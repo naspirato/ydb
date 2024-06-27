@@ -23,7 +23,6 @@ struct ITwoLevelFairShareThreadPool
 {
     virtual int GetThreadCount() = 0;
     virtual void Configure(int threadCount) = 0;
-    virtual void Configure(TDuration pollingPeriod) = 0;
 
     virtual IInvokerPtr GetInvoker(
         const TString& poolName,

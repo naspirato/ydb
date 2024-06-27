@@ -3,5 +3,4 @@ RECURSE(
     expr_nodes
     gateway
     provider
-    scheme
 )

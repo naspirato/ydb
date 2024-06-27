@@ -11,7 +11,6 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -57,7 +56,6 @@ struct TSourceInfo {
     bool PushStarted = false;
     bool Finished = false;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
-    std::optional<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
 };
 
 struct TSinkInfo {
@@ -95,12 +93,10 @@ public:
     explicit TDqWorker(
         const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
         const IDqAsyncIoFactory::TPtr& asyncIoFactory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TWorkerRuntimeData* runtimeData,
         const TString& traceId)
         : TRichActor<TDqWorker>(&TDqWorker::Handler)
         , AsyncIoFactory(asyncIoFactory)
-        , FunctionRegistry(functionRegistry)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , RuntimeData(runtimeData)
         , TraceId(traceId)
@@ -298,7 +294,6 @@ private:
                     if (input.HasSource()) {
                         auto& source = SourcesMap[inputId];
                         source.TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
-                        source.ProgramBuilder.emplace(*source.TypeEnv, *FunctionRegistry);
                         std::tie(source.Source, source.Actor) =
                             AsyncIoFactory->CreateDqSource(
                             IDqAsyncIoFactory::TSourceArguments {
@@ -312,7 +307,6 @@ private:
                                 .ComputeActorId = SelfId(),
                                 .TypeEnv = typeEnv,
                                 .HolderFactory = holderFactory,
-                                .ProgramBuilder = *source.ProgramBuilder,
                                 .MemoryQuotaManager = MemoryQuotaManager
                             });
                         RegisterLocalChild(source.Actor);
@@ -775,7 +769,6 @@ private:
     /*_________________________________________________________*/
 
     IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
     NTaskRunnerActor::ITaskRunnerActor* Actor = nullptr;
     TActorId TaskRunnerActor;
@@ -815,15 +808,13 @@ NActors::IActor* CreateWorkerActor(
     TWorkerRuntimeData* runtimeData,
     const TString& traceId,
     const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-    const IDqAsyncIoFactory::TPtr& asyncIoFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry)
+    const IDqAsyncIoFactory::TPtr& asyncIoFactory)
 {
     Y_ABORT_UNLESS(taskRunnerActorFactory);
     return new TLogWrapReceive(
         new TDqWorker(
             taskRunnerActorFactory,
             asyncIoFactory,
-            functionRegistry,
             runtimeData,
             traceId), traceId);
 }

@@ -89,14 +89,7 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     {
         auto guard = WriterGuard(PollerLock_);
         if (!*pollerPtr) {
-            if (isXfer) {
-                *pollerPtr = CreateThreadPoolPoller(
-                    Config_->ThreadPoolSize,
-                    threadNamePrefix,
-                    Config_->ThreadPoolPollingPeriod);
-            } else {
-                *pollerPtr = CreateThreadPoolPoller(/*threadCount*/ 1, threadNamePrefix);
-            }
+            *pollerPtr = CreateThreadPoolPoller(isXfer ? Config_->ThreadPoolSize : 1, threadNamePrefix);
         }
         poller = *pollerPtr;
     }
@@ -172,7 +165,6 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
 
         if (XferPoller_) {
             XferPoller_->Reconfigure(Config_->ThreadPoolSize);
-            XferPoller_->Reconfigure(Config_->ThreadPoolPollingPeriod);
         }
     }
 

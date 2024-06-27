@@ -6,7 +6,6 @@ using namespace NCommon;
 
 TSolomonConfiguration::TSolomonConfiguration()
 {
-    REGISTER_SETTING(*this, _EnableReading);
 }
 
 TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {

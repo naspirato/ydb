@@ -208,32 +208,30 @@ public:
                 }
 
                 auto valueNode = NYT::NodeFromYsonString(item->Value);
-                if (valueNode.HasKey("Meta")) {
-                    data.Meta = MakeIntrusive<TYtTableMetaInfo>();
-                    auto metaNode = valueNode["Meta"];
+                data.Meta = MakeIntrusive<TYtTableMetaInfo>();
+                auto metaNode = valueNode["Meta"];
 
-                    data.Meta->CanWrite = metaNode["CanWrite"].AsBool();
-                    data.Meta->DoesExist = metaNode["DoesExist"].AsBool();
-                    data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
-                    data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
-                    data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
-                    data.Meta->SqlView = metaNode["SqlView"].AsString();
-                    data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
-                    for (const auto& x : metaNode["Attrs"].AsMap()) {
-                        data.Meta->Attrs[x.first] = x.second.AsString();
-                    }
+                data.Meta->CanWrite = metaNode["CanWrite"].AsBool();
+                data.Meta->DoesExist = metaNode["DoesExist"].AsBool();
+                data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
+                data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
+                data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
+                data.Meta->SqlView = metaNode["SqlView"].AsString();
+                data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
+                for (const auto& x : metaNode["Attrs"].AsMap()) {
+                    data.Meta->Attrs[x.first] = x.second.AsString();
                 }
-                if (valueNode.HasKey("Stat")) {
-                    data.Stat = MakeIntrusive<TYtTableStatInfo>();
-                    auto statNode = valueNode["Stat"];
-                    data.Stat->Id = statNode["Id"].AsString();
-                    data.Stat->RecordsCount = statNode["RecordsCount"].AsUint64();
-                    data.Stat->DataSize = statNode["DataSize"].AsUint64();
-                    data.Stat->ChunkCount = statNode["ChunkCount"].AsUint64();
-                    data.Stat->ModifyTime = statNode["ModifyTime"].AsUint64();
-                    data.Stat->Revision = statNode["Revision"].AsUint64();
-                    data.Stat->TableRevision = statNode["TableRevision"].AsUint64();
-                }
+
+                data.Stat = MakeIntrusive<TYtTableStatInfo>();
+                auto statNode = valueNode["Stat"];
+                data.Stat->Id = statNode["Id"].AsString();
+                data.Stat->RecordsCount = statNode["RecordsCount"].AsUint64();
+                data.Stat->DataSize = statNode["DataSize"].AsUint64();
+                data.Stat->ChunkCount = statNode["ChunkCount"].AsUint64();
+                data.Stat->ModifyTime = statNode["ModifyTime"].AsUint64();
+                data.Stat->Revision = statNode["Revision"].AsUint64();
+                data.Stat->TableRevision = statNode["TableRevision"].AsUint64();
+
                 data.WriteLock = options.ReadOnly() ? false : valueNode["WriteLock"].AsBool();
                 res.Data.push_back(data);
             }
@@ -259,14 +257,12 @@ public:
                     const auto& data = res.Data[i];
                     auto key = MakeGetTableInfoKey(req, optionsDup.Epoch());
 
-                    auto attrsNode = NYT::TNode::CreateMap();
-                    if (data.Meta) {
-                        for (const auto& a : data.Meta->Attrs)  {
-                            attrsNode(a.first, a.second);
-                        }
+                    auto attrsNode = NYT::TNode();
+                    for (const auto& a : data.Meta->Attrs)  {
+                        attrsNode(a.first, a.second);
                     }
 
-                    auto metaNode = data.Meta ? NYT::TNode()
+                    auto metaNode = NYT::TNode()
                         ("CanWrite",data.Meta->CanWrite)
                         ("DoesExist",data.Meta->DoesExist)
                         ("YqlCompatibleScheme",data.Meta->YqlCompatibleScheme)
@@ -274,25 +270,21 @@ public:
                         ("IsDynamic",data.Meta->IsDynamic)
                         ("SqlView",data.Meta->SqlView)
                         ("SqlViewSyntaxVersion",ui64(data.Meta->SqlViewSyntaxVersion))
-                        ("Attrs",attrsNode) : NYT::TNode();
+                        ("Attrs",attrsNode);
 
-                    auto statNode = data.Stat ? NYT::TNode()
+                    auto statNode = NYT::TNode()
                         ("Id",data.Stat->Id)
                         ("RecordsCount",data.Stat->RecordsCount)
                         ("DataSize",data.Stat->DataSize)
                         ("ChunkCount",data.Stat->ChunkCount)
                         ("ModifyTime",data.Stat->ModifyTime)
                         ("Revision",data.Stat->Revision)
-                        ("TableRevision",data.Stat->TableRevision) : NYT::TNode();
+                        ("TableRevision",data.Stat->TableRevision);
 
-                    auto valueNode = NYT::TNode::CreateMap();
-                    if (data.Meta) {
-                        valueNode("Meta", metaNode);
-                    }
-                    if (data.Stat) {
-                        valueNode("Stat", statNode);
-                    }
-                    valueNode("WriteLock", data.WriteLock);
+                    auto valueNode = NYT::TNode()
+                        ("Meta", metaNode)
+                        ("Stat", statNode)
+                        ("WriteLock", data.WriteLock);
 
                     auto value = NYT::NodeToYsonString(valueNode, NYT::NYson::EYsonFormat::Binary);
                     qContext.GetWriter()->Put({YtGateway_GetTableInfo, key},value).GetValueSync();

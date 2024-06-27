@@ -425,7 +425,6 @@ public:
     static constexpr int DefaultCompressionPoolSize = 8;
     int HeavyPoolSize;
     int CompressionPoolSize;
-    TDuration HeavyPoolPollingPeriod;
 
     bool AlertOnMissingRequestInfo;
 
@@ -446,7 +445,6 @@ class TDispatcherDynamicConfig
 public:
     std::optional<int> HeavyPoolSize;
     std::optional<int> CompressionPoolSize;
-    std::optional<TDuration> HeavyPoolPollingPeriod;
 
     std::optional<bool> AlertOnMissingRequestInfo;
 

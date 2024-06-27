@@ -58,7 +58,7 @@ public:
 
         bool ready = true;
         TVector<TNodeState> nextNodes;
-        Nodes.emplace_back(Meta.GetPageId(), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
+        Nodes.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, 0, Meta.DataSize);
 
         for (ui32 height = 0; height < Meta.LevelCount; height++) {
             bool hasChanges = false;
@@ -86,14 +86,13 @@ public:
                 for (TRecIdx pos : xrange<TRecIdx>(0, node.GetChildrenCount())) {
                     auto& child = node.GetShortChild(pos);
 
-                    TPageId pageId = child.GetPageId();
-                    TRowId beginRowId = pos ? node.GetShortChild(pos - 1).GetRowCount() : nodeState.BeginRowId;
-                    TRowId endRowId = child.GetRowCount();
+                    TRowId beginRowId = pos ? node.GetShortChild(pos - 1).RowCount : nodeState.BeginRowId;
+                    TRowId endRowId = child.RowCount;
                     TCellsIterable beginKey = pos ? node.GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : nodeState.BeginKey;
-                    ui64 beginDataSize = pos ? node.GetShortChild(pos - 1).GetDataSize() : nodeState.BeginDataSize;
-                    ui64 endDataSize = child.GetDataSize();
+                    ui64 beginDataSize = pos ? node.GetShortChild(pos - 1).DataSize : nodeState.BeginDataSize;
+                    ui64 endDataSize = child.DataSize;
 
-                    nextNodes.emplace_back(pageId, beginRowId, endRowId, beginKey, beginDataSize, endDataSize);
+                    nextNodes.emplace_back(child.PageId, beginRowId, endRowId, beginKey, beginDataSize, endDataSize);
                     hasChanges = true;
                 }
             }
@@ -138,7 +137,7 @@ public:
     }
 
     TRowId GetEndRowId() const override {
-        return Meta.GetRowCount();
+        return Meta.RowCount;
     }
 
     TPageId GetPageId() const override {

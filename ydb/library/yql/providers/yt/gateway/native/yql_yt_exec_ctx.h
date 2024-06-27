@@ -74,13 +74,12 @@ struct TInputInfo {
 struct TOutputInfo {
     TOutputInfo() = default;
     TOutputInfo(const TString& name, const TString& path, const NYT::TNode& codecSpec, const NYT::TNode& attrSpec,
-        const NYT::TSortColumns& sortedBy, NYT::TNode columnGroups)
+        const NYT::TSortColumns& sortedBy)
         : Name(name)
         , Path(path)
         , Spec(codecSpec)
         , AttrSpec(attrSpec)
         , SortedBy(sortedBy)
-        , ColumnGroups(std::move(columnGroups))
     {
     }
     TString Name;
@@ -88,7 +87,6 @@ struct TOutputInfo {
     NYT::TNode Spec;
     NYT::TNode AttrSpec;
     NYT::TSortColumns SortedBy;
-    NYT::TNode ColumnGroups;
 };
 
 class TExecContextBase: public TThrRefBase {

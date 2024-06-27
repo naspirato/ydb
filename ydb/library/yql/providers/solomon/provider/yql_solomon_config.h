@@ -9,7 +9,6 @@ namespace NYql {
 
 struct TSolomonSettings {
     using TConstPtr = std::shared_ptr<const TSolomonSettings>;
-    NCommon::TConfSetting<bool, false> _EnableReading;
 };
 
 struct TSolomonConfiguration

@@ -108,7 +108,7 @@ namespace {
             ui64 byIndexBytes = 0;
             for (const auto& part : subset.Flatten) {
                 auto &root = part->IndexPages.GetBTree({});
-                byIndexBytes += root.GetDataSize() + root.GetGroupDataSize();
+                byIndexBytes += root.DataSize + root.GroupDataSize;
             }
             UNIT_ASSERT_VALUES_EQUAL(byIndexBytes, expectedData);
         }

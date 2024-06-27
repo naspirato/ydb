@@ -304,14 +304,14 @@ namespace {
         }
 
         auto dumpChild = [&] (NPage::TBtreeIndexNode::TChild child) {
-            if (part.GetPageType(child.GetPageId(), {}) == EPage::BTreeIndex) {
+            if (part.GetPageType(child.PageId, {}) == EPage::BTreeIndex) {
                 BTreeIndexNode(part, child, level + 1);
             } else {
                 Out << intend << " | " << child.ToString() << Endl;
             }
         };
 
-        auto page = Env->TryGetPage(&part, meta.GetPageId(), {});
+        auto page = Env->TryGetPage(&part, meta.PageId, {});
         if (!page) {
             Out << intend << " | -- the rest of the index pages aren't loaded" << Endl;
             return;

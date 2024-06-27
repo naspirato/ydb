@@ -19,7 +19,7 @@ public:
             return TStatus::Ok;
         }
 
-        return TStatus::Ok;
+        return TStatus::Async;
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {

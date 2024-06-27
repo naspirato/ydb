@@ -50,8 +50,6 @@ struct TSolomonExporterConfig
 
     int ThreadPoolSize;
     int EncodingThreadPoolSize;
-    TDuration ThreadPoolPollingPeriod;
-    TDuration EncodingThreadPoolPollingPeriod;
 
     bool ConvertCountersToRateForSolomon;
     bool RenameConvertedCounters;

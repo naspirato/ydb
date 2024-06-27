@@ -4,7 +4,6 @@
 #include "new_with_offloaded_dtor.h"
 #endif
 
-#include "bind.h"
 #include "invoker.h"
 
 namespace NYT {

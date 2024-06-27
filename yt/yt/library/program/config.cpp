@@ -77,8 +77,6 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
         .DefaultNew();
-    registrar.Parameter("io_dispatcher", &TThis::IODispatcher)
-        .DefaultNew();
     registrar.Parameter("rpc_dispatcher", &TThis::RpcDispatcher)
         .DefaultNew();
     registrar.Parameter("grpc_dispatcher", &TThis::GrpcDispatcher)
@@ -127,8 +125,6 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("tcp_dispatcher", &TThis::TcpDispatcher)
         .DefaultNew();
-    registrar.Parameter("io_dispatcher", &TThis::IODispatcher)
-        .Optional();
     registrar.Parameter("rpc_dispatcher", &TThis::RpcDispatcher)
         .DefaultNew();
     registrar.Parameter("logging", &TThis::Logging)
@@ -136,7 +132,7 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("jaeger", &TThis::Jaeger)
         .DefaultNew();
     registrar.Parameter("tracing_transport", &TThis::TracingTransport)
-        .Optional();
+        .DefaultNew();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
         .Optional();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)

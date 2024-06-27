@@ -9,8 +9,6 @@ namespace NYT::NPipes {
 DECLARE_REFCOUNTED_CLASS(TNamedPipe)
 DECLARE_REFCOUNTED_CLASS(TNamedPipeConfig)
 
-DECLARE_REFCOUNTED_CLASS(TIODispatcherConfig)
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NPipes

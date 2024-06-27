@@ -672,13 +672,13 @@ namespace NTable {
                     for (bool history : {false, true}) {
                         for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
                             auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
-                            m->SetRootPageId(meta.GetPageId());
+                            m->SetRootPageId(meta.PageId);
                             m->SetLevelCount(meta.LevelCount);
                             m->SetIndexSize(meta.IndexSize);
-                            m->SetDataSize(meta.GetDataSize());
-                            m->SetGroupDataSize(meta.GetGroupDataSize());
-                            m->SetRowCount(meta.GetRowCount());
-                            m->SetErasedRowCount(meta.GetErasedRowCount());
+                            m->SetDataSize(meta.DataSize);
+                            m->SetGroupDataSize(meta.GroupDataSize);
+                            m->SetRowCount(meta.RowCount);
+                            m->SetErasedRowCount(meta.ErasedRowCount);
                         }
                     }
                 }

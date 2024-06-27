@@ -35,8 +35,6 @@ class TTcpDispatcherConfig
 public:
     int ThreadPoolSize;
 
-    TDuration ThreadPoolPollingPeriod;
-
     //! Used for profiling export and alerts.
     std::optional<i64> NetworkBandwidth;
 
@@ -63,8 +61,6 @@ class TTcpDispatcherDynamicConfig
 {
 public:
     std::optional<int> ThreadPoolSize;
-
-    std::optional<TDuration> ThreadPoolPollingPeriod;
 
     std::optional<i64> NetworkBandwidth;
 

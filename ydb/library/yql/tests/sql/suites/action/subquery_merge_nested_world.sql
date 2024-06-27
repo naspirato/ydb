@@ -3,7 +3,7 @@
 use plato; 
 
 DEFINE SUBQUERY $s($_i) AS
-    $t = SELECT AGGREGATE_LIST(Path) FROM FOLDER('') WHERE Path LIKE "Input%";
+    $t = SELECT AGGREGATE_LIST(Path) FROM FOLDER('');
     SELECT
         *
     FROM EACH($t);

@@ -13,7 +13,6 @@ ENDIF()
 
 PEERDIR(
     ydb/tests/oss/canonical
-    ydb/public/api/client/yc_public/iam
 )
 
 END()

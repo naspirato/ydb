@@ -31,8 +31,7 @@ TString TYtFileServices::GetTablePath(TStringBuf cluster, TStringBuf table, bool
         return TString(TFsPath(TmpDir) / TString(table.substr(4)).append(TStringBuf(".tmp")));
     }
 
-    const auto tablePrefix = TString(YtProviderName).append('.').append(cluster);
-    const auto fullTableName = TString(tablePrefix).append('.').append(table);
+    auto fullTableName = TString(YtProviderName).append('.').append(cluster).append('.').append(table);
     if (!noLocks) {
         auto guard = Guard(Mutex);
         if (auto p = Locks.FindPtr(fullTableName)) {
@@ -41,9 +40,6 @@ TString TYtFileServices::GetTablePath(TStringBuf cluster, TStringBuf table, bool
     }
     if (auto p = TablesMapping.FindPtr(fullTableName)) {
         return *p;
-    }
-    if (auto dirPtr = TablesDirMapping.FindPtr(tablePrefix)) {
-        return TFsPath(*dirPtr) / TString(table).append(".txt");
     }
     ythrow yexception() << "Table not found: " << cluster << '.' << table;
 }

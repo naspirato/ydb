@@ -118,7 +118,7 @@ public:
         , State(Reserve(Meta.LevelCount + 1))
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
-        State.emplace_back(Meta.GetPageId(), 0, GetEndRowId(), EmptyKey, EmptyKey);
+        State.emplace_back(Meta.PageId, 0, GetEndRowId(), EmptyKey, EmptyKey);
     }
     
     EReady Seek(TRowId rowId) override {
@@ -246,7 +246,7 @@ public:
     }
 
     TRowId GetEndRowId() const override {
-        return Meta.GetRowCount();
+        return Meta.RowCount;
     }
 
     TPageId GetPageId() const override {
@@ -346,13 +346,13 @@ private:
 
         auto& child = current.Node->GetShortChild(pos);
 
-        TPageId pageId = child.GetPageId();
-        TRowId beginRowId = pos ? current.Node->GetShortChild(pos - 1).GetRowCount() : current.BeginRowId;
-        TRowId endRowId = child.GetRowCount();
+        TRowId beginRowId = pos ? current.Node->GetShortChild(pos - 1).RowCount : current.BeginRowId;
+        TRowId endRowId = child.RowCount;
+        
         TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;
         TCellsIterable endKey = pos < current.Node->GetKeysCount() ? current.Node->GetKeyCellsIterable(pos, GroupInfo.ColsKeyIdx) : current.EndKey;
         
-        State.emplace_back(pageId, beginRowId, endRowId, beginKey, endKey);
+        State.emplace_back(child.PageId, beginRowId, endRowId, beginKey, endKey);
     }
 
     bool TryLoad(TNodeState& state) {

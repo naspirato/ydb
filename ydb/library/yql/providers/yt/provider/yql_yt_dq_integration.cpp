@@ -221,7 +221,7 @@ public:
         }
 
         if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); canFallback && chunksCount > maxChunks) {
-            throw TFallbackError() << DqFallbackErrorMessageWrap( TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
+            throw TFallbackError() << DqFallbackErrorMessageWrap("table with too many chunks");
         }
 
         if (hasErasure) {
@@ -470,7 +470,7 @@ public:
                 }
             }
             if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
-                AddMessage(ctx,  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks, skipIssues, State_->PassiveExecution);
+                AddMessage(ctx, "table with too many chunks", skipIssues, State_->PassiveExecution);
                 return false;
             }
             return true;
@@ -592,7 +592,7 @@ public:
                     }
                 }
                 if (chunksCount > maxChunks) {
-                    AddErrorWrap(ctx, node_->Pos(),  TStringBuilder() << "table with too many chunks: " << chunksCount << " > " << maxChunks);
+                    AddErrorWrap(ctx, node_->Pos(), "table with too many chunks");
                     return Nothing();
                 }
                 clusterToNodesAndErasure[cluster].push_back({node_, hasErasure});

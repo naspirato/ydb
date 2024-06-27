@@ -21,11 +21,11 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
     if (rowId == 0) {
         return 0;
     }
-    if (rowId >= meta.GetRowCount()) {
-        return meta.GetDataSize();
+    if (rowId >= meta.RowCount) {
+        return meta.DataSize;
     }
 
-    TPageId pageId = meta.GetPageId();
+    TPageId pageId = meta.PageId;
     ui64 prevDataSize = 0;
 
     for (ui32 height = 0; height < meta.LevelCount; height++) {
@@ -37,9 +37,9 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
         auto node = TBtreeIndexNode(*page);
         auto pos = node.Seek(rowId);
 
-        pageId = node.GetShortChild(pos).GetPageId();
+        pageId = node.GetShortChild(pos).PageId;
         if (pos) {
-            prevDataSize = node.GetShortChild(pos - 1).GetDataSize();
+            prevDataSize = node.GetShortChild(pos - 1).DataSize;
         }
     }
 
@@ -55,12 +55,12 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
         historicRowId = 0;
         return 0;
     }
-    if (rowId >= part->IndexPages.GetBTree({}).GetRowCount()) {
-        historicRowId = meta.GetRowCount();
-        return meta.GetDataSize();
+    if (rowId >= part->IndexPages.GetBTree({}).RowCount) {
+        historicRowId = meta.RowCount;
+        return meta.DataSize;
     }
 
-    TPageId pageId = meta.GetPageId();
+    TPageId pageId = meta.PageId;
     ui64 prevDataSize = 0;
     historicRowId = 0;
 
@@ -83,11 +83,11 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
         auto node = TBtreeIndexNode(*page);
         auto pos = node.Seek(ESeek::Lower, key1, part->Scheme->HistoryGroup.ColsKeyIdx, part->Scheme->HistoryKeys.Get());
 
-        pageId = node.GetShortChild(pos).GetPageId();
+        pageId = node.GetShortChild(pos).PageId;
         if (pos) {
             const auto& prevChild = node.GetShortChild(pos - 1);
-            prevDataSize = prevChild.GetDataSize();
-            historicRowId = prevChild.GetRowCount();
+            prevDataSize = prevChild.DataSize;
+            historicRowId = prevChild.RowCount;
         }
     }
 
