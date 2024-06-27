@@ -415,39 +415,6 @@ public:
             break;
         }
 
-        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-            const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt32Ty(context), "data", Block_);
-            const auto sizeType = Type::getInt16Ty(context);
-            const auto strType = FixedVectorType::get(sizeType, 8);
-            const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
-            const auto type = Type::getInt8Ty(context);
-            const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzDate32"), { buf, data, tzId }, "", Block_);
-            break;
-        }
-
-        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-            const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt64Ty(context), "data", Block_);
-            const auto sizeType = Type::getInt16Ty(context);
-            const auto strType = FixedVectorType::get(sizeType, 8);
-            const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
-            const auto type = Type::getInt8Ty(context);
-            const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzDatetime64"), { buf, data, tzId }, "", Block_);
-            break;
-        }
-
-        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-            const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt64Ty(context), "data", Block_);
-            const auto sizeType = Type::getInt16Ty(context);
-            const auto strType = FixedVectorType::get(sizeType, 8);
-            const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
-            const auto type = Type::getInt8Ty(context);
-            const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzTimestamp64"), { buf, data, tzId }, "", Block_);
-            break;
-        }
-
         default:
             YQL_ENSURE(false, "Unsupported data type: " << schemeType);
         }
@@ -754,21 +721,6 @@ private:
             break;
         }
 
-        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-            CallInst::Create(module.getFunction("ReadTzDate32"), { buf, velemPtr }, "", Block_);
-            break;
-        }
-
-        case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-            CallInst::Create(module.getFunction("ReadTzDatetime64"), { buf, velemPtr }, "", Block_);
-            break;
-        }
-
-        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-            CallInst::Create(module.getFunction("ReadTzTimestamp64"), { buf, velemPtr }, "", Block_);
-            break;
-        }        
-
         default:
             YQL_ENSURE(false, "Unknown data type: " << schemeType);
         }
@@ -866,10 +818,7 @@ private:
             case NUdf::TDataType<NUdf::TJsonDocument>::Id:
             case NUdf::TDataType<NUdf::TTzDate>::Id:
             case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
-            case NUdf::TDataType<NUdf::TTzDate32>::Id:
-            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+            case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
                 CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
                 break;
             }

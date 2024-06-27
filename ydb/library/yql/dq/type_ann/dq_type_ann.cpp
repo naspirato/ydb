@@ -793,13 +793,12 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
         }
 
         auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-        bool isOptional = false;
-        const TStructExprType* structType = nullptr;
-
-        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], isOptional, structType, ctx)) {
+        if (!EnsureStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], ctx)) {
             return TStatus::Error;
         }
 
+        bool isOptional = false;
+        const TStructExprType* structType = nullptr;
         if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[1], isOptional, structType, ctx)) {
             return TStatus::Error;
         }

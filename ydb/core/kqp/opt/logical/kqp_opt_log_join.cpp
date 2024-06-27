@@ -730,12 +730,14 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         : join.LeftInput();
 
     TMaybeNode<TCoLambda> filter;
-    TVector<TExprBase> equalLeftKeysConditions;
-    auto row = Build<TCoArgument>(ctx, join.Pos())
-        .Name("row")
-        .Done();
 
     if (!equalLeftKeys.empty()) {
+        auto row = Build<TCoArgument>(ctx, join.Pos())
+            .Name("row")
+            .Done();
+
+        TVector<TExprBase> conditions;
+
         for (auto [first, others]: equalLeftKeys) {
             auto v = Build<TCoMember>(ctx, join.Pos())
                 .Struct(row)
@@ -743,7 +745,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                 .Done();
 
             for (std::string_view other: others) {
-                equalLeftKeysConditions.emplace_back(
+                conditions.emplace_back(
                     Build<TCoCmpEqual>(ctx, join.Pos())
                         .Left(v)
                         .Right<TCoMember>()
@@ -758,7 +760,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Args({row})
             .Body<TCoCoalesce>()
                 .Predicate<TCoAnd>()
-                    .Add(equalLeftKeysConditions)
+                    .Add(conditions)
                     .Build()
                 .Value<TCoBool>()
                     .Literal().Build("false")
@@ -788,38 +790,12 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     };
 
     if (useStreamIndexLookupJoin) {
-        TMaybeNode<TExprBase> joinKeyPredicate;
-
-        if (!equalLeftKeysConditions.empty()) {
-            for (auto& cond : equalLeftKeysConditions) {
-                cond = TExprBase(ctx.ReplaceNode(std::move(cond.Ptr()), row.Ref(), leftRowArg.Ptr()));
-            }
-
-            joinKeyPredicate = Build<TCoCoalesce>(ctx, join.Pos())
-                .Predicate<TCoAnd>()
-                    .Add(equalLeftKeysConditions)
-                    .Build()
-                .Value<TCoBool>()
-                    .Literal().Build("false")
-                    .Build()
-                .Done();
-        } else {
-            joinKeyPredicate = Build<TCoBool>(ctx, join.Pos())
-                .Literal().Build("true")
+        if (filter.IsValid()) {
+            leftData = Build<TCoFilter>(ctx, join.Pos())
+                .Input(leftData)
+                .Lambda(filter.Cast())
                 .Done();
         }
-
-        YQL_ENSURE(joinKeyPredicate.IsValid());
-
-        auto leftRowTuple = Build<TExprList>(ctx, join.Pos())
-            .Add<TCoOptionalIf>()
-                .Predicate(joinKeyPredicate.Cast())
-                .Value<TCoAsStruct>()
-                    .Add(lookupMembers)
-                    .Build() 
-                .Build()     
-            .Add(leftRowArg)
-            .Done();
 
         auto leftInput = Build<TCoFlatMap>(ctx, join.Pos())
             .Input(leftData)
@@ -829,7 +805,13 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                     .Input(rightPrefixExpr.Cast())
                     .Lambda()
                         .Args({prefixRowArg})
-                        .Body(wrapWithPrefixFilters(leftRowTuple))
+                        .Body(wrapWithPrefixFilters(
+                                Build<TExprList>(ctx, join.Pos())
+                                    .Add<TCoAsStruct>()
+                                        .Add(lookupMembers)
+                                        .Build()
+                                    .Add(leftRowArg)
+                                    .Done()))
                         .Build()
                     .Build()
                 .Build()

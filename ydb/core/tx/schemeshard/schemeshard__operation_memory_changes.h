@@ -52,9 +52,6 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TViewState = std::pair<TPathId, TViewInfo::TPtr>;
     TStack<TViewState> Views;
 
-    using TResourcePoolState = std::pair<TPathId, TResourcePoolInfo::TPtr>;
-    TStack<TResourcePoolState> ResourcePools;
-
 public:
     ~TMemoryChanges() = default;
 
@@ -88,8 +85,6 @@ public:
 
     void GrabNewView(TSchemeShard* ss, const TPathId& pathId);
     void GrabView(TSchemeShard* ss, const TPathId& pathId);
-
-    void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

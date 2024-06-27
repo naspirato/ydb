@@ -724,8 +724,7 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
     } else if (yqlType == TStringBuf("Yson")) {
         ytType = NYT::VT_ANY;
         required = false;
-    } else if (yqlType == TStringBuf("TzDate") || yqlType == TStringBuf("TzDatetime") || yqlType == TStringBuf("TzTimestamp") ||
-        yqlType == TStringBuf("TzDate32") || yqlType == TStringBuf("TzDatetime64") || yqlType == TStringBuf("TzTimestamp64")) {
+    } else if (yqlType == TStringBuf("TzDate") || yqlType == TStringBuf("TzDatetime") || yqlType == TStringBuf("TzTimestamp")) {
         ytType = NYT::VT_STRING;
     } else {
         YQL_LOG_CTX_THROW yexception() << "Unknown type " << yqlType.Quote() << " in row spec";
@@ -770,8 +769,7 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             ytType = "bool";
         } else if (yqlType == TStringBuf("Yson")) {
             ytType = "yson";
-        } else if (yqlType == TStringBuf("TzDate") || yqlType == TStringBuf("TzDatetime") || yqlType == TStringBuf("TzTimestamp") ||
-            yqlType == TStringBuf("TzDate32") || yqlType == TStringBuf("TzDatetime64") || yqlType == TStringBuf("TzTimestamp64")) {
+        } else if (yqlType == TStringBuf("TzDate") || yqlType == TStringBuf("TzDatetime") || yqlType == TStringBuf("TzTimestamp")) {
             ytType = "string";
         } else if (yqlType == TStringBuf("Date")) {
             ytType = (nativeYtTypeFlags & NTCF_DATE) ? "date" : "uint16";

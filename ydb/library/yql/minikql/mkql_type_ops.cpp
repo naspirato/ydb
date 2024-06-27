@@ -2606,23 +2606,23 @@ bool DeserializeTzTimestamp(TStringBuf buf, ui64& timestamp, ui16& tzId) {
 }
 
 void SerializeTzDate32(i32 date, ui16 tzId, IOutputStream& out) {
-    auto value = 0x80 ^ SwapBytes((ui32)date);
+    date = SwapBytes(date);
     tzId = SwapBytes(tzId);
-    out.Write(&value, sizeof(value));
+    out.Write(&date, sizeof(date));
     out.Write(&tzId, sizeof(tzId));
 }
 
 void SerializeTzDatetime64(i64 datetime, ui16 tzId, IOutputStream& out) {
-    auto value = 0x80 ^ SwapBytes((ui64)datetime);
+    datetime = SwapBytes(datetime);
     tzId = SwapBytes(tzId);
-    out.Write(&value, sizeof(value));
+    out.Write(&datetime, sizeof(datetime));
     out.Write(&tzId, sizeof(tzId));
 }
 
 void SerializeTzTimestamp64(i64 timestamp, ui16 tzId, IOutputStream& out) {
-    auto value = 0x80 ^ SwapBytes((ui64)timestamp);
+    timestamp = SwapBytes(timestamp);
     tzId = SwapBytes(tzId);
-    out.Write(&value, sizeof(value));
+    out.Write(&timestamp, sizeof(timestamp));
     out.Write(&tzId, sizeof(tzId));
 }
 
@@ -2631,8 +2631,8 @@ bool DeserializeTzDate32(TStringBuf buf, i32& date, ui16& tzId) {
         return false;
     }
 
-    auto value = ReadUnaligned<ui32>(buf.data());
-    date = (i32)(SwapBytes(value ^ 0x80));
+    date = ReadUnaligned<i32>(buf.data());
+    date = SwapBytes(date);
     if (date < NUdf::MIN_DATE32 || date > NUdf::MAX_DATE32) {
         return false;
     }
@@ -2651,8 +2651,8 @@ bool DeserializeTzDatetime64(TStringBuf buf, i64& datetime, ui16& tzId) {
         return false;
     }
 
-    auto value = ReadUnaligned<ui64>(buf.data());
-    datetime = (i64)(SwapBytes(0x80 ^ value));
+    datetime = ReadUnaligned<i64>(buf.data());
+    datetime = SwapBytes(datetime);
     if (datetime < NUdf::MIN_DATETIME64 || datetime > NUdf::MAX_DATETIME64) {
         return false;
     }
@@ -2671,8 +2671,8 @@ bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId) {
         return false;
     }
 
-    auto value = ReadUnaligned<ui64>(buf.data());
-    timestamp = (i64)(SwapBytes(0x80 ^ value));
+    timestamp = ReadUnaligned<i64>(buf.data());
+    timestamp = SwapBytes(timestamp);
     if (timestamp < NUdf::MIN_TIMESTAMP64 || timestamp > NUdf::MAX_TIMESTAMP64) {
         return false;
     }

@@ -267,8 +267,7 @@ enum ECastOptions : TCastResultOptions {
     MayLoseData = 1U << 1U,
     AnywayLoseData = 1U << 2U,
 
-    Impossible = 1U << 3U,
-    Undefined = 1U << 4U
+    Impossible = 1U << 3U
 };
 
 TMaybe<TCastResultOptions> GetCastResult(EDataSlot source, EDataSlot target);

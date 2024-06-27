@@ -694,16 +694,9 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
     SIMPLE_STRICT_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = Reference(args[0]);
-        try {
-            TUnboxedValuePod result(storage.ToDate(builder, true));
-            result.SetTimezoneId(storage.TimezoneId);
-            return result;
-        } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << "Timestamp "
-                                           << storage.ToString()
-                                           << " cannot be casted to TzDate"
-            ).data());
-        }
+        TUnboxedValuePod result(storage.ToDate(builder, true));
+        result.SetTimezoneId(storage.TimezoneId);
+        return result;
     }
 
     SIMPLE_STRICT_UDF(TMakeTzDatetime, TTzDatetime(TAutoMap<TResource<TMResourceName>>)) {

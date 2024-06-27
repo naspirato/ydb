@@ -31,10 +31,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 constexpr ui32 LEASE_UPDATE_FREQUENCY = 2;
-
-constexpr ui64 MIN_SAVE_RESULT_BATCH_SIZE = 5_MB;
-constexpr i32 MIN_SAVE_RESULT_BATCH_ROWS = 5000;
-constexpr ui64 RUN_SCRIPT_ACTOR_BUFFER_SIZE = 40_MB;
+constexpr ui32 MAX_SAVE_RESULT_IN_FLIGHT = 1;
 
 class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     enum class ERunState {
@@ -51,20 +48,14 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
         UpdateLeaseEvent,
     };
 
-    struct TResultSetInfo {
-        bool Truncated = false;
-        ui64 RowCount = 0;
-        ui64 ByteCount = 0;
-        NJson::TJsonValue* Meta;
+    struct TPendingSaveResult {
+        ui32 ResultSetIndex;
+        ui64 FirstRow;
+        ui64 AccumulatedSize;
+        Ydb::ResultSet ResultSet;
 
-        ui64 FirstRowId = 0;
-        ui64 AccumulatedSize = 0;
-        Ydb::ResultSet PendingResult;
-    };
-
-    struct TPendingAck {
         TActorId ReplyActorId;
-        THolder<TEvKqpExecuter::TEvStreamDataAck> AckEvent;
+        THolder<TEvKqpExecuter::TEvStreamDataAck> SaveResultResponse;
     };
 
 public:
@@ -264,32 +255,16 @@ private:
         PassAway();
     }
 
-    void SendStreamDataResponse() {
-        if (PendingAcks.empty()) {
-            return;
-        }
+    void SendStreamDataResponse(TActorId replyActorId, THolder<TEvKqpExecuter::TEvStreamDataAck> saveResultResponse) const {
+        LOG_D("Send stream data ack"
+            << ", seqNo: " << saveResultResponse->Record.GetSeqNo()
+            << ", to: " << replyActorId);
 
-        if (PendingResultSetsSize > RUN_SCRIPT_ACTOR_BUFFER_SIZE) {
-            // Try to save any pending result
-            SaveResult();
-        }
-
-        if (PendingResultSetsSize <= RUN_SCRIPT_ACTOR_BUFFER_SIZE) {
-            while (!PendingAcks.empty()) {
-                auto response = std::move(PendingAcks.front());
-                PendingAcks.pop();
-
-                LOG_D("Send stream data ack"
-                    << ", seqNo: " << response.AckEvent->Record.GetSeqNo()
-                    << ", to: " << response.ReplyActorId);
-
-                Send(response.ReplyActorId, response.AckEvent.Release());
-            }
-        }
+        Send(replyActorId, saveResultResponse.Release());
     }
 
-    void SaveResult(size_t resultSetId) {
-        if (SaveResultInflight) {
+    void SaveResult() {
+        if (SaveResultInflight >= MAX_SAVE_RESULT_IN_FLIGHT || PendingSaveResults.empty()) {
             return;
         }
 
@@ -297,22 +272,12 @@ private:
             ExpireAt = TInstant::Now() + ResultsTtl;
         }
 
-        auto& resultSetInfo = ResultSetInfos[resultSetId];
-        Register(CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, resultSetId, ExpireAt, resultSetInfo.FirstRowId, resultSetInfo.AccumulatedSize, std::move(resultSetInfo.PendingResult)));
-        SaveResultInflight++;
-        PendingResultSetsSize -= resultSetInfo.ByteCount - resultSetInfo.AccumulatedSize;
-        resultSetInfo.FirstRowId = resultSetInfo.RowCount;
-        resultSetInfo.AccumulatedSize = resultSetInfo.ByteCount;
-        resultSetInfo.PendingResult = Ydb::ResultSet();
-    }
+        TPendingSaveResult& result = PendingSaveResults.back();
+        Register(CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, result.ResultSetIndex, ExpireAt, result.FirstRow, result.AccumulatedSize, std::move(result.ResultSet)));
+        SendStreamDataResponse(result.ReplyActorId, std::move(result.SaveResultResponse));
 
-    void SaveResult() {
-        for (size_t resultSetId = 0; resultSetId < ResultSetInfos.size(); ++resultSetId) {
-            if (ResultSetInfos[resultSetId].PendingResult.rows_size()) {
-                SaveResult(resultSetId);
-                break;
-            }
-        }
+        PendingSaveResults.pop_back();
+        SaveResultInflight++;
     }
 
     void Handle(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
@@ -334,52 +299,57 @@ private:
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
 
-        if (resultSetIndex >= ResultSetInfos.size()) {
+        if (resultSetIndex >= ResultSetMetaArray.size()) {
             // we don't know result set count, so just accept all of them
             // it's possible to have several result sets per script
             // they can arrive in any order and may be missed for some indices
-            ResultSetInfos.resize(resultSetIndex + 1);
+            ResultSetRowCount.resize(resultSetIndex + 1);
+            ResultSetByteCount.resize(resultSetIndex + 1);
+            Truncated.resize(resultSetIndex + 1);
+            ResultSetMetaArray.resize(resultSetIndex + 1, nullptr);
         }
 
-        auto& resultSetInfo = ResultSetInfos[resultSetIndex];
-        if (IsExecuting() && !resultSetInfo.Truncated) {
-            auto& rowCount = resultSetInfo.RowCount;
-            auto& byteCount = resultSetInfo.ByteCount;
+        bool saveResultRequired = false;
+        if (IsExecuting() && !Truncated[resultSetIndex]) {
+            auto& rowCount = ResultSetRowCount[resultSetIndex];
+            auto& byteCount = ResultSetByteCount[resultSetIndex];
+            auto firstRow = rowCount;
+            auto accumulatedSize = byteCount;
 
+            Ydb::ResultSet resultSet;
             for (auto& row : *ev->Get()->Record.MutableResultSet()->mutable_rows()) {
                 if (QueryServiceConfig.GetScriptResultRowsLimit() && rowCount + 1 > QueryServiceConfig.GetScriptResultRowsLimit()) {
-                    resultSetInfo.Truncated = true;
+                    Truncated[resultSetIndex] = true;
                     break;
                 }
 
                 auto serializedSize = row.ByteSizeLong();
                 if (QueryServiceConfig.GetScriptResultSizeLimit() && byteCount + serializedSize > QueryServiceConfig.GetScriptResultSizeLimit()) {
-                    resultSetInfo.Truncated = true;
+                    Truncated[resultSetIndex] = true;
                     break;
                 }
 
                 rowCount++;
                 byteCount += serializedSize;
-                PendingResultSetsSize += serializedSize;
-                *resultSetInfo.PendingResult.add_rows() = std::move(row);
+                *resultSet.add_rows() = std::move(row);
             }
 
-            bool newResultSet = resultSetInfo.Meta == nullptr;
-            if (newResultSet || resultSetInfo.Truncated) {
+            bool newResultSet = ResultSetMetaArray[resultSetIndex] == nullptr;
+            if (newResultSet || Truncated[resultSetIndex]) {
                 Ydb::Query::Internal::ResultSetMeta meta;
                 if (newResultSet) {
                     *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
                 }
-                if (resultSetInfo.Truncated) {
+                if (Truncated[resultSetIndex]) {
                     meta.set_truncated(true);
                 }
 
                 NJson::TJsonValue* value;
                 if (newResultSet) {
                     value = &ResultSetMetas[resultSetIndex];
-                    resultSetInfo.Meta = value;
+                    ResultSetMetaArray[resultSetIndex] = value;
                 } else {
-                    value = resultSetInfo.Meta;
+                    value = ResultSetMetaArray[resultSetIndex];
                 }
                 NProtobufJson::Proto2Json(meta, *value, NProtobufJson::TProto2JsonConfig());
 
@@ -392,13 +362,24 @@ private:
                 }
             }
 
-            if (ShouldSaveResult(resultSetInfo)) {
-                SaveResult(resultSetIndex);
+            if (resultSet.rows_size() > 0) {
+                saveResultRequired = true;
+                PendingSaveResults.push_back({
+                    resultSetIndex,
+                    firstRow,
+                    accumulatedSize,
+                    std::move(resultSet),
+                    ev->Sender,
+                    std::move(resp)
+                });
             }
         }
 
-        PendingAcks.push({.ReplyActorId = ev->Sender, .AckEvent = std::move(resp)});
-        SendStreamDataResponse();
+        if (saveResultRequired) {
+            SaveResult();
+        } else {
+            SendStreamDataResponse(ev->Sender, std::move(resp));
+        }
     }
 
     void SaveResultMeta() {
@@ -523,15 +504,9 @@ private:
                 Status = ev->Get()->Status;
                 Issues.AddIssues(ev->Get()->Issues);
             } else {
-                for (size_t resultSetId = 0; resultSetId < ResultSetInfos.size(); ++resultSetId) {
-                    if (ShouldSaveResult(ResultSetInfos[resultSetId])) {
-                        SaveResult(resultSetId);
-                        break;
-                    }
-                }
+                SaveResult();
             }
         }
-        SendStreamDataResponse();
         CheckInflight();
     }
 
@@ -558,12 +533,6 @@ private:
             return;
         }
 
-        if (PendingResultSetsSize) {
-            // Complete results saving
-            SaveResult();
-            return;
-        }
-
         if (!LeaseUpdateQueryRunning) {
             RunScriptExecutionFinisher();
         } else {
@@ -576,7 +545,7 @@ private:
         Status = status;
 
         // if query has no results, save empty json array
-        if (ResultSetInfos.empty()) {
+        if (ResultSetMetaArray.empty()) {
             ResultSetMetas.SetType(NJson::JSON_ARRAY);
             SaveResultMeta();
             SaveResultMetaInflight++;
@@ -595,13 +564,6 @@ private:
             && RunState != ERunState::Finishing
             && RunState != ERunState::Cancelled
             && RunState != ERunState::Cancelling;
-    }
-
-    static bool ShouldSaveResult(TResultSetInfo& resultInfo) {
-        if (!resultInfo.PendingResult.rows_size()) {
-            return false;
-        }
-        return resultInfo.Truncated || resultInfo.PendingResult.rows_size() >= MIN_SAVE_RESULT_BATCH_ROWS || resultInfo.ByteCount - resultInfo.AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE;
     }
 
 private:
@@ -627,14 +589,16 @@ private:
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 
     // Result
-    std::vector<TResultSetInfo> ResultSetInfos;
-    std::queue<TPendingAck> PendingAcks;
+    std::vector<TPendingSaveResult> PendingSaveResults;
+    std::vector<ui64> ResultSetRowCount;
+    std::vector<ui64> ResultSetByteCount;
+    std::vector<bool> Truncated;
+    std::vector<NJson::TJsonValue*> ResultSetMetaArray;
     TMaybe<TInstant> ExpireAt;
     NJson::TJsonValue ResultSetMetas;
     ui32 SaveResultInflight = 0;
     ui32 SaveResultMetaInflight = 0;
     bool PendingResultMeta = false;
-    ui64 PendingResultSetsSize = 0;
     std::optional<TString> QueryPlan;
     std::optional<TString> QueryAst;
     std::optional<NKqpProto::TKqpStatsQuery> QueryStats;

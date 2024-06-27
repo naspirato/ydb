@@ -13,9 +13,8 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 
 def start_yds_query(kikimr, client, sql, streaming_disposition) -> str:
-    query_id = client.create_query(
-        "simple", sql, streaming_disposition=streaming_disposition, type=fq.QueryContent.QueryType.STREAMING
-    ).result.query_id
+    query_id = client.create_query("simple", sql, streaming_disposition=streaming_disposition,
+                                   type=fq.QueryContent.QueryType.STREAMING).result.query_id
     client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
     kikimr.compute_plane.wait_zero_checkpoint(query_id)
     return query_id
@@ -72,7 +71,10 @@ class TestWatermarks(TestYdsBase):
         ]
         self.write_stream(data2)
 
-        expected = ['{"data" = ["row1"]}', '{"data" = ["row1"]}']
+        expected = [
+            '{"data" = ["row1"]}',
+            '{"data" = ["row1"]}'
+        ]
 
         assert self.read_stream(len(expected)) == expected
 
@@ -116,7 +118,10 @@ class TestWatermarks(TestYdsBase):
         ]
         self.write_stream(data1)
 
-        expected = ['{"data" = ["row1"]}', '{"data" = ["row1"]}']
+        expected = [
+            '{"data" = ["row1"]}',
+            '{"data" = ["row1"]}'
+        ]
 
         assert self.read_stream(len(expected)) == expected
 

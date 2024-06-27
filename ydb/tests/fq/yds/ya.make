@@ -1,7 +1,6 @@
 PY3TEST()
 
 FORK_SUBTESTS()
-
 SPLIT_FACTOR(50)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
@@ -13,9 +12,7 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(
-    ydb/tests/tools/pq_read
-)
+DEPENDS(ydb/tests/tools/pq_read)
 
 PY_SRCS(
     conftest.py

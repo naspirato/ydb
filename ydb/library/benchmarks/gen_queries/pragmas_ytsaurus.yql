@@ -6,5 +6,3 @@ pragma AnsiOptionalAs;
 pragma AnsiInForEmptyOrNullableItemsCollections;
 pragma CompactGroupBy;
 pragma yt.QueryCacheMode = "disable";
-pragma FilterPushdownOverJoinOptionalSide;
-pragma RotateJoinTree="false";

@@ -3,12 +3,8 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/utils.h>
-#include <ydb/services/lib/sharding/sharding.h>
-
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -59,9 +55,7 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
-            && NPQ::SplitMergeEnabled(*tabletConfig)
-            && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
+        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
 
         TTopicInfo::TPtr params = new TTopicInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
@@ -70,7 +64,6 @@ public:
             errStr = "Split and merge operations disabled";
             return nullptr;
         }
-
         if (alter.SplitSize()) {
             for (const auto& split : alter.GetSplit()) {
                 if (!split.HasPartition()) {
@@ -112,7 +105,7 @@ public:
                 params->TotalGroupCount = totalGroupCount;
             }
         }
-        if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy() && NPQ::SplitMergeEnabled(alter.GetPQTabletConfig())) {
+        if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
             const auto strategy = alter.GetPQTabletConfig().GetPartitionStrategy();
             if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
                 errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
@@ -173,20 +166,6 @@ public:
             if (alterConfig.PartitionKeySchemaSize()) {
                 errStr = "Cannot change key schema";
                 return nullptr;
-            }
-
-            if (alterConfig.HasPartitionStrategy() && !NPQ::SplitMergeEnabled(alterConfig)
-                && tabletConfig->HasPartitionStrategy() && NPQ::SplitMergeEnabled(*tabletConfig)) {
-                if (!alterConfig.GetPartitionStrategy().HasMaxPartitionCount() || 0 != alterConfig.GetPartitionStrategy().GetMaxPartitionCount()) {
-                    errStr = TStringBuilder() << "Can`t disable autoscaling. Disabling autoscaling is a destructive operation, "
-                            << "after which all partitions will become active and the message order guarantee will be violated. "
-                            << "If you are sure of this, then set max_active_partitions to 0.";
-                    return nullptr;
-                }
-            }
-
-            if (!alterConfig.HasPartitionStrategy() && tabletConfig->HasPartitionStrategy()) {
-                alterConfig.MutablePartitionStrategy()->CopyFrom(tabletConfig->GetPartitionStrategy());
             }
 
             const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
@@ -255,9 +234,7 @@ public:
             ui64 shardsToCreate,
             const TChannelsBindings& rbChannelsBinding,
             const TChannelsBindings& pqChannelsBinding,
-            TOperationContext& context,
-            const NKikimrPQ::TPQTabletConfig& tabletConfig,
-            const NKikimrPQ::TPQTabletConfig& newTabletConfig)
+            TOperationContext& context)
     {
         TPathElement::TPtr item = path.Base();
         NIceDb::TNiceDb db(context.GetDB());
@@ -273,44 +250,10 @@ public:
             context.SS->PersistUpdateNextShardIdx(db);
         }
 
-        bool splitMergeWasDisabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
-                && !NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
-        bool splitMergeWasEnabled = !NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
-                && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
-
-        if (splitMergeWasEnabled) {
-            auto partitions = pqGroup->GetPartitions();
-
-            TString prevBound;
-            for (size_t i = 0; i < partitions.size(); ++i) {
-                auto* partitionInfo = partitions[i].second;
-                if (i) {
-                    partitionInfo->KeyRange.ConstructInPlace();
-                    partitionInfo->KeyRange->FromBound = prevBound;
-                }
-                if (i != (partitions.size() - 1)) {
-                    if (!partitionInfo->KeyRange) {
-                        partitionInfo->KeyRange.ConstructInPlace();
-                    }
-                    auto range = NDataStreams::V1::RangeFromShardNumber(i, partitions.size());
-                    prevBound = NPQ::AsKeyBound(range.End);
-                    partitionInfo->KeyRange->ToBound = prevBound;
-                }
-
-                context.SS->PersistPersQueue(db, item->PathId, partitions[i].first, *partitionInfo);
-            }
-        } else {
-            for (auto& [shardIdx, tabletInfo] : pqGroup->Shards) {
-                for (const auto& partitionInfo : tabletInfo->Partitions) {
-                    if (splitMergeWasDisabled) {
-                        // clear all splitmerge fields
-                        partitionInfo->Status = NKikimrPQ::ETopicPartitionStatus::Active;
-                        partitionInfo->KeyRange.Clear();
-                        partitionInfo->ParentPartitionIds.clear();
-                        partitionInfo->ChildPartitionIds.clear();
-                    }
-                    context.SS->PersistPersQueue(db, item->PathId, shardIdx, *partitionInfo.Get());
-                }
+        for (auto& shard : pqGroup->Shards) {
+            auto shardIdx = shard.first;
+            for (const auto& pqInfo : shard.second->Partitions) {
+                context.SS->PersistPersQueue(db, item->PathId, shardIdx, *pqInfo.Get());
             }
         }
 
@@ -551,8 +494,12 @@ public:
             return result;
         }
 
-        NKikimrPQ::TPQTabletConfig tabletConfig = topic->GetTabletConfig();
-        NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
+        NKikimrPQ::TPQTabletConfig tabletConfig, newTabletConfig;
+        if (!topic->TabletConfig.empty()) {
+            bool parseOk = ParseFromStringNoSizeLimit(tabletConfig, topic->TabletConfig);
+            Y_ABORT_UNLESS(parseOk, "Previously serialized pq tablet config cannot be parsed");
+        }
+        newTabletConfig = tabletConfig;
 
         TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
 
@@ -577,11 +524,9 @@ public:
             return result;
         }
 
-        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge()
-                && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
-                && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
-
+        bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
         if (splitMergeEnabled) {
+
             auto Hex = [](const auto& value) {
                 return HexText(TBasicStringBuf(value));
             };
@@ -844,8 +789,8 @@ public:
         }
 
         topic->PrepareAlter(alterData);
-        const TTxState& txState = PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding,
-                pqChannelsBinding, context, tabletConfig, newTabletConfig);
+        const TTxState& txState =
+            PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding, pqChannelsBinding, context);
 
         context.OnComplete.ActivateTx(OperationId);
         context.SS->ClearDescribePathCaches(path.Base());

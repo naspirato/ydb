@@ -133,7 +133,6 @@ public:
     bool IsExternalDataSource() const;
     bool IsView() const;
     bool IsTemporary() const;
-    bool IsResourcePool() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

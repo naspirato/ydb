@@ -11,6 +11,8 @@
 #include <util/stream/output.h>
 #include <util/system/file.h>
 
+#include "util.h"
+
 namespace NYdb {
 namespace NBackup {
 
@@ -21,7 +23,13 @@ public:
     TYdbErrorException(const TStatus& status)
         : Status(status) {}
 
-    void LogToStderr() const;
+    void LogToStderr() const {
+        LOG_ERR("Ydb error, status# " << Status.GetStatus());
+        if (what()) {
+            LOG_ERR("\t" << "What# " << what());
+        }
+        LOG_ERR("\t" << Status.GetIssues().ToString());
+    }
 };
 
 void BackupFolder(TDriver driver, const TString& database, const TString& relDbPath, TFsPath folderPath,

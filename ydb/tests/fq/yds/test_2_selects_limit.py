@@ -22,7 +22,8 @@ class TestSelectLimit(object):
         sql = R'''
             SELECT * FROM yds1.`{input_topic}` LIMIT 2;
             SELECT * FROM yds1.`{input_topic}` LIMIT 2;
-            '''.format(
+            ''' \
+            .format(
             input_topic=self.input_topic,
         )
 
@@ -64,7 +65,8 @@ class TestSelectLimit(object):
             PRAGMA pq.Consumer="{consumer_name}";
             SELECT * FROM yds2.`{input_topic}` LIMIT 2;
             SELECT * FROM yds2.`{input_topic}` LIMIT 2;
-            '''.format(
+            ''' \
+            .format(
             consumer_name=self.consumer_name,
             input_topic=self.input_topic,
         )

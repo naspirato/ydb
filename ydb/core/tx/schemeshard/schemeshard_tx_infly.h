@@ -134,9 +134,6 @@ struct TTxState {
         item(TxCreateContinuousBackup, 88) \
         item(TxAlterContinuousBackup, 89) \
         item(TxDropContinuousBackup, 90) \
-        item(TxCreateResourcePool, 91) \
-        item(TxDropResourcePool, 92) \
-        item(TxAlterResourcePool, 93) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -335,6 +332,7 @@ struct TTxState {
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCreatePQGroup:
+        case TxAllocatePQ:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:
@@ -353,7 +351,6 @@ struct TTxState {
         case TxCreateView:
         case TxCopySequence:
         case TxCreateContinuousBackup:
-        case TxCreateResourcePool:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -389,7 +386,6 @@ struct TTxState {
         case TxDropExternalDataSource:
         case TxDropView:
         case TxDropContinuousBackup:
-        case TxDropResourcePool:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -422,13 +418,11 @@ struct TTxState {
         case TxAlterExternalDataSource:
         case TxAlterView:
         case TxAlterContinuousBackup:
-        case TxAlterResourcePool:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
             return true;
         case TxInvalid:
-        case TxAllocatePQ:
             Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
             Y_UNREACHABLE();
         }
@@ -458,7 +452,6 @@ struct TTxState {
         case TxDropExternalDataSource:
         case TxDropView:
         case TxDropContinuousBackup:
-        case TxDropResourcePool:
             return true;
         case TxMkDir:
         case TxCreateTable:
@@ -466,6 +459,7 @@ struct TTxState {
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCreatePQGroup:
+        case TxAllocatePQ:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:
@@ -494,7 +488,6 @@ struct TTxState {
         case TxCreateView:
         case TxCopySequence:
         case TxCreateContinuousBackup:
-        case TxCreateResourcePool:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -527,13 +520,11 @@ struct TTxState {
         case TxAlterExternalDataSource:
         case TxAlterView:
         case TxAlterContinuousBackup:
-        case TxAlterResourcePool:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
             return false;
         case TxInvalid:
-        case TxAllocatePQ:
             Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
             Y_UNREACHABLE();
         }
@@ -567,7 +558,6 @@ struct TTxState {
         case TxDropExternalTable:
         case TxDropExternalDataSource:
         case TxDropView:
-        case TxDropResourcePool:
             return false;
         case TxMkDir:
         case TxCreateTable:
@@ -575,6 +565,7 @@ struct TTxState {
         case TxCreateColumnTable:
         case TxCopyTable:
         case TxCreatePQGroup:
+        case TxAllocatePQ:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
         case TxCreateBlockStoreVolume:
@@ -601,7 +592,6 @@ struct TTxState {
         case TxCreateExternalDataSource:
         case TxCreateView:
         case TxCreateContinuousBackup:
-        case TxCreateResourcePool:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -635,10 +625,8 @@ struct TTxState {
         case TxAlterExternalDataSource:
         case TxAlterView:
         case TxAlterContinuousBackup:
-        case TxAlterResourcePool:
             return false;
         case TxInvalid:
-        case TxAllocatePQ:
             Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
             Y_UNREACHABLE();
         }
@@ -729,6 +717,8 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpAlterBlobDepot: return TxAlterBlobDepot;
             case NKikimrSchemeOp::ESchemeOpDropBlobDepot: return TxDropBlobDepot;
             case NKikimrSchemeOp::ESchemeOpMoveIndex: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpAllocatePersQueueGroup: return TxAllocatePQ;
+            case NKikimrSchemeOp::ESchemeOpDeallocatePersQueueGroup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpCreateExternalTable: return TxCreateExternalTable;
             case NKikimrSchemeOp::ESchemeOpAlterExternalTable: return TxAlterExternalTable;
             case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource: return TxCreateExternalDataSource;
@@ -736,9 +726,6 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateView: return TxCreateView;
             case NKikimrSchemeOp::ESchemeOpAlterView: return TxAlterView;
             case NKikimrSchemeOp::ESchemeOpDropView: return TxDropView;
-            case NKikimrSchemeOp::ESchemeOpCreateResourcePool: return TxCreateResourcePool;
-            case NKikimrSchemeOp::ESchemeOpAlterResourcePool: return TxAlterResourcePool;
-            case NKikimrSchemeOp::ESchemeOpDropResourcePool: return TxDropResourcePool;
             default: return TxInvalid;
         }
     }

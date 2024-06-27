@@ -14,9 +14,11 @@ namespace {
 class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptService> {
 public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
         IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
         : QueryServiceConfig(queryServiceConfig)
+        , MetadataProviderConfig(metadataProviderConfig)
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
@@ -81,6 +83,7 @@ private:
         Register(CreateScriptFinalizerActor(
             std::move(request),
             QueryServiceConfig,
+            MetadataProviderConfig,
             FederatedQuerySetup,
             S3ActorsFactory
         ));
@@ -124,6 +127,7 @@ private:
 
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
 
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
@@ -138,9 +142,10 @@ private:
 }  // anonymous namespace
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
-    return new TKqpFinalizeScriptService(queryServiceConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
+    return new TKqpFinalizeScriptService(queryServiceConfig, metadataProviderConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
 }
 
 }  // namespace NKikimr::NKqp

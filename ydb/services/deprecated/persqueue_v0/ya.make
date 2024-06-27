@@ -6,6 +6,7 @@ SRCS(
     grpc_pq_read_actor.cpp
     grpc_pq_write.cpp
     grpc_pq_write_actor.cpp
+    move_topic_actor.cpp
     persqueue.cpp
 )
 
@@ -31,3 +32,4 @@ PEERDIR(
 )
 
 END()
+

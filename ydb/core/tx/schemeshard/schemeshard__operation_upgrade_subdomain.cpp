@@ -307,7 +307,6 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
             case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
             case NKikimrSchemeOp::EPathType::EPathTypeView:
-            case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
                 Y_ABORT_UNLESS(!path.Base()->IsRoot());
                 //no shards
                 break;

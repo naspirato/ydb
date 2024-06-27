@@ -5,12 +5,17 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include "move_topic_actor.h"
 
 namespace NKikimr {
 namespace NGRpcService {
 
 static const ui32 PersQueueWriteSessionsMaxCount = 1000000;
 static const ui32 PersQueueReadSessionsMaxCount = 100000;
+
+void DoMovePersQueueTopic(TActorSystem* actorSystem, NYdbGrpc::IRequestContextBase* ctx) {
+    actorSystem->Register(new TMoveTopicActor(ctx));
+}
 
 TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system,
                                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
@@ -42,10 +47,24 @@ void TGRpcPersQueueService::DecRequest() {
     Limiter->Dec();
 }
 
-void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr /*logger*/) {
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro already defined
+#endif
+#define ADD_REQUEST(NAME, CB)                                                                              \
+    MakeIntrusive<TGRpcRequest<NPersQueue::NAME##Request, NPersQueue::NAME##Response, TGRpcPersQueueService>>     \
+        (this, &Service_, CQ,                                                                                    \
+            [this](NYdbGrpc::IRequestContextBase* ctx) {                                                             \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer());                            \
+                CB(this->ActorSystem, ctx);                                                                        \
+            }, &NPersQueue::PersQueueService::AsyncService::Request##NAME ,                                   \
+            #NAME, logger, getCounterBlock("operation", #NAME))->Run();
+
+
+void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     WriteService->SetupIncomingRequests();
     ReadService->SetupIncomingRequests();
     auto getCounterBlock = CreateCounterCb(Counters, ActorSystem);
+    ADD_REQUEST(MoveTopic, DoMovePersQueueTopic);
 }
 
 void TGRpcPersQueueService::StopService() noexcept {

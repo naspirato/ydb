@@ -67,7 +67,6 @@ public:
 
     TClientRequest* CreateClient();
     bool Start();
-    const char* GetError();
 
     const THashMap<TString, TString>& GetData() const { return Data; }
 

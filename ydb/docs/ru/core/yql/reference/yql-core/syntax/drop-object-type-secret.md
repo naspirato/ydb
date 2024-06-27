@@ -14,6 +14,6 @@
 **Пример**
 
 ```yql
-DROP OBJECT my_secret (TYPE SECRET);
+DROP OBJECT (TYPE SECRET) my_secret;
 ```
 

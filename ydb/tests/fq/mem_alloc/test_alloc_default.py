@@ -16,10 +16,10 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 K = 1024
-M = 1024 * 1024
-G = 1024 * 1024 * 1024
-DEFAULT_LIMIT = 8 * G
-DEFAULT_DELTA = 30 * M
+M = 1024*1024
+G = 1024*1024*1024
+DEFAULT_LIMIT = 8*G
+DEFAULT_DELTA = 30*M
 
 
 @pytest.fixture
@@ -34,17 +34,11 @@ def kikimr(request):
     kikimr.compute_plane.fq_config['resource_manager']['mkql_initial_memory_limit'] = kikimr.mkql_initial_memory_limit
     kikimr.compute_plane.fq_config['resource_manager']['mkql_total_memory_limit'] = kikimr.mkql_total_memory_limit
     kikimr.compute_plane.fq_config['resource_manager']['mkql_alloc_size'] = kikimr.mkql_alloc_size
-    kikimr.compute_plane.fq_config['resource_manager'][
-        'mkql_task_hard_memory_limit'
-    ] = kikimr.mkql_task_hard_memory_limit
+    kikimr.compute_plane.fq_config['resource_manager']['mkql_task_hard_memory_limit'] = kikimr.mkql_task_hard_memory_limit
     kikimr.control_plane.fq_config['quotas_manager']['quotas'] = []
-    kikimr.control_plane.fq_config['quotas_manager']['quotas'].append(
-        {
-            "subject_type": "cloud",
-            "subject_id": "my_cloud",
-            "limit": [{"name": "yq.streamingQuery.count", "limit": 100}],
-        }
-    )
+    kikimr.control_plane.fq_config['quotas_manager']['quotas'].append({"subject_type": "cloud",
+                                                                       "subject_id": "my_cloud",
+                                                                       "limit": [{"name": "yq.streamingQuery.count", "limit": 100}]})
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr
@@ -52,11 +46,7 @@ def kikimr(request):
     kikimr.stop()
 
 
-def wait_until(
-    predicate,
-    wait_time=yatest_common.plain_or_under_sanitizer(10, 50),
-    wait_step=yatest_common.plain_or_under_sanitizer(0.5, 2),
-):
+def wait_until(predicate, wait_time=yatest_common.plain_or_under_sanitizer(10, 50), wait_step=yatest_common.plain_or_under_sanitizer(0.5, 2)):
     deadline = time.time() + wait_time
     while time.time() < deadline:
         if predicate():
@@ -67,7 +57,7 @@ def wait_until(
 
 
 def feq(a, b):
-    if abs(a) <= 1 * G:
+    if abs(a) <= 1*G:
         return a == b
     else:
         return abs((a - b) / a) < 0.0000001
@@ -76,6 +66,7 @@ def feq(a, b):
 class TestAlloc(TestYdsBase):
     @pytest.mark.parametrize("kikimr", [(None, None, None, None)], indirect=["kikimr"])
     def test_default_limits(self, kikimr):
+
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_limit(1) == 0, "Incorrect Limit"
         assert kikimr.control_plane.get_mkql_allocated(1) == 0, "Incorrect Alloc"
@@ -84,7 +75,8 @@ class TestAlloc(TestYdsBase):
 
         sql = R'''
             SELECT * FROM myyds.`{input_topic}`
-            '''.format(
+            '''\
+        .format(
             input_topic=self.input_topic,
         )
 
@@ -99,22 +91,8 @@ class TestAlloc(TestYdsBase):
         task_count = kikimr.control_plane.get_task_count(1, query_id)
         assert feq(kikimr.control_plane.get_mkql_allocated(1), task_count * DEFAULT_LIMIT), "Incorrect Alloc"
 
-        limit = sum(
-            v
-            for k, v in six.iteritems(
-                kikimr.control_plane.get_sensors(1, "dq_tasks").find_sensors(
-                    {"operation": query_id, "subsystem": "mkql", "sensor": "MemoryLimit"}, "id"
-                )
-            )
-        )
-        usage = sum(
-            v
-            for k, v in six.iteritems(
-                kikimr.control_plane.get_sensors(1, "dq_tasks").find_sensors(
-                    {"operation": query_id, "subsystem": "mkql", "sensor": "MemoryUsage"}, "id"
-                )
-            )
-        )
+        limit = sum(v for k, v in six.iteritems(kikimr.control_plane.get_sensors(1, "dq_tasks").find_sensors({"operation": query_id, "subsystem": "mkql", "sensor": "MemoryLimit"}, "id")))
+        usage = sum(v for k, v in six.iteritems(kikimr.control_plane.get_sensors(1, "dq_tasks").find_sensors({"operation": query_id, "subsystem": "mkql", "sensor": "MemoryUsage"}, "id")))
         assert limit is not None
         assert usage is not None
         # assert limit == task_count * DEFAULT_LIMIT, "Incorrect Alloc"
@@ -125,6 +103,7 @@ class TestAlloc(TestYdsBase):
 
     @pytest.mark.parametrize("kikimr", [(1 * M, 8 * G, None, None)], indirect=["kikimr"])
     def test_default_delta(self, kikimr):
+
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_limit(1) == kikimr.mkql_total_memory_limit, "Incorrect Limit"
         assert kikimr.control_plane.get_mkql_allocated(1) == 0, "Incorrect Alloc"
@@ -136,7 +115,8 @@ class TestAlloc(TestYdsBase):
             FROM myyds.`{input_topic}`
             GROUP BY HOP(Just(CurrentUtcTimestamp()), "PT10S", "PT10S", "PT10S"), Data
             LIMIT 1
-            '''.format(
+            '''\
+        .format(
             input_topic=self.input_topic,
         )
 
@@ -167,6 +147,7 @@ class TestAlloc(TestYdsBase):
 
     @pytest.mark.parametrize("kikimr", [(1 * M, 24 * M, 1 * M, None)], indirect=["kikimr"])
     def test_node_limit(self, kikimr):
+
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_limit(1) == kikimr.mkql_total_memory_limit, "Incorrect Limit"
         assert kikimr.control_plane.get_mkql_allocated() == 0, "Incorrect Alloc"
@@ -178,7 +159,8 @@ class TestAlloc(TestYdsBase):
             FROM myyds.`{input_topic}`
             GROUP BY HOP(Just(CurrentUtcTimestamp()), "PT10S", "PT10S", "PT10S"), Data
             LIMIT 1
-            '''.format(
+            '''\
+        .format(
             input_topic=self.input_topic,
         )
 
@@ -193,14 +175,10 @@ class TestAlloc(TestYdsBase):
         while True:
             query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
             client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-            assert wait_until(
-                (lambda: kikimr.control_plane.get_task_count(1, query_id) > 0)
-            ), "TaskController not started"
+            assert wait_until((lambda : kikimr.control_plane.get_task_count(1, query_id) > 0)), "TaskController not started"
             task_count += kikimr.control_plane.get_task_count(1, query_id)
             allocated = task_count * kikimr.mkql_initial_memory_limit
-            assert wait_until(
-                (lambda: kikimr.control_plane.get_mkql_allocated(1) == allocated)
-            ), "Task memory was not allocated"
+            assert wait_until((lambda : kikimr.control_plane.get_mkql_allocated(1) == allocated)), "Task memory was not allocated"
             queries.append(query_id)
             if memory_per_graph is None:
                 memory_per_graph = allocated
@@ -221,9 +199,7 @@ class TestAlloc(TestYdsBase):
             assert False, "Incorrect issues " + str(issues)
 
         assert wait_until(not_enough_memory), "Allocation was not failed"
-        assert (
-            kikimr.control_plane.get_mkql_allocated(1) == task_count * kikimr.mkql_initial_memory_limit
-        ), "Incorrect allocation size"
+        assert kikimr.control_plane.get_mkql_allocated(1) == task_count * kikimr.mkql_initial_memory_limit, "Incorrect allocation size"
         client.abort_query(query_id)
         # query is respawned every 30s, so wait with increased timeout
         # we may be lucky to stop the query, or it is stopped automatically due to high failure rate
@@ -234,33 +210,25 @@ class TestAlloc(TestYdsBase):
         client.abort_query(queries[0])
         client.wait_query_status(queries[0], fq.QueryMeta.ABORTED_BY_USER)
 
-        assert wait_until(
-            (
-                lambda: kikimr.control_plane.get_mkql_allocated(1)
-                == (task_count - task_count_0) * kikimr.mkql_initial_memory_limit
-            )
-        ), "Task memory was not freed"
+        assert wait_until((lambda : kikimr.control_plane.get_mkql_allocated(1) == (task_count - task_count_0) * kikimr.mkql_initial_memory_limit)), "Task memory was not freed"
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
-        assert wait_until((lambda: kikimr.control_plane.get_task_count(1, query_id) > 0)), (
-            "TaskController not started " + query_id
-        )
+        assert wait_until((lambda : kikimr.control_plane.get_task_count(1, query_id) > 0)), "TaskController not started " + query_id
         task_count += kikimr.control_plane.get_task_count(1, query_id) - task_count_0
-        assert wait_until(
-            (lambda: kikimr.control_plane.get_mkql_allocated(1) == task_count * kikimr.mkql_initial_memory_limit)
-        ), "Task memory was not allocated"
+        assert wait_until((lambda : kikimr.control_plane.get_mkql_allocated(1) == task_count * kikimr.mkql_initial_memory_limit)), "Task memory was not allocated"
         queries[0] = query_id
 
         for q in queries:
             client.abort_query(q)
             client.wait_query_status(q, fq.QueryMeta.ABORTED_BY_USER)
 
-        assert wait_until((lambda: kikimr.control_plane.get_mkql_allocated() == 0)), "Incorrect final free"
+        assert wait_until((lambda : kikimr.control_plane.get_mkql_allocated() == 0)), "Incorrect final free"
 
     @pytest.mark.parametrize("kikimr", [(1 * G, 8 * G, None, None)], indirect=["kikimr"])
     def test_alloc_and_free(self, kikimr):
+
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_limit(1) == kikimr.mkql_total_memory_limit, "Incorrect Limit"
         assert kikimr.control_plane.get_mkql_allocated(1) == 0, "Incorrect Alloc"
@@ -272,7 +240,8 @@ class TestAlloc(TestYdsBase):
             FROM myyds.`{input_topic}`
             GROUP BY HOP(Just(CurrentUtcTimestamp()), "PT10S", "PT10S", "PT10S"), Data
             LIMIT 1
-            '''.format(
+            '''\
+        .format(
             input_topic=self.input_topic,
         )
 
@@ -284,9 +253,7 @@ class TestAlloc(TestYdsBase):
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
         task_count = kikimr.control_plane.get_task_count(1, query_id)
-        assert (
-            kikimr.control_plane.get_mkql_allocated(1) == task_count * kikimr.mkql_initial_memory_limit
-        ), "Incorrect Alloc"
+        assert kikimr.control_plane.get_mkql_allocated(1) == task_count * kikimr.mkql_initial_memory_limit, "Incorrect Alloc"
 
         client.abort_query(query_id)
         client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
@@ -294,6 +261,7 @@ class TestAlloc(TestYdsBase):
 
     @pytest.mark.parametrize("kikimr", [(1 * M, 1 * G, 16 * K, None)], indirect=["kikimr"])
     def test_up_down(self, kikimr):
+
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_limit(1) == kikimr.mkql_total_memory_limit, "Incorrect Limit"
         assert kikimr.control_plane.get_mkql_allocated() == 0, "Incorrect Alloc"
@@ -305,7 +273,8 @@ class TestAlloc(TestYdsBase):
             SELECT Data
             FROM myyds.`{input_topic}`
             GROUP BY HOP(Just(CurrentUtcTimestamp()), "PT10S", "PT10S", "PT10S"), Data
-            '''.format(
+            '''\
+        .format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
         )
@@ -317,7 +286,7 @@ class TestAlloc(TestYdsBase):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.control_plane.wait_zero_checkpoint(query_id)
-        assert wait_until((lambda: kikimr.control_plane.get_task_count(1, query_id) > 0)), "TaskController not started"
+        assert wait_until((lambda : kikimr.control_plane.get_task_count(1, query_id) > 0)), "TaskController not started"
         allocated_at_start = kikimr.control_plane.get_mkql_allocated(1)
 
         for i in range(10000):
@@ -337,6 +306,7 @@ class TestAlloc(TestYdsBase):
 
     @pytest.mark.parametrize("kikimr", [(1 * M, 10 * M, 1 * G, None)], indirect=["kikimr"])
     def test_mkql_not_increased(self, kikimr):
+
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_limit(1) == kikimr.mkql_total_memory_limit, "Incorrect Limit"
         assert kikimr.control_plane.get_mkql_allocated() == 0, "Incorrect Alloc"
@@ -348,7 +318,8 @@ class TestAlloc(TestYdsBase):
             SELECT Data
             FROM myyds.`{input_topic}`
             GROUP BY HOP(Just(CurrentUtcTimestamp()), "PT10S", "PT10S", "PT10S"), Data
-            '''.format(
+            '''\
+        .format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
         )
@@ -360,16 +331,14 @@ class TestAlloc(TestYdsBase):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.control_plane.wait_zero_checkpoint(query_id)
-        assert wait_until((lambda: kikimr.control_plane.get_task_count(1, query_id) > 0)), "TaskController not started"
+        assert wait_until((lambda : kikimr.control_plane.get_task_count(1, query_id) > 0)), "TaskController not started"
 
         for i in range(10000):
             self.write_stream([format(i, "09x")])
             query = client.describe_query(query_id).result.query
             issues = query.transient_issue
             if len(issues) >= 1:
-                assert issues[0].message.startswith(
-                    "Mkql memory limit exceeded, limit: 1048576"
-                ), "Incorrect message text"
+                assert issues[0].message.startswith("Mkql memory limit exceeded, limit: 1048576"), "Incorrect message text"
                 assert issues[0].message.endswith("canAllocateExtraMemory: 1"), "Incorrect settings"
                 assert issues[0].issue_code == 2029, "Incorrect issue code" + issues[0].message
                 break
@@ -380,6 +349,7 @@ class TestAlloc(TestYdsBase):
 
     @pytest.mark.parametrize("kikimr", [(350 * K, 100 * M, 1 * K, 400 * K)], indirect=["kikimr"])
     def test_hard_limit(self, kikimr):
+
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_limit(1) == kikimr.mkql_total_memory_limit, "Incorrect Limit"
         assert kikimr.control_plane.get_mkql_allocated() == 0, "Incorrect Alloc"
@@ -390,9 +360,7 @@ class TestAlloc(TestYdsBase):
             '''
         n = 1
         for i in range(0, 10):
-            query_id = client.create_query(
-                "simple", sql.format(n=n), type=fq.QueryContent.QueryType.STREAMING
-            ).result.query_id
+            query_id = client.create_query("simple", sql.format(n=n), type=fq.QueryContent.QueryType.STREAMING).result.query_id
             status = client.wait_query_status(query_id, [fq.QueryMeta.COMPLETED, fq.QueryMeta.FAILED])
             if status == fq.QueryMeta.FAILED:
                 assert i > 1, "First queries must be successfull"

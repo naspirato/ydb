@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
 
@@ -11,10 +10,10 @@
 namespace NYql {
 
 NNodes::TExprBase FlatMapOverEquiJoin(
-    const NNodes::TCoFlatMapBase& node,
-    TExprContext& ctx,
-    const TParentsMap& parentsMap,
+    const NNodes::TCoFlatMapBase& node, 
+    TExprContext& ctx, 
+    const TParentsMap& parentsMap, 
     bool multiUsage,
-    const TTypeAnnotationContext* types);
+    bool filterPushdownOverJoinOptionalSide);
 
 } // NYql

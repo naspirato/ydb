@@ -11,6 +11,7 @@ namespace NKikimrConfig {
 namespace NKikimr::NKqp {
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory);
 

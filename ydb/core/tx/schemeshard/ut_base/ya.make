@@ -26,6 +26,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_base.cpp
     ut_info_types.cpp
+    ut_allocate_pq.cpp
     ut_table_pg_types.cpp
 )
 

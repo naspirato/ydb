@@ -23,8 +23,6 @@ class CreateTableRequest;
 class Changefeed;
 class ChangefeedDescription;
 class DescribeTableResult;
-class ExplicitPartitions;
-class GlobalIndexSettings;
 class PartitioningSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
@@ -150,67 +148,17 @@ struct TAlterTableColumn {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Represents table partitioning settings
-class TPartitioningSettings {
-public:
-    TPartitioningSettings();
-    explicit TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto);
-
-    const Ydb::Table::PartitioningSettings& GetProto() const;
-
-    TMaybe<bool> GetPartitioningBySize() const;
-    TMaybe<bool> GetPartitioningByLoad() const;
-    ui64 GetPartitionSizeMb() const;
-    ui64 GetMinPartitionsCount() const;
-    ui64 GetMaxPartitionsCount() const;
-
-private:
-    class TImpl;
-    std::shared_ptr<TImpl> Impl_;
-};
-
-struct TExplicitPartitions {
-    using TSelf = TExplicitPartitions;
-
-    FLUENT_SETTING_VECTOR(TValue, SplitPoints);
-    
-    template <typename TProto>
-    static TExplicitPartitions FromProto(const TProto& proto);
-    
-    void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
-};
-
-struct TGlobalIndexSettings {
-    using TUniformOrExplicitPartitions = std::variant<std::monostate, ui64, TExplicitPartitions>;
-
-    TPartitioningSettings PartitioningSettings;
-    TUniformOrExplicitPartitions Partitions;
-
-    template <typename TProto>
-    static TGlobalIndexSettings FromProto(const TProto& proto);
-
-    void SerializeTo(Ydb::Table::GlobalIndexSettings& proto) const;
-};
-
 //! Represents index description
 class TIndexDescription {
     friend class NYdb::TProtoAccessor;
 
 public:
     TIndexDescription(
-        const TString& name,
-        EIndexType type,
+        const TString& name, EIndexType type,
         const TVector<TString>& indexColumns,
-        const TVector<TString>& dataColumns = {},
-        const TGlobalIndexSettings& settings = {}
-    );
+        const TVector<TString>& dataColumns = TVector<TString>());
 
-    TIndexDescription(
-        const TString& name,
-        const TVector<TString>& indexColumns,
-        const TVector<TString>& dataColumns = {},
-        const TGlobalIndexSettings& settings = {}
-    );
+    TIndexDescription(const TString& name, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns = TVector<TString>());
 
     const TString& GetIndexName() const;
     EIndexType GetIndexType() const;
@@ -234,7 +182,6 @@ private:
     EIndexType IndexType_;
     TVector<TString> IndexColumns_;
     TVector<TString> DataColumns_;
-    TGlobalIndexSettings GlobalIndexSettings_;
     ui64 SizeBytes = 0;
 };
 
@@ -472,6 +419,25 @@ public:
     TMaybe<TString> GetData() const;
     TMaybe<EColumnFamilyCompression> GetCompression() const;
     TMaybe<bool> GetKeepInMemory() const;
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
+//! Represents table partitioning settings
+class TPartitioningSettings {
+public:
+    TPartitioningSettings();
+    explicit TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto);
+
+    const Ydb::Table::PartitioningSettings& GetProto() const;
+
+    TMaybe<bool> GetPartitioningBySize() const;
+    TMaybe<bool> GetPartitioningByLoad() const;
+    ui64 GetPartitionSizeMb() const;
+    ui64 GetMinPartitionsCount() const;
+    ui64 GetMaxPartitionsCount() const;
 
 private:
     class TImpl;
@@ -1253,6 +1219,12 @@ struct TStoragePolicy {
     FLUENT_SETTING_OPTIONAL(TString, External);
 
     FLUENT_SETTING_VECTOR(TColumnFamilyPolicy, ColumnFamilies);
+};
+
+struct TExplicitPartitions {
+    using TSelf = TExplicitPartitions;
+
+    FLUENT_SETTING_VECTOR(TValue, SplitPoints);
 };
 
 struct TPartitioningPolicy {

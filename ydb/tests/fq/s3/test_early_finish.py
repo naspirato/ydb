@@ -26,14 +26,20 @@ class TestEarlyFinish(TestYdsBase):
 
         # S3
         resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("rbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
         )
 
         s3_client.put_object(Body="A", Bucket='rbucket', Key='A.txt', ContentType='text/plain')
@@ -54,10 +60,11 @@ class TestEarlyFinish(TestYdsBase):
             ) AS D
             ON S.Data = D.Data
             LIMIT 2
-            '''.format(
+            '''\
+        .format(
             yds_connection_name=yds_connection_name,
             storage_connection_name=storage_connection_name,
-            input_topic=self.input_topic,
+            input_topic=self.input_topic
         )
 
         client = FederatedQueryClient("my_folder", streaming_over_kikimr=kikimr)
@@ -87,4 +94,4 @@ class TestEarlyFinish(TestYdsBase):
         read_rules = list_read_rules(self.input_topic)
         assert len(read_rules) == 0, read_rules
 
-        assert self.wait_until((lambda: kikimr.control_plane.get_actor_count(1, "YQ_PINGER") == 0))
+        assert self.wait_until((lambda : kikimr.control_plane.get_actor_count(1, "YQ_PINGER") == 0))

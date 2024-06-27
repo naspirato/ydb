@@ -8,7 +8,6 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -104,7 +103,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
-    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
+    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
