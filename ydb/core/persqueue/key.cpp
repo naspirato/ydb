@@ -10,16 +10,4 @@ std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, con
     return {std::move(from), std::move(to)};
 }
 
-TKey MakeKeyFromString(const TString& s, const TPartitionId& partition)
-{
-    TKey t(s);
-    return TKey(t.GetType(),
-                partition,
-                t.GetOffset(),
-                t.GetPartNo(),
-                t.GetCount(),
-                t.GetInternalPartsCount(),
-                t.IsHead());
-}
-
 }

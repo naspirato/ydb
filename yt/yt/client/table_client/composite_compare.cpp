@@ -12,8 +12,6 @@
 
 #include <util/stream/mem.h>
 
-#include <cmath>
-
 namespace NYT::NTableClient {
 
 using namespace NYson;

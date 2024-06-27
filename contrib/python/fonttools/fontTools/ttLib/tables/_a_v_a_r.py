@@ -143,9 +143,7 @@ class table__a_v_a_r(BaseTTXConverter):
 
     def renormalizeLocation(self, location, font):
 
-        majorVersion = getattr(self, "majorVersion", 1)
-
-        if majorVersion not in (1, 2):
+        if self.majorVersion not in (1, 2):
             raise NotImplementedError("Unknown avar table version")
 
         avarSegments = self.segments
@@ -156,7 +154,7 @@ class table__a_v_a_r(BaseTTXConverter):
                 value = piecewiseLinearMap(value, avarMapping)
             mappedLocation[axisTag] = value
 
-        if majorVersion < 2:
+        if self.majorVersion < 2:
             return mappedLocation
 
         # Version 2

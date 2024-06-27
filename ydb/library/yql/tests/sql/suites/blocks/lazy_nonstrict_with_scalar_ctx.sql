@@ -1,5 +1,7 @@
 USE plato;
 
+pragma UseBlocks;
+
 $one = select min(AssumeNonStrict(value)) from Input;
 $two = select AssumeNonStrict(min(value)) from Input;
 

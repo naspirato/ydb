@@ -9,10 +9,10 @@ from pythran.cxxgen import PythonModule, Include, Line, Statement
 from pythran.cxxgen import FunctionBody, FunctionDeclaration, Value, Block
 from pythran.cxxgen import ReturnStatement
 from pythran.dist import PythranExtension, PythranBuildExt
-from pythran.errors import PythranCompileError
 from pythran.middlend import refine, mark_unexported_functions
 from pythran.passmanager import PassManager
 from pythran.tables import pythran_ward
+from pythran.types import tog
 from pythran.types.type_dependencies import pytype_to_deps
 from pythran.types.conversion import pytype_to_ctype
 from pythran.spec import load_specfile, Spec
@@ -22,8 +22,12 @@ from pythran.version import __version__
 from pythran.utils import cxxid
 import pythran.frontend as frontend
 
-import sysconfig
-
+try:
+    from distutils.errors import CompileError
+    from distutils import sysconfig
+except ImportError:
+    from setuptools.errors import CompileError
+    from setuptools._distutils import sysconfig
 try:
     # `numpy.distutils is deprecated, may not be present, or broken
     from numpy.distutils.core import setup
@@ -162,7 +166,6 @@ def generate_cxx(module_name, code, specs=None, optimizations=None,
         mod = Generable(content)
 
         def error_checker():
-            from pythran.types import tog
             tog.typecheck(ir)
 
     else:
@@ -172,7 +175,6 @@ def generate_cxx(module_name, code, specs=None, optimizations=None,
             specs = Spec(specs, {})
 
         def error_checker():
-            from pythran.types import tog
             types = tog.typecheck(ir)
             check_specs(specs, types)
 
@@ -284,55 +286,13 @@ def generate_cxx(module_name, code, specs=None, optimizations=None,
                 docstring
             )
 
-        if specs.ufuncs:
-            mod.add_to_includes(
-                Include("pythonic/include/types/numpy_ufunc.hpp"),
-            )
-
-        for function_name, signatures in specs.ufuncs.items():
-            internal_func_name = cxxid(function_name)
-
-            for signature in signatures:
-                arguments_types = [pytype_to_ctype(t) for t in signature]
-                numpy_types = ['pythonic::c_type_to_numpy_type<{}>::value'.format(t) for t in
-                               arguments_types]
-                arguments_names = has_argument(ir, function_name)
-                arguments = [n for n, _ in
-                             zip(arguments_names, arguments_types)]
-                name_fmt = pythran_ward + "{0}::{1}::type{2}"
-                args_list = ", ".join(arguments_types)
-                specialized_fname = name_fmt.format(module_name,
-                                                    internal_func_name,
-                                                    "<{0}>".format(args_list)
-                                                    if arguments_names else "")
-                result_type = "typename %s::result_type" % specialized_fname
-                numpy_result_type = 'pythonic::c_type_to_numpy_type<{}>::value'.format(result_type)
-                numpy_types.append(numpy_result_type)
-
-                mod.add_ufunc(
-                    FunctionBody(
-                        FunctionDeclaration(
-                            Value(result_type, function_name),
-                            [Value(t, a)
-                             for t, a in zip(arguments_types, arguments)]),
-                        Block([ReturnStatement("{0}()({1})".format(
-                            warded(module_name, internal_func_name),
-                            ', '.join(arguments)))])
-                    ),
-                    function_name,
-                    pythran_ward + module_name + "::" + internal_func_name,
-                    arguments_types + [result_type],
-                    numpy_types
-                )
-
-    return mod, error_checker
     return mod, error_checker
 
 
 def compile_cxxfile(module_name, cxxfile, output_binary=None, **kwargs):
     '''c++ file -> native module
     Return the filename of the produced shared library
-    Raises PythranCompileError on failure
+    Raises CompileError on failure
 
     '''
 
@@ -357,7 +317,7 @@ def compile_cxxfile(module_name, cxxfile, output_binary=None, **kwargs):
                            '--build-temp', buildtmp]
               )
     except SystemExit as e:
-        raise PythranCompileError(str(e))
+        raise CompileError(str(e))
 
     def copy(src_file, dest_file):
         # not using shutil.copy because it fails to copy stat across devices
@@ -466,7 +426,7 @@ def compile_pythrancode(module_name, pythrancode, specs=None,
                                           str(module),
                                           output_binary=output_file,
                                           **kwargs)
-        except PythranCompileError:
+        except CompileError:
             logger.warning("Compilation error, "
                            "trying hard to find its origin...")
             error_checker()
@@ -559,7 +519,7 @@ def import_pythranfile(pythranpath, **kwargs):
 
 def test_compile():
     '''Simple passthrough compile test.
-    May raises PythranCompileError Exception.
+    May raises CompileError Exception.
 
     '''
     code = '''

@@ -18,15 +18,13 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
-    const TQueryRequestSettings& querySettings,
-    const TString& poolId)
+    const TQueryRequestSettings& querySettings)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
     , SessionId(sessionId)
     , YqlText(std::move(yqlText))
     , QueryId(std::move(queryId))
-    , PoolId(poolId)
     , QueryAction(queryAction)
     , QueryType(queryType)
     , TxControl(txControl)
@@ -84,10 +82,6 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
 
         if (!QueryId.empty()) {
             Record.MutableRequest()->SetPreparedQuery(QueryId);
-        }
-
-        if (!PoolId.empty()) {
-            Record.MutableRequest()->SetPoolId(PoolId);
         }
 
         Record.MutableRequest()->SetSessionId(SessionId);

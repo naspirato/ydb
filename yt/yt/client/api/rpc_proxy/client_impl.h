@@ -305,12 +305,6 @@ public:
         NJobTrackerClient::TJobId jobId,
         const NApi::TAbortJobOptions& options) override;
 
-    TFuture<void> DumpJobProxyLog(
-        NJobTrackerClient::TJobId jobId,
-        NJobTrackerClient::TOperationId operationId,
-        const NYPath::TYPath& path,
-        const NApi::TDumpJobProxyLogOptions& options) override;
-
     // Metadata.
     TFuture<NApi::TClusterMeta> GetClusterMeta(
         const NApi::TGetClusterMetaOptions&) override;
@@ -551,9 +545,9 @@ public:
         const NYPath::TYPath& pipelinePath,
         const TPausePipelineOptions& options = {}) override;
 
-    TFuture<TPipelineState> GetPipelineState(
+    TFuture<TPipelineStatus> GetPipelineStatus(
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStateOptions& options) override;
+        const TGetPipelineStatusOptions& options) override;
 
     TFuture<TGetFlowViewResult> GetFlowView(
         const NYPath::TYPath& pipelinePath,

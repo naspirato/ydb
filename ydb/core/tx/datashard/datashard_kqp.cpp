@@ -1015,10 +1015,6 @@ public:
     std::function<void()> GetWakeupCallback() const override {
         return {};
     }
-
-    NDq::TTxId GetTxId() const override {
-        return {};
-    }
 };
 
 }  // anonymous namespace

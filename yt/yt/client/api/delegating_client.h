@@ -555,13 +555,6 @@ public:
         const TAbortJobOptions& options),
         (jobId, options))
 
-    DELEGATE_METHOD(TFuture<void>, DumpJobProxyLog, (
-        NJobTrackerClient::TJobId jobId,
-        NJobTrackerClient::TOperationId operationId,
-        const NYPath::TYPath& path,
-        const TDumpJobProxyLogOptions& options),
-        (jobId, operationId, path, options))
-
     // Metadata
     DELEGATE_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (
         const TGetClusterMetaOptions& options),
@@ -830,9 +823,9 @@ public:
         const TPausePipelineOptions& options),
         (pipelinePath, options))
 
-    DELEGATE_METHOD(TFuture<TPipelineState>, GetPipelineState, (
+    DELEGATE_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStateOptions& options),
+        const TGetPipelineStatusOptions& options),
         (pipelinePath, options))
 
     DELEGATE_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (

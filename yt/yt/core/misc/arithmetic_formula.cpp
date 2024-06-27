@@ -907,7 +907,12 @@ void Deserialize(TBooleanFormulaTags& tags, NYTree::INodePtr node)
     tags = TBooleanFormulaTags(ConvertTo<THashSet<TString>>(node));
 }
 
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*spec*/)
+TString ToString(const TBooleanFormulaTags& tags)
+{
+    return ToStringViaBuilder(tags);
+}
+
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormulaTags& tags, TStringBuf /*format*/)
 {
     builder->AppendFormat("%v", tags.GetSourceTags());
 }
@@ -1036,7 +1041,12 @@ void TBooleanFormula::Load(TStreamLoadContext& context)
     Impl_ = MakeGenericFormulaImpl(formula, EEvaluationContext::Boolean);
 }
 
-void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*spec*/)
+TString ToString(const TBooleanFormula& booleanFormula)
+{
+    return ToStringViaBuilder(booleanFormula);
+}
+
+void FormatValue(TStringBuilderBase* builder, const TBooleanFormula& booleanFormula, TStringBuf /*format*/)
 {
     builder->AppendFormat("%v", booleanFormula.GetFormula());
 }

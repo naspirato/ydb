@@ -7,8 +7,6 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 
-#include <ydb/core/protos/cms.pb.h>
-
 namespace NKikimr {
 namespace NDriverClient {
 

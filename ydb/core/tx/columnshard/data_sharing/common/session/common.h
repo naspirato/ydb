@@ -21,7 +21,7 @@ class TManager;
 namespace NKikimr::NOlap::NDataSharing {
 
 class TCommonSession {
-public:
+private:
     enum class EState {
         Created,
         Prepared,
@@ -29,7 +29,6 @@ public:
         Finished
     };
 
-private:
     static ui64 GetNextRuntimeId() {
         static TAtomicCounter Counter = 0;
         return (ui64)Counter.Inc();
@@ -57,7 +56,6 @@ public:
         : SessionId(sessionId)
         , Info(info)
         , TransferContext(transferContext) {
-        AFL_VERIFY(!!SessionId);
     }
 
     const TTransferContext& GetTransferContext() const {
@@ -70,10 +68,6 @@ public:
 
     bool IsPrepared() const {
         return State == EState::Prepared;
-    }
-
-    bool IsFinished() const {
-        return State == EState::Finished;
     }
 
     bool IsInProgress() const {

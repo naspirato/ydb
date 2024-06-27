@@ -23,7 +23,7 @@
 | **Credentials providers** |
 | Anonymous (default) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \+ | \- |
-| Token: IAM, Access token | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Token: IAM, OAuth | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Service account (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \- | \+ |
 | Metadata (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | **Working with Table service sessions** |

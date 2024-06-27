@@ -66,15 +66,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Periodically executes callback which can fail using retries. Specifics:
+// Periodically executes callback which can fail using retries. Speciffics:
 // Fallible callback is modelled as TCallback<TError()>
-// Any non-OK error is considered a failure.
-// Retries are made with exponential backoff; see yt/yt/core/misc/backoff_strategy.h .
+// Any non-Ok error is considered a failure.
+// Retries are made with exponential backoff see yt/yt/core/misc/backoff_strategy.h .
 class TRetryingPeriodicExecutor
     : public NDetail::TPeriodicExecutorBase<NDetail::TRetryingInvocationTimePolicy>
 {
 public:
-    //! Initializes the instance.
+    //! Initializes an instance.
     /*!
      *  \note
      *  We must call #Start to activate the instance.

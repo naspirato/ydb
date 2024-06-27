@@ -23,13 +23,10 @@ public: \
     \
 private: \
     using TThis = type; \
-    using TLoadContextImpl = TLoadContext; \
     \
     template <class TThis, class TContext> \
     friend std::unique_ptr<::NYT::NPhoenix2::NDetail::TRuntimeTypeLoadSchedule<TThis, TContext>> NYT::NPhoenix2::NDetail::BuildRuntimeTypeLoadSchedule( \
-        const ::NYT::NPhoenix2::NDetail::TTypeLoadSchedule* schedule); \
-    template <auto Member, class TThis, class TContext, class TFieldSerializer> \
-    friend class ::NYT::NPhoenix2::NDetail::TFieldLoadRegistrar
+        const ::NYT::NPhoenix2::NDetail::TTypeLoadSchedule* schedule)
 
 #define PHOENIX_DECLARE_TYPE__IMPL(type, typeTagValue, saveLoadModifier) \
     PHOENIX_DECLARE_TYPE__PROLOGUE(type, typeTagValue); \

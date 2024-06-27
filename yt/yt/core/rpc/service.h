@@ -20,8 +20,6 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
-#include <library/cpp/yt/string/guid.h>
-
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -250,16 +248,16 @@ struct IServiceContext
     void SetResponseInfo();
 
     template <class... TArgs>
-    void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
+    void SetRequestInfo(const char* format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetIncrementalRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
+    void SetIncrementalRequestInfo(const char* format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
+    void SetResponseInfo(const char* format, TArgs&&... args);
 
     template <class... TArgs>
-    void SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
+    void SetIncrementalResponseInfo(const char* format, TArgs&&... args);
 
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);
@@ -291,7 +289,7 @@ struct TServiceId
     TRealmId RealmId;
 };
 
-void FormatValue(TStringBuilderBase* builder, const TServiceId& id, TStringBuf spec);
+TString ToString(const TServiceId& serviceId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -12,7 +12,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TCancelableRunWithBoundedConcurrencyTest, Simple)
+TEST(TCancelableRunWithBoundedConcurrencyTest, TestSimple)
 {
     int x = 0;
 
@@ -30,7 +30,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, Simple)
     EXPECT_EQ(x, 1);
 }
 
-TEST(TCancelableRunWithBoundedConcurrencyTest, ManyCallbacks)
+TEST(TCancelableRunWithBoundedConcurrencyTest, TestManyCallbacks)
 {
     auto threadPool = CreateThreadPool(4, "ThreadPool");
 
@@ -55,7 +55,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, ManyCallbacks)
     EXPECT_EQ(x, callbackCount);
 }
 
-TEST(TCancelableRunWithBoundedConcurrencyTest, Cancelation)
+TEST(TCancelableRunWithBoundedConcurrencyTest, TestCancelation)
 {
     auto threadPool = CreateThreadPool(4, "ThreadPool");
 
@@ -92,7 +92,7 @@ TEST(TCancelableRunWithBoundedConcurrencyTest, Cancelation)
     EXPECT_EQ(canceledCount, 4);
 }
 
-TEST(TAllSucceededBoundedConcurrencyTest, AllSucceededFail)
+TEST(TestAllSucceededBoundedConcurrency, TestAllSucceededFail)
 {
     using TCounter = std::atomic<int>;
 
@@ -104,11 +104,11 @@ TEST(TAllSucceededBoundedConcurrencyTest, AllSucceededFail)
 
     std::vector<TCallback<TFuture<void>()>> callbacks;
     for (int i = 0; i < 9; ++i) {
-        callbacks.push_back(BIND([x, startingSleepCount, finishedSleepCount]() mutable {
-            int curX = (*x)++;
-            if (curX < 5) {
+        callbacks.emplace_back(BIND([x, startingSleepCount, finishedSleepCount]() mutable {
+            int cur_x = (*x)++;
+            if (cur_x < 5) {
                 return;
-            } else if (curX == 5) {
+            } else if (cur_x == 5) {
                 //Make sure other callbacks have a chance to start first
                 Sleep(TDuration::MilliSeconds(5));
                 THROW_ERROR_EXCEPTION("My Error");

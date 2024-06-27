@@ -12,7 +12,9 @@ NKikimrColumnShardDataSharingProto::TTransferContext TTransferContext::Serialize
     for (auto&& i : SourceTabletIds) {
         result.AddSourceTabletIds((ui64)i);
     }
-    GetSnapshotBarrierVerified().SerializeToProto(*result.MutableSnapshotBarrier());
+    if (SnapshotBarrier) {
+        SnapshotBarrier->SerializeToProto(*result.MutableSnapshotBarrier());
+    }
     result.SetMoving(Moving);
     return result;
 }
@@ -57,7 +59,7 @@ bool TTransferContext::IsEqualTo(const TTransferContext& context) const {
 }
 
 TString TTransferContext::DebugString() const {
-    return TStringBuilder() << "{from=" << (ui64)DestinationTabletId << ";moving=" << Moving << ";snapshot=" << SnapshotBarrier.DebugString() << "}";
+    return TStringBuilder() << "{from=" << (ui64)DestinationTabletId << ";moving=" << Moving << ";snapshot=" << (SnapshotBarrier ? SnapshotBarrier->DebugString() : "NO") << "}";
 }
 
 TTransferContext::TTransferContext(const TTabletId destination, const THashSet<TTabletId>& sources, const TSnapshot& snapshotBarrier, const bool moving, const std::optional<ui64> txId)
@@ -72,8 +74,13 @@ TTransferContext::TTransferContext(const TTabletId destination, const THashSet<T
 }
 
 const NKikimr::NOlap::TSnapshot& TTransferContext::GetSnapshotBarrierVerified() const {
-    AFL_VERIFY(SnapshotBarrier.Valid());
-    return SnapshotBarrier;
+    AFL_VERIFY(!!SnapshotBarrier);
+    return *SnapshotBarrier;
+}
+
+void TTransferContext::SetSnapshotBarrier(const TSnapshot& snapshot) {
+    AFL_VERIFY(!SnapshotBarrier || *SnapshotBarrier == snapshot);
+    SnapshotBarrier = snapshot;
 }
 
 }

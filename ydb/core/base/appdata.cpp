@@ -13,8 +13,6 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/bootstrap.pb.h>
-#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/key.pb.h>
@@ -60,7 +58,6 @@ struct TAppData::TImpl {
     NKikimrConfig::TBackgroundCleaningConfig BackgroundCleaningConfig;
     NKikimrConfig::TGraphConfig GraphConfig;
     NKikimrSharedCache::TSharedCacheConfig SharedCacheConfig;
-    NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
 };
 
 TAppData::TAppData(
@@ -112,7 +109,6 @@ TAppData::TAppData(
     , BackgroundCleaningConfig(Impl->BackgroundCleaningConfig)
     , GraphConfig(Impl->GraphConfig)
     , SharedCacheConfig(Impl->SharedCacheConfig)
-    , MetadataCacheConfig(Impl->MetadataCacheConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 

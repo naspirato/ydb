@@ -6,7 +6,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FormatValue(TStringBuilderBase* builder, const std::monostate&, TStringBuf /*spec*/)
+void FormatValue(TStringBuilderBase* builder, const std::monostate&, TStringBuf /*format*/)
 {
     builder->AppendString(TStringBuf("<monostate>"));
 }

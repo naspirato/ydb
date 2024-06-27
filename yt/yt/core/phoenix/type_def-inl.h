@@ -81,11 +81,6 @@ public:
         return std::move(*this);
     }
 
-    auto InVersions(auto /*filter*/) &&
-    {
-        return std::move(*this);
-    }
-
     auto WhenMissing(auto&& /*handler*/) &&
     {
         return std::move(*this);
@@ -133,6 +128,32 @@ decltype(auto) RunRegistrar(auto&& registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TFieldSchemaRegistrar
+{
+public:
+    explicit TFieldSchemaRegistrar(TFieldDescriptor* descriptor);
+
+    auto SinceVersion(auto version) &&
+    {
+        Descriptor_->MinVersion_ = static_cast<int>(version);
+        return std::move(*this);
+    }
+
+    auto WhenMissing(auto&& /*handler*/) &&
+    {
+        return std::move(*this);
+    }
+
+    template <class TFieldSerializer>
+    auto Serializer() &&
+    {
+        return std::move(*this);
+    }
+
+private:
+    TFieldDescriptor* const Descriptor_;
+};
+
 class TTypeSchemaBuilderRegistar
     : public TTypeRegistrarBase
 {
@@ -167,14 +188,14 @@ private:
     std::unique_ptr<TTypeDescriptor> TypeDescriptor_ = std::make_unique<TTypeDescriptor>();
 
     template <TFieldTag::TUnderlying TagValue>
-    auto DoField(TString name, bool deprecated)
+    TFieldSchemaRegistrar DoField(TString name, bool deprecated)
     {
         auto fieldDescriptor = std::make_unique<TFieldDescriptor>();
         fieldDescriptor->Name_ = std::move(name);
         fieldDescriptor->Tag_ = TFieldTag(TagValue);
         fieldDescriptor->Deprecated_ = deprecated;
         TypeDescriptor_->Fields_.push_back(std::move(fieldDescriptor));
-        return TDummyFieldRegistrar();
+        return TFieldSchemaRegistrar(TypeDescriptor_->Fields_.back().get());
     }
 };
 
@@ -254,11 +275,6 @@ public:
     }
 
     auto SinceVersion(auto /*version*/) &&
-    {
-        return TFieldSaveRegistrar(std::move(*this));
-    }
-
-    auto InVersions(auto /*filter*/) &&
     {
         return TFieldSaveRegistrar(std::move(*this));
     }
@@ -360,36 +376,25 @@ public:
         , Context_(other.Context_)
         , Name_(other.Name_)
         , MinVersion_(other.MinVersion_)
-        , VersionFilter_(other.VersionFilter_)
+        , MaxVersion_(other.MaxVersion_)
         , MissingHandler_(other.MissingHandler_)
     {
         other.Armed_ = false;
     }
 
-    using TVersion = decltype(std::declval<typename TThis::TLoadContextImpl>().GetVersion());
-
-    auto SinceVersion(TVersion version) &&
+    auto SinceVersion(auto verison) &&
     {
-        MinVersion_ = version;
+        MinVersion_ = static_cast<int>(verison);
         return TFieldLoadRegistrar(std::move(*this));
     }
 
-    using TMissingHandler = void (*)(TThis* this_, TContext& context);
+    using TMissingHandler = void (*)(TThis*, TContext&);
 
     auto WhenMissing(TMissingHandler handler) &&
     {
         MissingHandler_ = handler;
         return TFieldLoadRegistrar(std::move(*this));
     }
-
-    using TVersionFilter = bool (*)(TVersion version);
-
-    auto InVersions(TVersionFilter filter) &&
-    {
-        VersionFilter_ = filter;
-        return TFieldLoadRegistrar(std::move(*this));
-    }
-
 
     template <class TFieldSerializer_>
     auto Serializer() &&
@@ -400,7 +405,7 @@ public:
     ~TFieldLoadRegistrar()
     {
         if (Armed_) {
-            if (auto version = Context_.GetVersion(); version >= MinVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+            if (auto version = static_cast<int>(Context_.GetVersion()); version >= MinVersion_ && version <= MaxVersion_) {
                 Context_.Dumper().SetFieldName(Name_);
                 TFieldSerializer::Load(Context_, This_->*Member);
             } else if (MissingHandler_) {
@@ -419,8 +424,8 @@ private:
     TContext& Context_;
     const TStringBuf Name_;
 
-    TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
-    TVersionFilter VersionFilter_ = nullptr;
+    int MinVersion_ = std::numeric_limits<int>::min();
+    int MaxVersion_ = std::numeric_limits<int>::max();
     TMissingHandler MissingHandler_ = nullptr;
 
     bool Armed_ = true;
@@ -529,11 +534,6 @@ public:
         return std::move(*this);
     }
 
-    auto InVersions(auto /*filter*/) &&
-    {
-        return std::move(*this);
-    }
-
     auto WhenMissing(TFieldHandler<TThis, TContext> handler) &&
     {
         Descriptor_->MissingHandler = handler;
@@ -575,11 +575,6 @@ public:
     { }
 
     auto SinceVersion(auto /*version*/) &&
-    {
-        return *this;
-    }
-
-    auto InVersions(auto /*filter*/) &&
     {
         return *this;
     }

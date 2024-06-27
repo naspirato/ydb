@@ -11,7 +11,7 @@ namespace NYT {
 template <class... TArgs>
 template <class T>
     requires std::constructible_from<std::string_view, T>
-consteval TBasicFormatString<TArgs...>::TBasicFormatString(const T& fmt)
+consteval TBasicStaticFormat<TArgs...>::TBasicStaticFormat(const T& fmt)
     : Format_(fmt)
 {
     CheckFormattability();
@@ -21,13 +21,13 @@ consteval TBasicFormatString<TArgs...>::TBasicFormatString(const T& fmt)
 }
 
 template <class... TArgs>
-TStringBuf TBasicFormatString<TArgs...>::Get() const noexcept
+TStringBuf TBasicStaticFormat<TArgs...>::Get() const noexcept
 {
     return {Format_};
 }
 
 template <class... TArgs>
-consteval void TBasicFormatString<TArgs...>::CheckFormattability()
+consteval void TBasicStaticFormat<TArgs...>::CheckFormattability()
 {
 #if !defined(NDEBUG) && !defined(YT_DISABLE_FORMAT_STATIC_ANALYSIS)
     using TTuple = std::tuple<std::remove_cvref_t<TArgs>...>;
@@ -42,21 +42,13 @@ consteval void TBasicFormatString<TArgs...>::CheckFormattability()
 #endif
 }
 
-template <class... TArgs>
-TBasicFormatString<TArgs...>::TBasicFormatString(TRuntimeFormat fmt)
-    : Format_(fmt.Get())
+inline TRuntimeFormat::TRuntimeFormat(TStringBuf fmt)
+    : Format_(fmt)
+{ }
+
+inline TStringBuf TRuntimeFormat::Get() const noexcept
 {
-    // NB(arkady-e1ppa): StaticFormat performs the
-    // formattability check of the args in a way
-    // that provides more useful information
-    // than a simple static_assert with conjunction.
-    // Additionally, the latter doesn't work properly
-    // for older clang version.
-    static constexpr auto argsChecker = [] {
-        CheckFormattability();
-        return 42;
-    } ();
-    Y_UNUSED(argsChecker);
+    return Format_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

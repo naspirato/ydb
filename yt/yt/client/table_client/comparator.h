@@ -94,6 +94,7 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, const TComparator& comparator, TStringBuf spec);
+TString ToString(const TComparator& comparator);
 
 void Serialize(const TComparator& comparator, NYson::IYsonConsumer* consumer);
 

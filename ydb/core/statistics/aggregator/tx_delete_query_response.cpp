@@ -5,7 +5,6 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxDeleteQueryResponse : public TTxBase {
-    std::unordered_set<TActorId> ReplyToActorIds;
 
     TTxDeleteQueryResponse(TSelf* self)
         : TTxBase(self)
@@ -16,20 +15,17 @@ struct TStatisticsAggregator::TTxDeleteQueryResponse : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxDeleteQueryResponse::Execute");
 
-        ReplyToActorIds.swap(Self->ReplyToActorIds);
-
         NIceDb::TNiceDb db(txc.DB);
-        Self->FinishScan(db);
+
+        Self->ResetScanState(db);
 
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxDeleteQueryResponse::Complete");
 
-        for (auto& id : ReplyToActorIds) {
-            ctx.Send(id, new TEvStatistics::TEvScanTableResponse);
-        }
+        Self->ScheduleNextScan();
     }
 };
 void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {

@@ -5,16 +5,10 @@
 #include <util/stream/output.h>
 #include <library/cpp/yaml/as/tstring.h>
 
-struct TEnumSettings {
-    bool ConvertToLowerCase = false;
-    bool SkipDefaultValue = false;
-};
-
 class TProtoToYaml {
 public:
     static YAML::Node ProtoToYamlSchema(const ::google::protobuf::Descriptor* descriptor);
-
-    static void FillEnum(YAML::Node property, const ::google::protobuf::EnumDescriptor* enumDescriptor, const TEnumSettings& enumSettings = TEnumSettings());
+    static void FillEnum(YAML::Node property, const ::google::protobuf::EnumDescriptor* enumDescriptor);
 
     template <typename ProtoType>
     static YAML::Node ProtoToYamlSchema() {

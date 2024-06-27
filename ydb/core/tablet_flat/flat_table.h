@@ -31,7 +31,6 @@ namespace NTable {
 
 class TTableEpochs;
 class TKeyRangeCache;
-class TKeyRangeCacheNeedGCList;
 
 class TTable: public TAtomicRefCount<TTable> {
 public:
@@ -65,7 +64,7 @@ public:
         TIteratorStats Stats;
     };
 
-    explicit TTable(TEpoch, const TIntrusivePtr<TKeyRangeCacheNeedGCList>& gcList = nullptr);
+    explicit TTable(TEpoch);
     ~TTable();
 
     void PrepareRollback();
@@ -352,7 +351,6 @@ private:
 
     bool EraseCacheEnabled = false;
     TKeyRangeCacheConfig EraseCacheConfig;
-    const TIntrusivePtr<TKeyRangeCacheNeedGCList> EraseCacheGCList;
 
     TRowVersionRanges RemovedRowVersions;
 
@@ -361,7 +359,6 @@ private:
     absl::flat_hash_set<ui64> CheckTransactions;
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
-    TTransactionSet DecidedTransactions;
     TIntrusivePtr<ITableObserver> TableObserver;
 
 private:
@@ -403,13 +400,6 @@ private:
         TRollbackAddOpenTx,
         TRollbackRemoveOpenTx>;
 
-    struct TCommitAddDecidedTx {
-        ui64 TxId;
-    };
-
-    using TCommitOp = std::variant<
-        TCommitAddDecidedTx>;
-
     struct TRollbackState {
         TEpoch Epoch;
         TIntrusiveConstPtr<TRowScheme> Scheme;
@@ -418,7 +408,6 @@ private:
         bool EraseCacheEnabled;
         bool MutableExisted;
         bool MutableUpdated;
-        bool DisableEraseCache;
 
         TRollbackState(TEpoch epoch)
             : Epoch(epoch)
@@ -426,7 +415,6 @@ private:
     };
 
     std::optional<TRollbackState> RollbackState;
-    std::vector<TCommitOp> CommitOps;
     std::vector<TRollbackOp> RollbackOps;
     TIntrusivePtr<TMemTable> MutableBackup;
 };

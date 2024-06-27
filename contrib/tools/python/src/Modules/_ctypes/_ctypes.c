@@ -1534,10 +1534,9 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     }
 
     itemsize = itemdict->size;
-    if (itemsize != 0 && length > PY_SSIZE_T_MAX / itemsize) {
+    if (length * itemsize < 0) {
         PyErr_SetString(PyExc_OverflowError,
                         "array too large");
-        Py_DECREF(stgdict);
         return NULL;
     }
 
@@ -1560,10 +1559,8 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     /* create the new instance (which is a class,
        since we are a metatype!) */
     result = (PyTypeObject *)PyType_Type.tp_new(type, args, kwds);
-    if (result == NULL) {
-        Py_DECREF(stgdict);
+    if (result == NULL)
         return NULL;
-    }
 
     /* replace the class dict by our updated spam dict */
     if (-1 == PyDict_Update((PyObject *)stgdict, result->tp_dict)) {
@@ -1577,16 +1574,12 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
        A permanent annoyance: char arrays are also strings!
     */
     if (itemdict->getfunc == _ctypes_get_fielddesc("c")->getfunc) {
-        if (-1 == add_getset(result, CharArray_getsets)) {
-            Py_DECREF(result);
+        if (-1 == add_getset(result, CharArray_getsets))
             return NULL;
-        }
 #ifdef CTYPES_UNICODE
     } else if (itemdict->getfunc == _ctypes_get_fielddesc("u")->getfunc) {
-        if (-1 == add_getset(result, WCharArray_getsets)) {
-            Py_DECREF(result);
+        if (-1 == add_getset(result, WCharArray_getsets))
             return NULL;
-        }
 #endif
     }
 
@@ -2795,18 +2788,16 @@ static PyObject *
 PyCData_reduce(PyObject *_self, PyObject *args)
 {
     CDataObject *self = (CDataObject *)_self;
-    PyObject *dict;
 
     if (PyObject_stgdict(_self)->flags & (TYPEFLAG_ISPOINTER|TYPEFLAG_HASPOINTER)) {
         PyErr_SetString(PyExc_ValueError,
                         "ctypes objects containing pointers cannot be pickled");
         return NULL;
     }
-    dict = PyObject_GetAttrString(_self, "__dict__");
-    if (dict == NULL) {
-        return NULL;
-    }
-    return Py_BuildValue("O(O(NN))", _unpickle, Py_TYPE(_self), dict,
+    return Py_BuildValue("O(O(NN))",
+                         _unpickle,
+                         Py_TYPE(_self),
+                         PyObject_GetAttrString(_self, "__dict__"),
                          PyString_FromStringAndSize(self->b_ptr, self->b_size));
 }
 

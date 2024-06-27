@@ -242,9 +242,7 @@ static TCHAR *FormatError(DWORD code)
 {
     TCHAR *lpMsgBuf;
     DWORD n;
-    n = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                      FORMAT_MESSAGE_FROM_SYSTEM |
-                      FORMAT_MESSAGE_IGNORE_INSERTS,
+    n = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
                       NULL,
                       code,
                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), /* Default language */
@@ -1848,7 +1846,6 @@ POINTER(PyObject *self, PyObject *cls)
                                        "s(O){}",
                                        buf,
                                        &PyCPointer_Type);
-        PyMem_Free(buf);
         if (result == NULL)
             return result;
         key = PyLong_FromVoidPtr(result);

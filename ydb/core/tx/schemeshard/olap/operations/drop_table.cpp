@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/tx/tiering/cleaner_task.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -295,6 +296,11 @@ public:
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
+    bool HandleReply(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, TOperationContext& context) override {
+        Y_ABORT_UNLESS(ev->Get()->IsSuccess());
+        return Finish(context);
+    }
+
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -305,7 +311,23 @@ public:
             DebugHint() << " ProgressState"
             << ", at schemeshard: " << ssId);
 
-        return Finish(context);
+        if (!NBackgroundTasks::TServiceOperator::IsEnabled()) {
+            return Finish(context);
+        }
+        NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
+        auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
+        const TString& tieringId = tableInfo->Description.GetTtlSettings().GetUseTiering();
+        if (!tieringId) {
+            return Finish(context);
+        }
+
+        {
+            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(
+                tieringId, txState->TargetPathId.LocalPathId), nullptr);
+            task.SetId(OperationId.SerializeToString());
+            context.SS->SelfId().Send(NBackgroundTasks::MakeServiceId(context.SS->SelfId().NodeId()), new NBackgroundTasks::TEvAddTask(std::move(task)));
+            return false;
+        }
     }
 };
 

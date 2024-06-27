@@ -26,7 +26,6 @@ SRCS(
     scheme_printers.cpp
     sys.cpp
     tabbed_table.cpp
-    waiting_bar.cpp
     ydb_updater.cpp
     yt.cpp
 )

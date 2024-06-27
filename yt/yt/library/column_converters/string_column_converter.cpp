@@ -20,7 +20,7 @@ using namespace NTableClient;
 namespace {
 
 void FillColumnarStringValues(
-    IUnversionedColumnarRowBatch::TColumn* column,
+    NTableClient::IUnversionedColumnarRowBatch::TColumn* column,
     i64 startIndex,
     i64 valueCount,
     ui32 avgLength,
@@ -30,14 +30,12 @@ void FillColumnarStringValues(
     column->StartIndex = startIndex;
     column->ValueCount = valueCount;
 
-    column->Values = IUnversionedColumnarRowBatch::TValueBuffer{};
-    auto& values = *column->Values;
+    auto& values = column->Values.emplace();
     values.BitWidth = 32;
     values.ZigZagEncoded = true;
     values.Data = offsets;
 
-    column->Strings = IUnversionedColumnarRowBatch::TStringBuffer{};
-    auto& strings = *column->Strings;
+    auto& strings = column->Strings.emplace();
     strings.AvgLength = avgLength;
     strings.Data = stringData;
 }
@@ -232,7 +230,7 @@ private:
         FillColumnarDictionary(
             primaryColumn.get(),
             dictionaryColumn.get(),
-            IUnversionedColumnarRowBatch::GenerateDictionaryId(),
+            NTableClient::IUnversionedColumnarRowBatch::GenerateDictionaryId(),
             primaryColumn->Type,
             0,
             RowCount_,
@@ -372,7 +370,7 @@ private:
 
 IColumnConverterPtr CreateStringConverter(
     int columnId,
-    const TColumnSchema& columnSchema,
+    const NTableClient::TColumnSchema& columnSchema,
     int columnOffset)
 {
     return std::make_unique<TStringConverter<EValueType::String>>(columnId, columnSchema, columnOffset);
@@ -380,7 +378,7 @@ IColumnConverterPtr CreateStringConverter(
 
 IColumnConverterPtr CreateAnyConverter(
     int columnId,
-    const TColumnSchema& columnSchema,
+    const NTableClient::TColumnSchema& columnSchema,
     int columnOffset)
 {
     return std::make_unique<TStringConverter<EValueType::Any>>(columnId, columnSchema, columnOffset);
@@ -388,7 +386,7 @@ IColumnConverterPtr CreateAnyConverter(
 
 IColumnConverterPtr CreateCompositeConverter(
     int columnId,
-    const TColumnSchema& columnSchema,
+    const NTableClient::TColumnSchema& columnSchema,
     int columnOffset)
 {
     return std::make_unique<TStringConverter<EValueType::Composite>>(columnId, columnSchema, columnOffset);

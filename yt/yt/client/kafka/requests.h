@@ -4,7 +4,7 @@
 
 #include "protocol.h"
 
-#include <library/cpp/yt/misc/guid.h>
+#include <util/generic/guid.h>
 
 namespace NYT::NKafka {
 
@@ -37,6 +37,7 @@ struct TTaggedField
     TString Data;
 
     void Serialize(IKafkaProtocolWriter* writer) const;
+
     void Deserialize(IKafkaProtocolReader* reader);
 };
 
@@ -86,6 +87,7 @@ struct TMessage
     TString Value;
 
     void Serialize(IKafkaProtocolWriter* writer, int version) const;
+
     void Deserialize(IKafkaProtocolReader* reader, int version);
 };
 
@@ -115,20 +117,63 @@ struct TRecord
     std::vector<TMessage> Messages;
 
     void Serialize(IKafkaProtocolWriter* writer) const;
+
     void Deserialize(IKafkaProtocolReader* reader);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <typename T, typename ...Args>
+void Serialize(const std::vector<T>& data, IKafkaProtocolWriter* writer, bool isCompact, Args&&... args)
+{
+    if (isCompact) {
+        auto size = data.size();
+        if constexpr (!std::is_same_v<T, TTaggedField>) {
+            ++size;
+        }
+        writer->WriteUnsignedVarInt(size);
+    } else {
+        writer->WriteInt32(data.size());
+    }
+    for (const auto& item : data) {
+        item.Serialize(writer, args...);
+    }
+}
+
+template <typename T, typename ...Args>
+void Deserialize(std::vector<T>& data, IKafkaProtocolReader* reader, bool isCompact, Args&&...args)
+{
+    if (isCompact) {
+        auto size = reader->ReadUnsignedVarInt();
+        if (size == 0) {
+            return;
+        }
+        if constexpr (!std::is_same_v<T, TTaggedField>) {
+            --size;
+        }
+        data.resize(size);
+    } else {
+        data.resize(reader->ReadInt32());
+    }
+    for (auto& item : data) {
+        item.Deserialize(reader, args...);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TReqApiVersions
 {
-    static constexpr ERequestType RequestType = ERequestType::ApiVersions;
-
     TString ClientSoftwareName;
     TString ClientSoftwareVersion;
     std::vector<TTaggedField> TagBuffer;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::ApiVersions;
+    }
 };
 
 struct TRspApiKey
@@ -155,7 +200,7 @@ struct TRspApiVersions
 
 struct TReqMetadataTopic
 {
-    TGuid TopicId;
+    TGUID TopicId;
     TString Topic;
     std::vector<TTaggedField> TagBuffer;
 
@@ -164,8 +209,6 @@ struct TReqMetadataTopic
 
 struct TReqMetadata
 {
-    static constexpr ERequestType RequestType = ERequestType::Metadata;
-
     std::vector<TReqMetadataTopic> Topics;
     bool AllowAutoTopicCreation;
     bool IncludeClusterAuthorizedOperations;
@@ -173,6 +216,11 @@ struct TReqMetadata
     std::vector<TTaggedField> TagBuffer;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::Metadata;
+    }
 };
 
 struct TRspMetadataBroker
@@ -205,7 +253,7 @@ struct TRspMetadataTopic
 {
     EErrorCode ErrorCode = EErrorCode::None;
     TString Name;
-    TGuid TopicId;
+    TGUID TopicId;
     bool IsInternal = false;
     std::vector<TRspMetadataTopicPartition> Partitions;
     i32 TopicAuthorizedOperations = 0;
@@ -230,11 +278,14 @@ struct TRspMetadata
 
 struct TReqFindCoordinator
 {
-    static constexpr ERequestType RequestType = ERequestType::FindCoordinator;
-
     TString Key;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::FindCoordinator;
+    }
 };
 
 struct TRspFindCoordinator
@@ -259,8 +310,6 @@ struct TReqJoinGroupProtocol
 
 struct TReqJoinGroup
 {
-    static constexpr ERequestType RequestType = ERequestType::JoinGroup;
-
     TString GroupId;
     i32 SessionTimeoutMs = 0;
     TString MemberId;
@@ -268,6 +317,11 @@ struct TReqJoinGroup
     std::vector<TReqJoinGroupProtocol> Protocols;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::JoinGroup;
+    }
 };
 
 struct TRspJoinGroupMember
@@ -302,14 +356,17 @@ struct TReqSyncGroupAssignment
 
 struct TReqSyncGroup
 {
-    static constexpr ERequestType RequestType = ERequestType::SyncGroup;
-
     TString GroupId;
     TString GenerationId;
     TString MemberId;
     std::vector<TReqSyncGroupAssignment> Assignments;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::SyncGroup;
+    }
 };
 
 struct TRspSyncGroupAssignment
@@ -332,13 +389,16 @@ struct TRspSyncGroup
 
 struct TReqHeartbeat
 {
-    static constexpr ERequestType RequestType = ERequestType::Heartbeat;
-
     TString GroupId;
     i32 GenerationId = 0;
     TString MemberId;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::Heartbeat;
+    }
 };
 
 struct TRspHeartbeat
@@ -369,12 +429,15 @@ struct TReqOffsetCommitTopic
 
 struct TReqOffsetCommit
 {
-    static constexpr ERequestType RequestType = ERequestType::OffsetCommit;
-
     TString GroupId;
     std::vector<TReqOffsetCommitTopic> Topics;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::OffsetCommit;
+    }
 };
 
 struct TRspOffsetCommitTopicPartition
@@ -411,12 +474,15 @@ struct TReqOffsetFetchTopic
 
 struct TReqOffsetFetch
 {
-    static constexpr ERequestType RequestType = ERequestType::OffsetFetch;
-
     TString GroupId;
     std::vector<TReqOffsetFetchTopic> Topics;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::OffsetFetch;
+    }
 };
 
 struct TRspOffsetFetchTopicPartition
@@ -465,14 +531,17 @@ struct TReqFetchTopic
 
 struct TReqFetch
 {
-    static constexpr ERequestType RequestType = ERequestType::Fetch;
-
     i32 ReplicaId = 0;
     i32 MaxWaitMs = 0;
     i32 MinBytes = 0;
     std::vector<TReqFetchTopic> Topics;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::Fetch;
+    }
 };
 
 struct TRspFetchResponsePartition
@@ -504,11 +573,14 @@ struct TRspFetch
 
 struct TReqSaslHandshake
 {
-    static constexpr ERequestType RequestType = ERequestType::SaslHandshake;
-
     TString Mechanism;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::SaslHandshake;
+    }
 };
 
 struct TRspSaslHandshake
@@ -523,11 +595,14 @@ struct TRspSaslHandshake
 
 struct TReqSaslAuthenticate
 {
-    static constexpr ERequestType RequestType = ERequestType::SaslAuthenticate;
-
     TString AuthBytes;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::SaslAuthenticate;
+    }
 };
 
 struct TRspSaslAuthenticate
@@ -561,8 +636,6 @@ struct TReqProduceTopicData
 
 struct TReqProduce
 {
-    static constexpr ERequestType RequestType = ERequestType::Produce;
-
     std::optional<TString> TransactionalId;
     i16 Acks = 0;
     i32 TimeoutMs = 0;
@@ -570,6 +643,11 @@ struct TReqProduce
     std::vector<TTaggedField> TagBuffer;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+
+    static ERequestType GetRequestType()
+    {
+        return ERequestType::Produce;
+    }
 };
 
 struct TRspProduceResponsePartitionResponseRecordError
@@ -616,7 +694,3 @@ struct TRspProduce
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NKafka
-
-#define REQUESTS_INL_H_
-#include "requests-inl.h"
-#undef REQUESTS_INL_H_

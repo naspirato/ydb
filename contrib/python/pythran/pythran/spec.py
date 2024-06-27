@@ -5,7 +5,7 @@ This module provides a dummy parser for pythran annotations.
 from pythran.types.conversion import pytype_to_pretty_type
 
 from collections import defaultdict
-from itertools import product, chain
+from itertools import product
 import re
 import ply.lex as lex
 import ply.yacc as yacc
@@ -80,10 +80,9 @@ class Spec(object):
     ``capsule'' is a mapping from function name to signature
     '''
 
-    def __init__(self, functions, capsules=None, ufuncs=None):
+    def __init__(self, functions, capsules=None):
         self.functions = dict(functions)
         self.capsules = capsules or dict()
-        self.ufuncs = ufuncs or dict()
 
         # normalize function signatures
         for fname, signatures in functions.items():
@@ -96,11 +95,10 @@ class Spec(object):
                            "nothing will be exported")
 
     def keys(self):
-        return chain(self.functions.keys(), self.capsules.keys(),
-                     self.ufuncs.keys())
+        return list(self.functions.keys()) + list(self.capsules.keys())
 
     def __bool__(self):
-        return any((self.functions, self.capsules, self.ufuncs))
+        return bool(self.functions or self.capsules)
 
     __nonzero__ = __bool__
 
@@ -163,7 +161,6 @@ class SpecParser(object):
         'export': 'EXPORT',
         'order': 'ORDER',
         'capsule': 'CAPSULE',
-        'ufunc': 'UFUNC',
         'or': 'OR',
         'list': 'LIST',
         'set': 'SET',
@@ -215,19 +212,13 @@ class SpecParser(object):
     def p_exports(self, p):
         if len(p) > 1:
             isnative = len(p) == 6
-            if len(p) == 6:
-                target = self.exports
-            elif p[3] == "capsule":
-                target = self.native_exports
-            else:
-                target = self.ufunc_exports
+            target = self.exports if len(p) == 6 else self.native_exports
             for key, val in p[len(p)-3]:
                 target[key] += val
 
     p_exports.__doc__ = '''exports :
                    | PYTHRAN EXPORT export_list opt_craps exports
-                   | PYTHRAN EXPORT CAPSULE export_list opt_craps exports
-                   | PYTHRAN EXPORT UFUNC export_list opt_craps exports'''
+                   | PYTHRAN EXPORT CAPSULE export_list opt_craps exports'''
 
     def p_export_list(self, p):
         p[0] = (p[1],) if len(p) == 2 else (p[1] + (p[3],))
@@ -472,7 +463,6 @@ class SpecParser(object):
     def __call__(self, text, input_file=None):
         self.exports = defaultdict(tuple)
         self.native_exports = defaultdict(tuple)
-        self.ufunc_exports = defaultdict(tuple)
         self.export_info = defaultdict(tuple)
         self.input_text = text
         self.input_file = input_file
@@ -526,7 +516,7 @@ class SpecParser(object):
                         loc = self.export_info[key][i]
                         raise self.PythranSpecError(msg, loc)
 
-        return Spec(self.exports, self.native_exports, self.ufunc_exports)
+        return Spec(self.exports, self.native_exports)
 
 
 class ExtraSpecParser(SpecParser):

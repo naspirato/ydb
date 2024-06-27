@@ -23,7 +23,6 @@
 
 #include <util/generic/xrange.h>
 
-#include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/yson/writer.h>
 
 namespace NYql {
@@ -2673,15 +2672,6 @@ TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TEx
         return ctx.ChangeChildren(*input, std::move(newChildren));
     }
     return input;
-}
-
-TExprNode::TPtr ExpandVersion(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand Version";
-    const TString branch(GetBranch());
-    return ctx.Builder(node->Pos())
-        .Callable("String")
-            .Atom(0, branch.substr(branch.rfind("/") + 1))
-        .Seal().Build();
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -5970,10 +5960,9 @@ bool CanRewriteToBlocksWithInput(const TExprNode& input, const TTypeAnnotationCo
 }
 
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-    Y_ENSURE(node->IsCallable("WideMap"));
     const auto lambda = node->TailPtr();
     // Swap trivial WideMap and WideFromBlocks.
-    if (node->Head().IsCallable("WideFromBlocks")) {
+    if (node->IsCallable("WideMap") && node->Head().IsCallable("WideFromBlocks")) {
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
@@ -8279,7 +8268,6 @@ struct TPeepHoleRules {
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
         {"EmptyIterator", &DropDependsOnFromEmptyIterator},
-        {"Version", &ExpandVersion},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
@@ -8382,7 +8370,10 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap BlockStageExtRules = {
+        {"NarrowFlatMap", &OptimizeWideMapBlocks},
+        {"NarrowMultiMap", &OptimizeWideMapBlocks},
         {"WideMap", &OptimizeWideMapBlocks},
+        {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideFilter", &OptimizeWideFilterBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
         {"WideFromBlocks", &OptimizeWideFromBlocks},

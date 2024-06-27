@@ -1,3 +1,4 @@
+pragma UseBlocks;
 USE plato;
 pragma yt.UseNativeDescSort;
 

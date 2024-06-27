@@ -40,11 +40,6 @@
       "Name": "TDqSourceWideBlockWrap",
       "Base": "TDqSourceWrapBase",
       "Match": {"Type": "Callable", "Name": "DqSourceWideBlockWrap"}
-    },
-    {
-      "Name": "TDqLookupSourceWrap",
-      "Base": "TDqSourceWrapBase",
-      "Match": {"Type": "Callable", "Name": "TDqLookupSourceWrap"}
     }
   ]
 }

@@ -2,11 +2,17 @@
 
 #include "public.h"
 
+#include <yt/yt/library/query/base/public.h>
+
+#include <yt/yt/core/bus/public.h>
 #include <yt/yt/core/bus/bus.h>
 
 #include <yt/yt/core/net/address.h>
 
+#include <yt/yt/core/rpc/public.h>
 #include <yt/yt/core/rpc/channel.h>
+
+#include <yt/yt/core/rpc/bus/channel.h>
 
 #include <yt/yt/core/logging/log.h>
 

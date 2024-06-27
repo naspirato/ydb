@@ -20,11 +20,11 @@ struct TPausePipelineOptions
     : public TTimeoutOptions
 { };
 
-struct TGetPipelineStateOptions
+struct TGetPipelineStatusOptions
     : public TTimeoutOptions
 { };
 
-struct TPipelineState
+struct TPipelineStatus
 {
     NFlow::EPipelineState State;
 };
@@ -116,9 +116,9 @@ struct IFlowClient
         const NYPath::TYPath& pipelinePath,
         const TPausePipelineOptions& options = {}) = 0;
 
-    virtual TFuture<TPipelineState> GetPipelineState(
+    virtual TFuture<TPipelineStatus> GetPipelineStatus(
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStateOptions& options = {}) = 0;
+        const TGetPipelineStatusOptions& options = {}) = 0;
 
     virtual TFuture<TGetFlowViewResult> GetFlowView(
         const NYPath::TYPath& pipelinePath,

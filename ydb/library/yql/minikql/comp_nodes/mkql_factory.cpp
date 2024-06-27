@@ -333,7 +333,6 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideSkipWhileInclusive", &WrapWideSkipWhileInclusive},
         {"WideCombiner", &WrapWideCombiner},
         {"WideLastCombiner", &WrapWideLastCombiner},
-        {"WideLastCombinerWithSpilling", &WrapWideLastCombinerWithSpilling},
         {"WideCondense1", &WrapWideCondense1},
         {"WideChopper", &WrapWideChopper},
         {"WideTop", &WrapWideTop},

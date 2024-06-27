@@ -173,10 +173,8 @@ trip_signal(int sig_num)
        cleared in PyErr_CheckSignals() before .tripped. */
     is_tripped = 1;
     Py_AddPendingCall(checksignals_witharg, NULL);
-    if (wakeup_fd != -1) {
-        int rc = write(wakeup_fd, "\0", 1);
-        (void)rc;
-    }
+    if (wakeup_fd != -1)
+        write(wakeup_fd, "\0", 1);
 }
 
 static void

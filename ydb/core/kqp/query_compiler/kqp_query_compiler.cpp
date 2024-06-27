@@ -752,7 +752,7 @@ private:
         stageProto.SetOutputsCount(outputsCount);
 
         // Dq sinks
-        bool hasTxTableSink = false;
+        bool hasTableSink = false;
         if (auto maybeOutputsNode = stage.Outputs()) {
             auto outputsNode = maybeOutputsNode.Cast();
             for (size_t i = 0; i < outputsNode.Size(); ++i) {
@@ -764,17 +764,12 @@ private:
                 FillSink(sinkNode, sinkProto, tablesMap, ctx);
                 sinkProto->SetOutputIndex(FromString(TStringBuf(sinkNode.Index())));
 
-                if (IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category())) {
-                    // Only sinks with transactions to ydb tables can be considered as effects.
-                    // Inconsistent internal sinks and external sinks (like S3) aren't effects.
-                    auto settings = sinkNode.Settings().Maybe<TKqpTableSinkSettings>();
-                    YQL_ENSURE(settings);
-                    hasTxTableSink |= settings.InconsistentWrite().Cast().StringValue() != "true";
-                }
+                // Only sinks to ydb tables can be considered as effects.
+                hasTableSink |= IsTableSink(sinkNode.DataSink().Cast<TCoDataSink>().Category());
             }
         }
 
-        stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
+        stageProto.SetIsEffectsStage(hasEffects || hasTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
@@ -1038,7 +1033,6 @@ private:
             for (const auto& columnName : tableMeta->KeyColumnNames) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
-
                 auto keyColumnProto = settingsProto.AddKeyColumns();
                 keyColumnProto->SetId(columnMeta->Id);
                 keyColumnProto->SetName(columnName);
@@ -1066,10 +1060,6 @@ private:
                     typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
                     typeInfo.SetPgTypeMod(columnMeta->TypeMod);
                 }
-            }
-
-            if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
-                settingsProto.SetInconsistentTx(true);
             }
 
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);

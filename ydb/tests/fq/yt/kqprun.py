@@ -37,7 +37,7 @@ class KqpRun(object):
 
         cmd += '--emulate-yt ' \
             '--exclude-linked-udfs ' \
-            '--execution-case query ' \
+            '--clear-execution query ' \
             '--app-config=%(config_file)s ' \
             '--script-query=%(program_file)s ' \
             '--scheme-query=%(scheme_file)s ' \

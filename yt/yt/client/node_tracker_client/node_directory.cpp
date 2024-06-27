@@ -203,6 +203,11 @@ void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor,
     }
 }
 
+TString ToString(const TNodeDescriptor& descriptor)
+{
+    return ToStringViaBuilder(descriptor);
+}
+
 std::optional<TString> FindDefaultAddress(const TAddressMap& addresses)
 {
     if (addresses.empty()) {

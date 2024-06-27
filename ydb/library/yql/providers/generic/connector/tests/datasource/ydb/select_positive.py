@@ -519,10 +519,7 @@ class Factory:
         test_case_name = 'json'
 
         data_in = [
-            [
-                '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
-                '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}',
-            ],
+            ['{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}', '{ "friends": [{"name": "James Holden","age": 35},{"name": "Naomi Nagata","age": 30}]}'],
             ['{ "TODO" : "unicode" }', '{ "TODO" : "unicode" }'],
             [None, None],
         ]
@@ -556,8 +553,9 @@ class Factory:
             itertools.chain(
                 self._primitive_types(),
                 self._optional_types(),
-                self._constant(),
-                self._count(),
+                # FIXME: YQ-3314
+                # self._constant(),
+                # self._count(),
                 self._pushdown(),
                 self._unsupported_types(),
                 self._json(),

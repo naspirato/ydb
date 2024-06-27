@@ -1027,6 +1027,14 @@ bytearray_repr(PyByteArrayObject *self)
 static PyObject *
 bytearray_str(PyObject *op)
 {
+#if 0
+    if (Py_BytesWarningFlag) {
+        if (PyErr_WarnEx(PyExc_BytesWarning,
+                 "str() on a bytearray instance", 1))
+            return NULL;
+    }
+    return bytearray_repr((PyByteArrayObject*)op);
+#endif
     return PyBytes_FromStringAndSize(((PyByteArrayObject*)op)->ob_bytes, Py_SIZE(op));
 }
 
@@ -1051,7 +1059,7 @@ bytearray_richcompare(PyObject *self, PyObject *other, int op)
     if (rc) {
         if (Py_BytesWarningFlag && op == Py_EQ) {
             if (PyErr_WarnEx(PyExc_BytesWarning,
-                            "Comparison between bytearray and unicode", 1))
+                            "Comparison between bytearray and string", 1))
                 return NULL;
         }
 

@@ -1507,7 +1507,6 @@ partitioning_settings {
     Y_UNIT_TEST(ExportStartTime) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1545,7 +1544,6 @@ partitioning_settings {
     Y_UNIT_TEST(CompletedExportEndTime) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1573,7 +1571,7 @@ partitioning_settings {
             }
         )", port));
 
-        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing backup
 
         env.TestWaitNotification(runtime, txId);
 
@@ -1588,7 +1586,6 @@ partitioning_settings {
     Y_UNIT_TEST(CancelledExportEndTime) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1635,7 +1632,7 @@ partitioning_settings {
         )", port));
         const ui64 exportId = txId;
 
-        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
+        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // doing backup
 
         if (!delayed) {
             TDispatchOptions opts;

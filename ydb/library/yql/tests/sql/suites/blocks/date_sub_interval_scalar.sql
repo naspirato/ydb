@@ -1,4 +1,5 @@
 USE plato;
+pragma UseBlocks;
 
 SELECT
     Date("2000-01-01") - ni,

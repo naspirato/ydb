@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <set>
 #include <utility>
 

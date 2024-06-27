@@ -19,9 +19,9 @@ public:
     TCommandTable();
 };
 
-class TCommandTableQuery : public TClientCommandTree {
+class TCommandQuery : public TClientCommandTree {
 public:
-    TCommandTableQuery();
+    TCommandQuery();
 };
 
 class TCommandIndex : public TClientCommandTree {

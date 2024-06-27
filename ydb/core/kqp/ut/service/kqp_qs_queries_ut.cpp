@@ -235,18 +235,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
-
-        TExecuteQuerySettings settings;
-        settings.PoolId("sample_pool_id");
-
-        const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
-        auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-        CheckQueryResult(result);
-    }
-
     std::pair<ui32, ui32> CalcRowsAndBatches(TExecuteQueryIterator& it) {
         ui32 totalRows = 0;
         ui32 totalBatches = 0;
@@ -341,16 +329,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto [totalRows, totalBatches] = CalcRowsAndBatches(it);
 
-        Cerr << totalBatches << Endl;
         if (longRow) {
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100);
             // 100 rows * 1000 byte per row / 10000 chunk size limit -> expect 10 batches
-            UNIT_ASSERT(9 <= totalBatches);
+            UNIT_ASSERT(10 <= totalBatches);
             UNIT_ASSERT_LT_C(totalBatches, 13, totalBatches);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100000);
             // 100000 rows * 12 byte per row / 10000 chunk size limit -> expect 120 batches
-            UNIT_ASSERT(119 <= totalBatches);
+            UNIT_ASSERT(120 <= totalBatches);
             UNIT_ASSERT_LT_C(totalBatches, 123, totalBatches);
         }
     }

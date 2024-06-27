@@ -312,7 +312,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
 
-            if (PartitionWriteQuotaWaitCounter && !writeResponse.Internal) {
+            if (PartitionWriteQuotaWaitCounter) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
@@ -519,25 +519,15 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         avg.Update(WriteNewSize, now);
     }
 
-    LOG_DEBUG_S(
-        ctx, NKikimrServices::PERSQUEUE,
-        "TPartition::HandleWriteResponse writeNewSize# " << WriteNewSize;
-    );
-
-    if (SupportivePartitionTimeLag) {
-        SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
-    }
     if (SplitMergeEnabled(Config)) {
-        SplitMergeAvgWriteBytes->Update(WriteNewSizeFull, now);
+        SplitMergeAvgWriteBytes->Update(WriteNewSize, now);
         auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
     }
     WriteCycleSize = 0;
     WriteNewSize = 0;
-    WriteNewSizeFull = 0;
     WriteNewSizeInternal = 0;
     WriteNewSizeUncompressed = 0;
-    WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
     UpdateWriteBufferIsFullState(now);
@@ -561,12 +551,7 @@ NKikimrPQ::EScaleStatus TPartition::CheckScaleStatus(const TActorContext& ctx) {
     auto const writeSpeedUsagePercent = SplitMergeAvgWriteBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / TotalPartitionWriteSpeed;
     LOG_DEBUG_S(
         ctx, NKikimrServices::PERSQUEUE,
-        "TPartition::CheckScaleStatus"
-            << " splitMergeAvgWriteBytes# " << SplitMergeAvgWriteBytes->GetValue()
-            << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
-            << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
-            << " totalPartitionWriteSpeed# " << TotalPartitionWriteSpeed
-            << " Topic: \"" << TopicName() << "\"." <<
+        "TPartition::CheckScaleStatus writeSpeedUsagePercent# " << writeSpeedUsagePercent << " Topic: \"" << TopicName() << "\"." <<
         " Partition: " << Partition
     );
     auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
@@ -882,11 +867,6 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg) {
-    if (!CanWrite()) {
-        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
-        return EProcessResult::ContinueDrop;
-    }
     if (DiskIsFull) {
         ScheduleReplyError(msg.Cookie,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -914,11 +894,6 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg) {
-    if (!CanWrite()) {
-        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
-        return EProcessResult::ContinueDrop;
-    }
     if (DiskIsFull) {
         ScheduleReplyError(msg.Cookie,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -938,11 +913,6 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg) {
-    if (!CanWrite()) {
-        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
-        return EProcessResult::ContinueDrop;
-    }
     if (DiskIsFull) {
         ScheduleReplyError(msg.Cookie,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -983,11 +953,6 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 }
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
-    if (!CanWrite()) {
-        ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
-        return EProcessResult::ContinueDrop;
-    }
     if (DiskIsFull) {
         ScheduleReplyError(p.Cookie,
                             NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -1002,11 +967,6 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
-    if (!CanWrite()) {
-        ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition");
-        return false;
-    }
     if (DiskIsFull) {
         ScheduleReplyError(p.Cookie,
                             NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -1049,17 +1009,14 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                         << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
                         << ". EndOffset: " << EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
             );
-            if (!p.Internal) {
-                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
-                MsgsDiscarded.Inc();
-                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
-                BytesDiscarded.Inc(p.Msg.Data.size());
-            }
+
+            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+            MsgsDiscarded.Inc();
+            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+            BytesDiscarded.Inc(p.Msg.Data.size());
         } else {
-            if (!p.Internal) {
-                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_SMALL_OFFSET].Increment(1);
-                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_SMALL_OFFSET].Increment(p.Msg.Data.size());
-            }
+            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_SMALL_OFFSET].Increment(1);
+            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_SMALL_OFFSET].Increment(p.Msg.Data.size());
         }
 
         TString().swap(p.Msg.Data);
@@ -1161,17 +1118,14 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
         return false;
     }
-    WriteNewSizeFull += p.Msg.SourceId.size() + p.Msg.Data.size();
-    WriteNewSizeUncompressedFull += p.Msg.UncompressedSize + p.Msg.SourceId.size();
-    if (!p.Internal) {
-        WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
-        WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
-        WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
-    }
-    if (p.Msg.PartNo == 0 && !p.Internal) {
-        ++WriteNewMessages;
-        if (!p.Msg.External)
-            ++WriteNewMessagesInternal;
+
+    WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
+    WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
+    WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
+    if (p.Msg.PartNo == 0) {
+            ++WriteNewMessages;
+            if (!p.Msg.External)
+                ++WriteNewMessagesInternal;
     }
 
     TMaybe<TPartData> partData;
@@ -1187,14 +1141,13 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
     WriteLagMs.Update(writeLagMs, WriteTimestamp);
-    if (InputTimeLag && !p.Internal) {
+    if (InputTimeLag) {
         InputTimeLag->IncFor(writeLagMs, 1);
-    } else if (SupportivePartitionTimeLag) {
-        SupportivePartitionTimeLag->Insert(writeLagMs, 1);
+        if (p.Msg.PartNo == 0) {
+            MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
+        }
     }
-    if (p.Msg.PartNo == 0  && !p.Internal) {
-        MessageSize.IncFor(p.Msg.TotalSize + p.Msg.SourceId.size(), 1);
-    }
+
     bool lastBlobPart = blob.IsLastPart();
 
     //will return compacted tmp blob
@@ -1627,7 +1580,6 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
-    WriteNewSizeUncompressed = 0;
     WriteNewSizeUncompressed = 0;
     WriteNewMessages = 0;
     UpdateWriteBufferIsFullState(ctx.Now());

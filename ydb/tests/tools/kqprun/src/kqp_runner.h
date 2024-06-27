@@ -18,10 +18,6 @@ public:
 
     bool ExecuteYqlScript(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
 
-    void ExecuteQueryAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
-
-    void WaitAsyncQueries() const;
-
     bool FetchScriptResults();
 
     bool ForgetExecutionOperation();

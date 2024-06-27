@@ -8,8 +8,6 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/protos/db_metadata_cache.pb.h>
 
@@ -36,8 +34,7 @@ public:
     using TBoardInfoEntries = TMap<TActorId, TEvStateStorage::TBoardInfoEntry>;
 
 private:
-    TDuration RefreshPeriod;
-    bool Enabled = false;
+    static constexpr TDuration TIMEOUT = TDuration::Seconds(15);
     const TString Path;
     const TString BoardPath;
     ui32 ActiveNode;
@@ -60,7 +57,6 @@ private:
         auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
         request->Database = Path;
         request->Request.set_return_verbose_status(true);
-        request->Request.set_merge_records(true);
         Send(NHealthCheck::MakeHealthCheckID(), request.release());
         Counters->GetCounter(HEALTHCHECK_REQUESTS_MADE_COUNTER, true)->Inc();
     }
@@ -74,7 +70,7 @@ private:
 
     void RefreshCache() {
         SendRequest();
-        Schedule(RefreshPeriod, new TEvRefreshCache());
+        Schedule(TIMEOUT, new TEvRefreshCache());
     }
 
     void UpdateActiveNode() {
@@ -133,7 +129,7 @@ private:
     void Handle(NHealthCheck::TEvSelfCheckRequestProto::TPtr& ev) {
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Got request");
         TInstant now = TActivationContext::Now();
-        if (Result && now - LastResultUpdate <= 2 * RefreshPeriod) {
+        if (Result && now - LastResultUpdate <= 2 * TIMEOUT) {
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Replying now");
             Reply(ev->Sender);
         } else {
@@ -141,12 +137,6 @@ private:
             SendRequest();
             Clients.push_back(ev->Sender);
         }
-    }
-
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        ApplyConfig(record.GetConfig().GetMetadataCacheConfig(), record.GetConfig().GetFeatureFlags());
-        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
     }
 
 public:
@@ -177,43 +167,23 @@ public:
         return result;
     }
 
-    void ApplyConfig(const NKikimrConfig::TMetadataCacheConfig& config, const NKikimrConfig::TFeatureFlags& flags) {
-        RefreshPeriod = TDuration::MilliSeconds(config.GetRefreshPeriodMs());
-        bool enabled = flags.GetEnableDbMetadataCache();
-        if (!Enabled && enabled) {
-            TInstant now = TActivationContext::Now();
-            NKikimrMetadataCache::TDatabaseMetadataCacheInfo info;
-            info.SetStartTimestamp(now.MicroSeconds());
-            PublishActor = RegisterWithSameMailbox(CreateBoardPublishActor(BoardPath,
-                                                   info.SerializeAsString(),
-                                                   SelfId(),
-                                                   0,
-                                                   true));
-            SubscribeToBoard();
-            Become(&TThis::StateWait);
-        } else if (Enabled && !enabled) {
-            CleanUp();
-            Become(&TThis::StateDisabled);
-        }
-        Enabled = enabled;
-    }
-
     void Bootstrap() {
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Starting db metadata cache actor");
-        Become(&TThis::StateInactive);
-        ApplyConfig(AppData()->MetadataCacheConfig, AppData()->FeatureFlags);
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::FeatureFlagsItem,
-                                                                                  NKikimrConsole::TConfigItem::MetadataCacheConfigItem}));
-    }
-
-    void CleanUp() {
-        Send(PublishActor, new TEvents::TEvPoison);
-        Send(SubscribeActor, new TEvents::TEvPoison);
+        TInstant now = TActivationContext::Now();
+        NKikimrMetadataCache::TDatabaseMetadataCacheInfo info;
+        info.SetStartTimestamp(now.MicroSeconds());
+        PublishActor = RegisterWithSameMailbox(CreateBoardPublishActor(BoardPath,
+                                                        info.SerializeAsString(),
+                                                        SelfId(),
+                                                        0,
+                                                        true));
+        SubscribeToBoard();
+        Become(&TThis::StateWait);
     }
 
     void PassAway() override {
-        CleanUp();
+        Send(PublishActor, new TEvents::TEvPoison);
+        Send(SubscribeActor, new TEvents::TEvPoison);
         return TActor::PassAway();
     }
 
@@ -224,8 +194,6 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NHealthCheck::TEvSelfCheckRequestProto, Handle);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
@@ -238,8 +206,6 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
@@ -252,17 +218,7 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
-        }
-    }
-
-    STATEFN(StateDisabled) {
-        switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
-            // Ignore everything else
         }
     }
 };

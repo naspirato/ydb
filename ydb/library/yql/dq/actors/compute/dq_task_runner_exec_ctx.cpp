@@ -28,9 +28,5 @@ std::function<void()> TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
     return WakeUp_;
 }
 
-TTxId TDqTaskRunnerExecutionContext::GetTxId() const {
-    return TxId_;
-}
-
 } // namespace NDq
 } // namespace NYql

@@ -76,6 +76,10 @@ void TGRpcLocalDiscoveryService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
+void TGRpcLocalDiscoveryService::SetDynamicNodeAuthParams(const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams) {
+    DynamicNodeAuthorizationParams = dynamicNodeAuthorizationParams;
+}
+
 void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     using namespace Ydb;
@@ -98,7 +102,10 @@ void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logg
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
     ADD_REQUEST(WhoAmI, &DoWhoAmIRequest, WHOAMI)
-    ADD_REQUEST(NodeRegistration, &DoNodeRegistrationRequest, NODEREGISTRATION)
+    NodeRegistrationRequest = [authParams = this->DynamicNodeAuthorizationParams] (std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+        DoNodeRegistrationRequest(std::move(p), f, authParams);
+    };
+    ADD_REQUEST(NodeRegistration, NodeRegistrationRequest, NODEREGISTRATION)
 #undef ADD_REQUEST
 
 using namespace std::placeholders;

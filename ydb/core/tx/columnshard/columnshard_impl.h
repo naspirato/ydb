@@ -28,8 +28,6 @@
 #include "data_sharing/common/transactions/tx_extension.h"
 #include "data_sharing/modification/events/change_owning.h"
 
-#include "subscriber/abstract/manager/manager.h"
-
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -86,11 +84,10 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
-class TTxFinishAsyncTransaction;
+
 class TTxInsertTableCleanup;
 class TTxRemoveSharedBlobs;
 class TOperationsManager;
-class TWaitEraseTablesTxSubscriber;
 
 extern bool gAllowLogBatchingDefaultValue;
 
@@ -153,8 +150,6 @@ class TColumnShard
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
-    friend class TTxFinishAsyncTransaction;
-    friend class TWaitEraseTablesTxSubscriber;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -495,7 +490,6 @@ private:
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
-    std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;

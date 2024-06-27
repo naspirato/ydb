@@ -19,11 +19,6 @@
             "uri": "file://test.test_DefOptions_/results.txt"
         }
     ],
-    "test.test[FindAndConsumeEmpty]": [
-        {
-            "uri": "file://test.test_FindAndConsumeEmpty_/results.txt"
-        }
-    ],
     "test.test[LikeEscape]": [
         {
             "uri": "file://test.test_LikeEscape_/results.txt"

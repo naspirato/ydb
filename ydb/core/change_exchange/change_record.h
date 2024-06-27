@@ -4,19 +4,7 @@
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
-namespace NKikimr {
-
-template <class TChangeRecord>
-struct TChangeRecordBuilderTrait;
-
-template <class TChangeRecord>
-struct TChangeRecordBuilderContextTrait {};
-
-} // namespace NKikimr
-
 namespace NKikimr::NChangeExchange {
-
-class IChangeSenderResolver;
 
 class IChangeRecord: public TThrRefBase {
 public:
@@ -46,7 +34,11 @@ public:
     virtual TString ToString() const = 0;
     virtual void Out(IOutputStream& out) const = 0;
 
-    virtual ui64 ResolvePartitionId(IChangeSenderResolver* const resolver) const = 0;
+    template <typename T>
+    T* Get() {
+        return dynamic_cast<T*>(this);
+    }
+
 }; // IChangeRecord
 
 template <typename T, typename TDerived> class TChangeRecordBuilder;
@@ -85,11 +77,13 @@ protected:
 public:
     TChangeRecordBuilder()
         : Record(MakeIntrusive<T>())
-    {}
+    {
+    }
 
-    explicit TChangeRecordBuilder(TIntrusivePtr<T> record)
+    explicit TChangeRecordBuilder(IChangeRecord::TPtr record)
         : Record(std::move(record))
-    {}
+    {
+    }
 
     TSelf& WithOrder(ui64 order) {
         GetRecord()->Order = order;
@@ -111,21 +105,17 @@ public:
         return static_cast<TSelf&>(*this);
     }
 
-    TIntrusivePtr<T> Build() {
+    IChangeRecord::TPtr Build() {
         return Record;
     }
 
 protected:
-    TIntrusivePtr<T> Record;
+    IChangeRecord::TPtr Record;
 
 }; // TChangeRecordBuilder
 
 }
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NChangeExchange::IChangeRecord::TPtr, out, value) {
-    return value->Out(out);
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NChangeExchange::IChangeRecord*, out, value) {
     return value->Out(out);
 }

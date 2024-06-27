@@ -662,7 +662,6 @@ private:
     TPortionsPool Others;
     TInstant NextActualizeInstant = TInstant::Zero();
     std::optional<NArrow::TReplaceKey> NextBorder;
-    YDB_READONLY_DEF(std::optional<NArrow::NMerger::TSortableBatchPosition>, StartPos);
 
     void MoveNextBorderTo(TPortionsBucket& dest) {
         dest.NextBorder = NextBorder;
@@ -678,7 +677,7 @@ private:
     }
 
     void RebuildOptimizedFeature(const TInstant currentInstant) const {
-//        Others.InitRuntimeFeature();
+        Others.InitRuntimeFeature();
         if (!MainPortion) {
             return;
         }
@@ -764,14 +763,11 @@ public:
         return TModificationGuard(*this);
     }
 
-    TPortionsBucket(const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<TCounters>& counters)
+    TPortionsBucket(const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TCounters>& counters)
         : MainPortion(portion)
         , Counters(counters)
-        , Others(Counters, GetCommonFreshnessCheckDuration())
-    {
+        , Others(Counters, GetCommonFreshnessCheckDuration()) {
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition sBatchPosition(MainPortion->IndexKeyStart().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
-            StartPos = std::move(sBatchPosition);
             Counters->PortionsAlone->AddPortion(MainPortion);
         }
     }
@@ -1040,7 +1036,7 @@ private:
     }
 
     void AddBucket(const std::shared_ptr<TPortionInfo>& portion) {
-        auto insertInfo = Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters));
+        auto insertInfo = Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, Counters));
         AFL_VERIFY(insertInfo.second);
         if (insertInfo.first == Buckets.begin()) {
             RemoveBucketFromRating(LeftBucket);
@@ -1061,7 +1057,7 @@ public:
         const std::shared_ptr<TCounters>& counters)
         : PrimaryKeysSchema(primaryKeysSchema)
         , StoragesManager(storagesManager)
-        , LeftBucket(std::make_shared<TPortionsBucket>(nullptr, primaryKeysSchema, counters))
+        , LeftBucket(std::make_shared<TPortionsBucket>(nullptr, counters))
         , Counters(counters) {
         AddBucketToRating(LeftBucket);
     }
@@ -1184,8 +1180,8 @@ public:
     std::vector<NArrow::NMerger::TSortableBatchPosition> GetBucketPositions() const {
         std::vector<NArrow::NMerger::TSortableBatchPosition> result;
         for (auto&& i : Buckets) {
-            AFL_VERIFY(i.second->GetStartPos());
-            result.emplace_back(*i.second->GetStartPos());
+            NArrow::NMerger::TSortableBatchPosition pos(i.second->GetPortion()->IndexKeyStart().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
+            result.emplace_back(pos);
         }
         if (Buckets.size()) {
             NArrow::NMerger::TSortableBatchPosition pos(Buckets.rbegin()->second->GetPortion()->IndexKeyEnd().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);

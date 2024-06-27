@@ -141,7 +141,7 @@ public:
             .WithBody(body.SerializeAsString())
             .Build();
 
-        const auto& record = *recordPtr;
+        const auto& record = *recordPtr->Get<TChangeRecord>();
         Self->PersistChangeRecord(db, record);
 
         if (record.GetLockId() == 0) {

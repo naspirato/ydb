@@ -54,7 +54,7 @@ class TPeriodicExecutor
     : public NDetail::TPeriodicExecutorBase<NDetail::TDefaultInvocationTimePolicy>
 {
 public:
-    //! Initializes the instance.
+    //! Initializes an instance.
     /*!
      *  \note
      *  We must call #Start to activate the instance.

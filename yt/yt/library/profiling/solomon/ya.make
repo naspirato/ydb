@@ -5,10 +5,8 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 SRCS(
     cube.cpp
     exporter.cpp
-    helpers.cpp
     percpu.cpp
     producer.cpp
-    proxy.cpp
     registry.cpp
     remote.cpp
     sensor.cpp
@@ -33,7 +31,3 @@ PEERDIR(
 )
 
 END()
-
-RECURSE(
-    proxy_example
-)

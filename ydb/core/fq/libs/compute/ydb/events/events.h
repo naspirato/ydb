@@ -488,11 +488,10 @@ struct TEvYdbCompute {
     };
 
     struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
-        TEvCpuQuotaResponse(int32_t currentLoad = -1, NYdb::EStatus status = NYdb::EStatus::SUCCESS, NYql::TIssues issues = {})
-            : CurrentLoad(currentLoad), Status(status),  Issues(std::move(issues))
+        TEvCpuQuotaResponse(NYdb::EStatus status = NYdb::EStatus::SUCCESS, NYql::TIssues issues = {})
+            : Status(status), Issues(std::move(issues))
         {}
 
-        int32_t CurrentLoad;
         NYdb::EStatus Status;
         NYql::TIssues Issues;
     };

@@ -2547,8 +2547,8 @@ _numpy_array_signature = Union[
 ]
 
 
-def expand_numpy_2_args(args, defaults=None, force=False):
-    if force or numpy.__version__[0] < '2':
+def expand_numpy_2_args(args, defaults=None):
+    if numpy.__version__[0] < '2':
         if defaults is not None:
             return {'args': args, 'defaults': defaults}
         else:
@@ -2941,9 +2941,7 @@ MODULES = {
         ),
         "alltrue": ConstFunctionIntr(
             signature=_numpy_unary_op_bool_axis_signature,
-            return_range=interval.bool_values,
-            args=("a", "axis"),
-            defaults=(None,)
+            return_range=interval.bool_values
         ),
         "amax": ConstFunctionIntr(signature=_numpy_unary_op_axis_signature),
         "amin": ConstFunctionIntr(signature=_numpy_unary_op_axis_signature),
@@ -3403,7 +3401,6 @@ MODULES = {
             REDUCED_BINARY_UFUNC,
             signature=_numpy_int_binary_op_signature
         ),
-        "bool_": ConstFunctionIntr(signature=_int_signature),
         "broadcast_to": ConstFunctionIntr(),
         "byte": ConstFunctionIntr(signature=_int_signature),
         "cbrt": ConstFunctionIntr(
@@ -3586,8 +3583,8 @@ MODULES = {
         "complex256": ConstFunctionIntr(signature=_complex_signature),
         "conj": ConstMethodIntr(signature=_numpy_unary_op_signature),
         "conjugate": ConstMethodIntr(signature=_numpy_unary_op_signature),
-        "convolve": ConstMethodIntr(requires_blas=True),
-        "correlate": ConstMethodIntr(requires_blas=True),
+        "convolve": ConstMethodIntr(),
+        "correlate": ConstMethodIntr(),
         "copy": ConstMethodIntr(signature=_numpy_array_signature),
         "copyto": FunctionIntr(
             argument_effects=[UpdateEffect(), ReadEffect(),
@@ -3689,9 +3686,7 @@ MODULES = {
             signature=_numpy_unary_op_cumsum_axis_signature
         ),
         "cumproduct": ConstFunctionIntr(
-            signature=_numpy_unary_op_cumsum_axis_signature,
-            args=("a", "axis", "dtype", "out"),
-            defaults=(None, None, None),
+            signature=_numpy_unary_op_cumsum_axis_signature
         ),
         "cumsum": ConstMethodIntr(
             signature=_numpy_unary_op_cumsum_axis_signature
@@ -3709,7 +3704,7 @@ MODULES = {
         "diff": ConstFunctionIntr(),
         "digitize": ConstFunctionIntr(),
         "divide": UFunc(BINARY_UFUNC),
-        "dot": ConstMethodIntr(requires_blas=True),
+        "dot": ConstMethodIntr(),
         "double": ConstFunctionIntr(signature=_float_signature),
         "dtype": ClassWithConstConstructor(CLASSES["dtype"]),
         "e": ConstantIntr(),
@@ -3779,7 +3774,7 @@ MODULES = {
         "indices": ConstFunctionIntr(),
         "inf": ConstantIntr(),
         "Inf": ConstantIntr(),
-        "inner": ConstFunctionIntr(requires_blas=True),
+        "inner": ConstFunctionIntr(),
         "insert": ConstFunctionIntr(),
         "interp": ConstFunctionIntr(),
         "intersect1d": ConstFunctionIntr(),
@@ -3817,7 +3812,7 @@ MODULES = {
         "lexsort": ConstFunctionIntr(),
         "linalg": {
             "norm": FunctionIntr(),
-            "matrix_power": ConstFunctionIntr(requires_blas=True),
+            "matrix_power": ConstFunctionIntr(),
         },
         "linspace": ConstFunctionIntr(),
         "log": ConstFunctionIntr(),
@@ -3887,10 +3882,7 @@ MODULES = {
             signature=_numpy_binary_op_signature
         ),
         "prod": ConstMethodIntr(),
-        "product": ConstFunctionIntr(
-            args=("a", "axis", "dtype", "out"),
-            defaults=(None, None, None),
-                ),
+        "product": ConstFunctionIntr(),
         "ptp": ConstMethodIntr(),
         "put": MethodIntr(),
         "putmask": FunctionIntr(),
@@ -3961,7 +3953,7 @@ MODULES = {
             "rand": FunctionIntr(global_effects=True,
                 **expand_numpy_2_args(args=())),
             "ranf": FunctionIntr(global_effects=True,
-                **expand_numpy_2_args(args=('size',), force=True)),
+                **expand_numpy_2_args(args=('size',))),
             "randint": FunctionIntr(global_effects=True,
                 **expand_numpy_2_args(args=("low", "high", "size"),
                                       defaults=(None, None))),
@@ -3977,7 +3969,7 @@ MODULES = {
                 **expand_numpy_2_args(args=('scale', 'size',),
                                       defaults=(1.0, None,))),
             "sample": FunctionIntr(global_effects=True,
-                **expand_numpy_2_args(args=('size',), force=True)),
+                **expand_numpy_2_args(args=('size',))),
             "seed": FunctionIntr(global_effects=True),
             "shuffle": FunctionIntr(global_effects=True),
             "standard_exponential": FunctionIntr(global_effects=True,
@@ -4024,10 +4016,7 @@ MODULES = {
         "sin": ConstFunctionIntr(signature=_numpy_unary_op_float_signature),
         "sinh": ConstFunctionIntr(signature=_numpy_unary_op_float_signature),
         "size": ConstFunctionIntr(return_range=interval.positive_values),
-        "sometrue": ConstFunctionIntr(
-            args=("a", "axis"),
-            defaults=(None,)
-                ),
+        "sometrue": ConstFunctionIntr(),
         "sort": ConstFunctionIntr(),
         "sort_complex": ConstFunctionIntr(),
         "spacing": ConstFunctionIntr(),
@@ -4070,8 +4059,7 @@ MODULES = {
         "unravel_index": ConstFunctionIntr(),
         "ushort": ConstFunctionIntr(signature=_int_signature),
         "var": ConstMethodIntr(),
-        "vectorize": ConstFunctionIntr(),
-        "vdot": ConstMethodIntr(requires_blas=True),
+        "vdot": ConstMethodIntr(),
         "vstack": ConstFunctionIntr(),
         "where": ConstFunctionIntr(),
         "zeros": ConstFunctionIntr(args=('shape', 'dtype'),
@@ -4408,12 +4396,8 @@ MODULES = {
         "__lshift__": ConstFunctionIntr(
             signature=_numpy_int_binary_op_signature
         ),
-        "matmul": ConstFunctionIntr(signature=_operator_mul_signature,
-                                    requires_blas=True),
-        "__matmul__": ConstFunctionIntr(signature=_operator_mul_signature,
-                                        requires_blas=True),
-        "imatmul": MethodIntr(update_effects, requires_blas=True),
-        "__imatmul__": MethodIntr(update_effects, requires_blas=True),
+        "matmul": ConstFunctionIntr(signature=_operator_mul_signature),
+        "__matmul__": ConstFunctionIntr(signature=_operator_mul_signature),
         "mod": ConstFunctionIntr(signature=_operator_mod_signature),
         "__mod__": ConstFunctionIntr(signature=_operator_mod_signature),
         "mul": ConstFunctionIntr(signature=_operator_mul_signature),
@@ -4583,8 +4567,6 @@ try:
 except ImportError:
     pass
 
-def looks_like_a_forward_function(spec):
-    return not spec.args and spec.varargs == 'args' and spec.varkw == 'kwargs'
 
 # populate argument description through introspection
 def save_arguments(module_name, elements):
@@ -4599,7 +4581,7 @@ def save_arguments(module_name, elements):
                 obj = getattr(themodule, elem)
                 while hasattr(obj, '__wrapped__'):
                     obj = obj.__wrapped__
-            except (AttributeError, ImportError, TypeError, ValueError):
+            except (AttributeError, ImportError, TypeError):
                 continue
 
             # first try to gather info through getfullargspec
@@ -4608,19 +4590,8 @@ def save_arguments(module_name, elements):
             except:
                 continue
 
-            # some function are actually forward function, detect those
-            # and accept to use our description instead.
-            if looks_like_a_forward_function(spec):
-                assert signature.args.args, "{} require an explicit description".format(elem)
-                continue
-
             args = [ast.Name(arg, ast.Param(), None, None)
                     for arg in spec.args]
-
-            # pop 'self' if we have a bound method
-            if inspect.ismethod(obj):
-                args = args[1:]
-
             defaults = list(spec.defaults or [])
             args += [ast.Name(arg, ast.Param(), None, None)
                      for arg in spec.kwonlyargs]
@@ -4741,21 +4712,6 @@ def save_attribute(elements, module_path):
 
 
 save_attribute(MODULES, ())
-
-blas_requires = set()
-
-def save_blas_requires(elements, module_path):
-    """ Recursively save attributes with module name and signature. """
-    for elem, signature in elements.items():
-        if isinstance(signature, dict):  # Submodule case
-            save_blas_requires(signature, module_path + (elem,))
-        elif signature.requires_blas:
-            blas_requires.add(module_path + (elem,))
-        elif isinstance(signature, Class):
-            save_blas_requires(signature.fields, module_path + (elem,))
-
-save_blas_requires(MODULES, ())
-
 
 # patch beniget with pythran-specific builtins
 import beniget

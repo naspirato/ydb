@@ -309,7 +309,7 @@ public:
     }
 
     TStatus HandleS3SourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 4U, ctx)) {
+        if (!EnsureMinArgsCount(*input, 3U, ctx)) {
             return TStatus::Error;
         }
 
@@ -327,10 +327,6 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(TS3SourceSettings::idx_Path), ctx)) {
-            return TStatus::Error;
-        }
-
         const TTypeAnnotationNode* itemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
         if (extraColumnsType->GetSize()) {
             itemType = ctx.MakeType<TTupleExprType>(
@@ -341,7 +337,7 @@ public:
     }
 
     TStatus HandleS3ParseSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
             return TStatus::Error;
         }
 
@@ -357,10 +353,6 @@ public:
         }
 
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_RowsLimitHint), ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Path), ctx)) {
             return TStatus::Error;
         }
 
@@ -415,7 +407,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 4U, 5U, ctx)) {
             return TStatus::Error;
         }
 
@@ -424,10 +416,6 @@ public:
         }
 
         if (!EnsureSpecificDataSource(*input->Child(TS3ReadObject::idx_DataSource), S3ProviderName, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureAtom(*input->Child(TS3ReadObject::idx_Path), ctx)) {
             return TStatus::Error;
         }
 

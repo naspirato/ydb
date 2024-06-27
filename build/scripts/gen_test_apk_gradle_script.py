@@ -71,7 +71,7 @@ android {{
     }}
 
     defaultConfig {{
-        minSdkVersion 26
+        minSdkVersion 23
         targetSdkVersion 33
         applicationId "{app_id}"
     }}

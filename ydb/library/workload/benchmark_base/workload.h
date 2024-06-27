@@ -24,9 +24,8 @@ public:
     YDB_READONLY_DEF(TString, S3Endpoint);
     YDB_READONLY_DEF(TString, S3Prefix);
     YDB_READONLY(TString, StringType, "Utf8");
-    YDB_READONLY(TString, DateType, "Date32");
-    YDB_READONLY(TString, TimestampType, "Timestamp64");
-    YDB_READONLY(TString, FloatType, "Double");
+    YDB_READONLY(TString, DateType, "Date");
+    YDB_READONLY(TString, TimestampType, "Timestamp");
 };
 
 class TWorkloadGeneratorBase : public IWorkloadQueryGenerator {

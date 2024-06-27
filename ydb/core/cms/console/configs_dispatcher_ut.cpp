@@ -8,8 +8,6 @@
 
 #include <util/system/hostname.h>
 
-#include <ydb/core/protos/netclassifier.pb.h>
-
 namespace NKikimr {
 
 using namespace NConsole;

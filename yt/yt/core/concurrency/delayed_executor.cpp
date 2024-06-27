@@ -433,7 +433,7 @@ private:
         void RunCallback(const TDelayedExecutorEntryPtr& entry, bool abort)
         {
             if (auto callback = TakeCallback(entry)) {
-                const auto& invoker = entry->Invoker
+                auto invoker = entry->Invoker
                     ? entry->Invoker
                     : DelayedInvoker_;
                 invoker

@@ -10,11 +10,6 @@
 
 #include <util/stream/output.h>
 
-static inline IOutputStream& operator<<(IOutputStream& o, std::set<size_t> t) {
-    o << "[" << JoinRange(", ", t.begin(), t.end()) << "]";
-    return o;
-}
-
 /*
 static inline IOutputStream& operator<<(IOutputStream& o, const std::optional<std::set<size_t>> t) {
     if (t) {
@@ -54,11 +49,11 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
-                UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.SeqNo);
             } else if (info.Data == "message_2.1") {
-                UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(3, info.SeqNo);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(3, info.SeqNo);
             } else {
                 UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
             }
@@ -73,108 +68,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         SimpleTest(false);
     }
 
-    Y_UNIT_TEST(Simple_AutoscaleAwareSDK) {
+    Y_UNIT_TEST(Simple_NewSDK) {
         SimpleTest(true);
-    }
-
-    void ReadingAfterSplitTest(bool autoscaleAwareSDK, bool autoCommit) {
-        TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic();
-
-        TTopicClient client = setup.MakeClient();
-
-        auto writeSession = CreateWriteSession(client, "producer-1");
-
-        UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
-
-        ui64 txId = 1006;
-        SplitPartition(setup, ++txId, 0, "a");
-
-        UNIT_ASSERT(writeSession->Write(Msg("message_2.1", 3)));
-
-        SplitPartition(setup, ++txId, 2, "d");
-
-        UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
-
-        TTestReadSession readSession("Session-0", client, 3, autoCommit, {}, autoscaleAwareSDK);
-        readSession.Run();
-        readSession.WaitAllMessages();
-
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
-            if (info.Data == "message_1.1") {
-                UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
-            } else if (info.Data == "message_2.1") {
-                UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(3, info.SeqNo);
-            } else if (info.Data == "message_3.1") {
-                UNIT_ASSERT_VALUES_EQUAL(4, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(5, info.SeqNo);
-            } else {
-                UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
-            }
-        }
-
-        writeSession->Close(TDuration::Seconds(1));
-        readSession.Close();
-    }
-
-    Y_UNIT_TEST(ReadingAfterSplitTest_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest(false, true);
-    }
-
-    Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest(true, false);
-    }
-
-    Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
-        ReadingAfterSplitTest(true, false);
-    }
-
-    void ReadingAfterSplitTest_PreferedPartition(bool autoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic();
-
-        TTopicClient client = setup.MakeClient();
-
-        auto writeSession = CreateWriteSession(client, "producer-1");
-
-        UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
-
-        ui64 txId = 1006;
-        SplitPartition(setup, ++txId, 0, "a");
-
-        UNIT_ASSERT(writeSession->Write(Msg("message_2.1", 3)));
-
-        SplitPartition(setup, ++txId, 2, "d");
-
-        UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
-
-        TTestReadSession readSession("Session-0", client, 1, !autoscaleAwareSDK, {2}, autoscaleAwareSDK);
-        readSession.Run();
-        readSession.WaitAllMessages();
-
-        Sleep(TDuration::Seconds(1));
-
-        for(const auto& info : readSession.Impl->ReceivedMessages) {
-            if (info.Data == "message_2.1") {
-                UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(3, info.SeqNo);
-            } else {
-                UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
-            }
-        }
-
-        writeSession->Close(TDuration::Seconds(1));
-        readSession.Close();
-    }
-
-    Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(false);
-    }
-
-    Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(true);
     }
 
     Y_UNIT_TEST(PartitionSplit_BeforeAutoscaleAwareSDK) {
@@ -224,7 +119,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession.Close();
     }
 
-    Y_UNIT_TEST(PartitionSplit_AutoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionSplit_NewSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -249,11 +144,11 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
-                UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.SeqNo);
             } else if (info.Data == "message_1.2") {
                 UNIT_ASSERT(1 == info.PartitionId || 2 == info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(3, info.SeqNo);
+                UNIT_ASSERT_EQUAL(3, info.SeqNo);
             } else {
                 UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
             }
@@ -307,23 +202,23 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == "message_1.1") {
-                UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.SeqNo);
             } else if (info.Data == "message_2.1") {
-                UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(3, info.SeqNo);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(3, info.SeqNo);
             } else if (info.Data == "message_1.2") {
-                UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(5, info.SeqNo);
+                UNIT_ASSERT_EQUAL(2, info.PartitionId);
+                UNIT_ASSERT_EQUAL(5, info.SeqNo);
             } else if (info.Data == "message_2.2") {
-                UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(7, info.SeqNo);
+                UNIT_ASSERT_EQUAL(2, info.PartitionId);
+                UNIT_ASSERT_EQUAL(7, info.SeqNo);
             } else if (info.Data == "message_3.1") {
-                UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(1, info.SeqNo);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(1, info.SeqNo);
             } else if (info.Data == "message_4.1") {
-                UNIT_ASSERT_VALUES_EQUAL(1, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(1, info.SeqNo);
+                UNIT_ASSERT_C(1, info.PartitionId);
+                UNIT_ASSERT_C(1, info.SeqNo);
             } else {
                 UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
             }
@@ -341,7 +236,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         PartitionSplit_PreferedPartition(false);
     }
 
-    Y_UNIT_TEST(PartitionSplit_PreferedPartition_AutoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionSplit_PreferedPartition_NewSDK) {
         PartitionSplit_PreferedPartition(true);
     }
 
@@ -376,14 +271,14 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         for(const auto& info : readSession.Impl->ReceivedMessages) {
             if (info.Data == TString("message_1.1")) {
-                UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.SeqNo);
             } else if (info.Data == TString("message_2.1")) {
-                UNIT_ASSERT_VALUES_EQUAL(1, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(3, info.SeqNo);
+                UNIT_ASSERT_EQUAL(1, info.PartitionId);
+                UNIT_ASSERT_EQUAL(3, info.SeqNo);
             } else if (info.Data == TString("message_3.2")) {
-                UNIT_ASSERT_VALUES_EQUAL(2, info.PartitionId);
-                UNIT_ASSERT_VALUES_EQUAL(11, info.SeqNo);
+                UNIT_ASSERT_EQUAL(2, info.PartitionId);
+                UNIT_ASSERT_EQUAL(11, info.SeqNo);
             } else {
                 UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
             }
@@ -410,7 +305,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         PartitionMerge_PreferedPartition(false);
     }
 
-    Y_UNIT_TEST(PartitionMerge_PreferedPartition_AutoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionMerge_PreferedPartition_NewSDK) {
         PartitionMerge_PreferedPartition(true);
     }
 
@@ -435,7 +330,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         PartitionSplit_ReadEmptyPartitions(false);
     }
 
-    Y_UNIT_TEST(PartitionSplit_ReadEmptyPartitions_AutoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionSplit_ReadEmptyPartitions_NewSDK) {
         PartitionSplit_ReadEmptyPartitions(true);
     }
 
@@ -466,7 +361,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession.Close();
     }
 
-    Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_NewSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -519,7 +414,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession2.Close();
     }
 
-    Y_UNIT_TEST(PartitionSplit_ManySession_AutoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionSplit_ManySession_NewSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -533,38 +428,23 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         Sleep(TDuration::Seconds(1));
 
-        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {}, true);
+        TTestReadSession readSession1("Session-0", client, Max<size_t>(), false, {0, 1, 2}, true);
+        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {0}, true);
 
         readSession1.WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because used new SDK");
         readSession1.Commit();
-        readSession1.Run();
-
-        TTestReadSession readSession2("Session-1", client, Max<size_t>(), false, {}, true);
         readSession2.Run();
 
-        Sleep(TDuration::Seconds(1));
+        readSession2.WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
+        readSession2.Run();
 
-        auto p1 = readSession1.GetPartitions();
-        auto p2 = readSession2.GetPartitions();
-
-        std::set<size_t> partitions;
-        partitions.insert(p1.begin(), p1.end());
-        partitions.insert(p2.begin(), p2.end());
-
-        std::set<size_t> expected{0, 1, 2};
-
-        UNIT_ASSERT_VALUES_EQUAL(expected, partitions);
+        readSession1.WaitAndAssertPartitions({1, 2}, "Partition 0 must rebalance to other sessions (Session-0)");
 
         readSession1.Close();
-
-        Sleep(TDuration::Seconds(1));
-
-        UNIT_ASSERT_VALUES_EQUAL(expected, readSession2.GetPartitions());
-
         readSession2.Close();
     }
 
-    Y_UNIT_TEST(PartitionSplit_ManySession_existed_AutoscaleAwareSDK) {
+    Y_UNIT_TEST(PartitionSplit_ManySession_existed_NewSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
@@ -742,17 +622,16 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
+        auto writeSession = CreateWriteSession(client, "producer-1", 0);
         UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
         UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(10));
         auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
 
-        auto writeSession2 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
+        auto writeSession2 = CreateWriteSession(client, "producer-1", 1);
         UNIT_ASSERT(writeSession2->Write(Msg(msg, 3)));
-        UNIT_ASSERT(writeSession2->Write(Msg(msg, 4)));
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(10));
         auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
     }

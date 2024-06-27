@@ -4,27 +4,26 @@
 #include "pythonic/include/types/assignable.hpp"
 #include "pythonic/include/types/empty_iterator.hpp"
 #include "pythonic/include/types/nditerator.hpp"
-#include "pythonic/include/types/slice.hpp"
-#include "pythonic/include/types/tuple.hpp"
-#include "pythonic/include/types/vectorizable_type.hpp"
-#include "pythonic/include/utils/allocate.hpp"
-#include "pythonic/include/utils/int_.hpp"
-#include "pythonic/include/utils/nested_container.hpp"
-#include "pythonic/include/utils/reserve.hpp"
 #include "pythonic/include/utils/shared_ref.hpp"
+#include "pythonic/include/utils/nested_container.hpp"
+#include "pythonic/include/utils/int_.hpp"
+#include "pythonic/include/utils/reserve.hpp"
+#include "pythonic/include/types/tuple.hpp"
+#include "pythonic/include/types/slice.hpp"
+#include "pythonic/include/types/vectorizable_type.hpp"
 
+#include <ostream>
+#include <vector>
+#include <utility>
 #include <algorithm>
 #include <iterator>
-#include <ostream>
-#include <utility>
-#include <vector>
 
 PYTHONIC_NS_BEGIN
 
 namespace types
 {
   template <class T>
-  using container = std::vector<T, utils::allocator<T>>;
+  using container = std::vector<T>;
 
   static const size_t DEFAULT_LIST_CAPACITY = 16;
 
@@ -178,11 +177,6 @@ namespace types
     bool contains(V const &v) const;
     intptr_t id() const;
 
-    intptr_t baseid() const
-    {
-      return reinterpret_cast<intptr_t>(&(*_data));
-    }
-
     long count(T const &x) const;
     template <class Tp, class Sp>
     friend std::ostream &operator<<(std::ostream &os,
@@ -245,7 +239,8 @@ namespace types
     template <class Tp, class S>
     list(sliced_list<Tp, S> const &other);
     template <class Tp, size_t N>
-    list(static_list<Tp, N> const &other) : list(other.begin(), other.end())
+    list(static_list<Tp, N> const &other)
+        : list(other.begin(), other.end())
     {
     }
     template <class Tp, size_t N, class... S>
@@ -332,14 +327,8 @@ namespace types
       return fast(index);
     }
 
-    dtype *data()
-    {
-      return _data->data();
-    }
-    const dtype *data() const
-    {
-      return _data->data();
-    }
+    dtype* data() { return _data->data();}
+    const dtype* data() const { return _data->data();}
 
     // modifiers
     template <class Tp>
@@ -502,7 +491,7 @@ namespace types
     list<T> res(self.begin(), self.end());
     return res += other;
   }
-} // namespace types
+}
 
 namespace utils
 {
@@ -515,7 +504,7 @@ namespace utils
   template <class T, class From>
   void reserve(types::list<T> &l, From const &f,
                typename From::const_iterator *p = nullptr);
-} // namespace utils
+}
 
 template <class T>
 struct assignable<types::list<T>> {
@@ -568,7 +557,7 @@ namespace std
   struct tuple_element<I, pythonic::types::sliced_list<T, S>> {
     typedef typename pythonic::types::sliced_list<T, S>::value_type type;
   };
-} // namespace std
+}
 
 /* type inference stuff  {*/
 #include "pythonic/include/types/combined.hpp"

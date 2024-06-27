@@ -28,7 +28,6 @@
 namespace NKikimr::NPQ {
 
 static const ui32 MAX_BLOB_PART_SIZE = 500_KB;
-static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
 
 using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 
@@ -430,7 +429,7 @@ private:
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
 
-    void CommitWriteOperations(TTransaction& t);
+    void CommitWriteOperations(const TTransaction& t);
 
     void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
@@ -705,7 +704,7 @@ private:
 
 
     [[nodiscard]] EProcessResult PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx);
-    void ExecImmediateTx(TTransaction& tx);
+    void ExecImmediateTx(const TTransaction& tx);
 
     EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg);
     EProcessResult PreProcessRequest(TDeregisterMessageGroupMsg& msg);
@@ -758,7 +757,6 @@ private:
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingCommit;
-    TVector<THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfosApplied;
 
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;
     THashMap<TActorId, TSimpleSharedPtr<TTransaction>> WriteInfosToTx;
@@ -816,17 +814,14 @@ private:
     TSubscriber Subscriber;
 
     TInstant WriteCycleStartTime;
-    ui32 WriteCycleSize = 0;
+    ui32 WriteCycleSize;
     ui32 WriteCycleSizeEstimate = 0;
     ui32 WriteKeysSizeEstimate = 0;
-    ui32 WriteNewSize = 0;
-    ui32 WriteNewSizeFull = 0;
-    ui32 WriteNewSizeInternal = 0;
-    ui64 WriteNewSizeUncompressed = 0;
-    ui64 WriteNewSizeUncompressedFull = 0;
-
-    ui32 WriteNewMessages = 0;
-    ui32 WriteNewMessagesInternal = 0;
+    ui32 WriteNewSize;
+    ui32 WriteNewSizeInternal;
+    ui64 WriteNewSizeUncompressed;
+    ui32 WriteNewMessages;
+    ui32 WriteNewMessagesInternal;
 
     TInstant CurrentTimestamp;
 
@@ -865,7 +860,6 @@ private:
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
-    THolder<TMultiBucketCounter> SupportivePartitionTimeLag;
     TPartitionHistogramWrapper MessageSize;
 
     TPercentileCounter WriteLatency;
@@ -927,8 +921,6 @@ private:
     void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);
 
     void DestroyActor(const TActorContext& ctx);
-
-    TActorId OffloadActor;
 };
 
 } // namespace NKikimr::NPQ

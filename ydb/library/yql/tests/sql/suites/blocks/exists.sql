@@ -1,4 +1,6 @@
 USE plato;
+/* XXX: Enable UseBlocks pragma and provide input to trigger block execution. */
+PRAGMA UseBlocks;
 
 SELECT
     key,

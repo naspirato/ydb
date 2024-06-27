@@ -433,6 +433,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
+    ui64 dataSizeResolution = 0; // Datashard will use default resolution
+    ui64 rowCountResolution = 0; // Datashard will use default resolution
     bool collectKeySample = false;
     if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
         // We would like to split by size and do this no matter how many partitions there are
@@ -473,9 +475,13 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     // Request histograms from the datashard
     LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
              "Requesting full stats from datashard %" PRIu64, rec.GetDatashardId());
-    auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
-    request->Record.SetCollectKeySample(collectKeySample);
-    PendingMessages.emplace_back(item.Ev->Sender, request);
+    PendingMessages.emplace_back(
+        item.Ev->Sender,
+        new TEvDataShard::TEvGetTableStats(
+            pathId.LocalPathId,
+            dataSizeResolution,
+            rowCountResolution,
+            collectKeySample));
 
     return true;
 }

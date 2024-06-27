@@ -182,15 +182,16 @@ public:
         return Width_;
     }
 
-    TStorage Pop() {
-        auto data(std::move(Data));
+    void Pop() {
         HasValue = false;
         Read();
-        return data;
     }
 
-    const NUdf::TUnboxedValue* GetValue() const {
-        return &Data.front();
+    NKikimr::NUdf::TUnboxedValue* GetValue() {
+        return &*Data.begin();
+    }
+    const NKikimr::NUdf::TUnboxedValue* GetValue() const {
+        return &*Data.begin();
     }
 };
 
@@ -349,9 +350,9 @@ class TWideTopWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTopWrapper
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>;
 public:
     TWideTopWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
+        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Count(count), Directions(std::move(directions)), Keys(std::move(keys))
-        , Indexes(std::move(indexes)), Representations(std::move(representations))
+        , Indexes(std::move(indexes)), Representations(std::move(representations)), TupleMultiType(tupleMultiType)
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -600,6 +601,7 @@ private:
     const std::vector<ui32> Indexes;
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
+    TMultiType* TupleMultiType;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -717,20 +719,15 @@ public:
         }
     }
 
-    bool Seal() {
-        if (SpilledStates.empty()) {
-            SealInMemory();
-        } else {
+    void Seal() {
+        if (!SpilledStates.empty()) {
             SwitchMode(EOperatingMode::Spilling);
+            return;
         }
-        return IsReadyToContinue();
+        SealInMemory();
     }
 
     NUdf::TUnboxedValue* Extract() {
-        if (!IsReadyToContinue()) {
-            return nullptr;
-        }
-
         if (SpilledUnboxedValuesIterators.empty()) {
             // No spilled data
             return ExtractInMemory();
@@ -745,12 +742,21 @@ public:
 
         std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
         auto &currentIt = SpilledUnboxedValuesIterators.back();
-        Storage = currentIt.Pop();
+        return currentIt.GetValue();
+    }
+
+    void Clean() {
+        if (SpilledUnboxedValuesIterators.empty()) {
+            // No spilled data
+            return;
+        }
+        auto &currentIt = SpilledUnboxedValuesIterators.back();
+        currentIt.Pop();
         if (currentIt.IsFinished()) {
             SpilledUnboxedValuesIterators.pop_back();
         }
-        return Storage.data();
     }
+
 private:
     EOperatingMode GetMode() const { return Mode; }
 
@@ -896,13 +902,16 @@ public:
                     case EFetchResult::One:
                         ptr->Put();
                         continue;
-                    case EFetchResult::Finish:
-                        if (ptr->Seal())
-                            break;
-                        [[fallthrough]];
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
+                    case EFetchResult::Finish:
+                        ptr->Seal();
+                        break;
                 }
+            }
+
+            if (!ptr->IsReadyToContinue()) {
+                return EFetchResult::Yield;
             }
 
             if (auto extract = ptr->Extract()) {
@@ -912,6 +921,7 @@ public:
                     else
                         ++extract;
                 }
+                ptr->Clean();
                 return EFetchResult::One;
             }
 
@@ -978,7 +988,6 @@ public:
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
         BranchInst::Create(more, block);
 
         block = more;
@@ -986,7 +995,7 @@ public:
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto full = BasicBlock::Create(context, "full", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
-        const auto result = PHINode::Create(statusType, 5U, "result", over);
+        const auto result = PHINode::Create(statusType, 3U, "result", over);
 
         const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetStatus()}, "last", block);
         const auto last = new LoadInst(statusType, statusPtr, "last", block);
@@ -997,19 +1006,8 @@ public:
         {
             const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
-            const auto pull = BasicBlock::Create(context, "pull", ctx.Func);
 
             block = loop;
-
-            const auto readyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::IsReadyToContinue));
-            const auto readyPtr = CastInst::Create(Instruction::IntToPtr, readyFunc, PointerType::getUnqual(boolFuncType), "ready", block);
-            const auto process = CallInst::Create(boolFuncType, readyPtr, {stateArg}, "process", block);
-
-            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
-
-            BranchInst::Create(pull, over, process, block);
-
-            block = pull;
 
             const auto getres = GetNodeValues(Flow, ctx, block);
 
@@ -1023,12 +1021,11 @@ public:
 
             new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block);
             const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Seal));
-            const auto sealPtr = CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(boolFuncType), "seal", block);
-            const auto stop = CallInst::Create(boolFuncType, sealPtr, {stateArg}, "stop", block);
+            const auto sealType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
+            const auto sealPtr = CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block);
+            CallInst::Create(sealType, sealPtr, {stateArg}, "", block);
 
-            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
-
-            BranchInst::Create(full, over, stop, block);
+            BranchInst::Create(full, block);
 
             block = good;
 
@@ -1058,7 +1055,6 @@ public:
             block = full;
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
-            const auto last = BasicBlock::Create(context, "last", ctx.Func);
 
             const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Extract));
             const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
@@ -1066,26 +1062,15 @@ public:
             const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
             const auto has = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block);
 
-            BranchInst::Create(good, last, has, block);
+            result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+
+            BranchInst::Create(good, over, has, block);
 
             block = good;
 
             new StoreInst(out, outs, block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
-            BranchInst::Create(over, block);
-
-            block = last;
-
-            const auto finishedFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::IsFinished));
-            const auto finishedPtr = CastInst::Create(Instruction::IntToPtr, finishedFunc, PointerType::getUnqual(boolFuncType), "finished_ptr", block);
-            const auto finished = CallInst::Create(boolFuncType, finishedPtr, {stateArg}, "finished", block);
-            const auto output = SelectInst::Create(finished,
-                ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)),
-                ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)),
-                "output", block);
-
-            result->addIncoming(output, block);
             BranchInst::Create(over, block);
         }
 
@@ -1114,7 +1099,7 @@ private:
     const std::vector<ui32> Indexes;
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
-    TMultiType *const TupleMultiType;
+    TMultiType* TupleMultiType;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1212,7 +1197,7 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (HasCount)
             return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
-                std::move(indexes), std::move(representations));
+                std::move(indexes), std::move(representations), tupleMultiType);
         else
             return new TWideSortWrapper(ctx.Mutables, wide, std::move(directions), std::move(keys),
                 std::move(indexes), std::move(representations), tupleMultiType);

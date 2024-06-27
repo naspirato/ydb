@@ -104,8 +104,7 @@ namespace NTest {
         EReady SkipToRowVersion(TRowVersion rowVersion) noexcept
         {
             TIteratorStats stats;
-            Ready = Iter->SkipToRowVersion(rowVersion, stats, /* committed */ nullptr, /* observer */ nullptr,
-                /* decided */ ITransactionSet::None);
+            Ready = Iter->SkipToRowVersion(rowVersion, stats, /* committed */ nullptr, /* observer */ nullptr);
 
             if (Ready == EReady::Data)
                 Ready = RollUp();

@@ -1,25 +1,19 @@
 #pragma once
 
-#include "lag_provider.h"
 #include "replication.h"
 
 namespace NKikimr::NReplication::NController {
 
-class TTargetBase
-    : public TReplication::ITarget
-    , public TLagProvider
-{
+class TTargetBase: public TReplication::ITarget {
 protected:
     using ETargetKind = TReplication::ETargetKind;
     using EDstState = TReplication::EDstState;
     using EStreamState = TReplication::EStreamState;
-    struct TWorker: public TItemWithLag {};
 
     inline TReplication* GetReplication() const {
         return Replication;
     }
 
-    const THashMap<ui64, TWorker>& GetWorkers() const;
     void RemoveWorkers(const TActorContext& ctx);
 
 public:
@@ -49,7 +43,7 @@ public:
 
     void AddWorker(ui64 id) override;
     void RemoveWorker(ui64 id) override;
-    void UpdateLag(ui64 workerId, TDuration lag) override;
+    const THashSet<ui64>& GetWorkers() const override;
 
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
@@ -71,7 +65,7 @@ private:
     TActorId DstAlterer;
     TActorId DstRemover;
     TActorId WorkerRegistar;
-    THashMap<ui64, TWorker> Workers;
+    THashSet<ui64> Workers;
     bool PendingRemoveWorkers = false;
 
 }; // TTargetBase

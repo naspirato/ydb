@@ -8,23 +8,18 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TWatermarkRuntimeDataConfig
+struct TWatermarkRuntimeData
     : public NYTree::TYsonStructLite
 {
     TString ColumnName;
     ui64 Watermark;
 
-    REGISTER_YSON_STRUCT_LITE(TWatermarkRuntimeDataConfig);
+    // Should be set manually using table schema after ColumnName is known.
+    int ColumnIndex;
+
+    REGISTER_YSON_STRUCT_LITE(TWatermarkRuntimeData);
 
     static void Register(TRegistrar registrar);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TWatermarkRuntimeData
-{
-    ui64 Watermark;
-    int ColumnIndex;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

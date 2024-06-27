@@ -22,7 +22,7 @@ YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Test");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TReconfigurableThroughputThrottlerTest, NoLimit)
+TEST(TReconfigurableThroughputThrottlerTest, TestNoLimit)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         New<TThroughputThrottlerConfig>());
@@ -35,7 +35,7 @@ TEST(TReconfigurableThroughputThrottlerTest, NoLimit)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, Limit)
+TEST(TReconfigurableThroughputThrottlerTest, TestLimit)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(1));
@@ -53,7 +53,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Limit)
     EXPECT_LE(duration, 3000u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, NoOverflow)
+TEST(TReconfigurableThroughputThrottlerTest, TestNoOverflow)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(100_TB));
@@ -75,7 +75,7 @@ TEST(TReconfigurableThroughputThrottlerTest, NoOverflow)
         .ThrowOnError();
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, FractionalPeriod)
+TEST(TReconfigurableThroughputThrottlerTest, TestFractionalPeriod)
 {
     auto config = NYT::New<NYT::NConcurrency::TThroughputThrottlerConfig>();
         config->Limit = 15;
@@ -88,9 +88,10 @@ TEST(TReconfigurableThroughputThrottlerTest, FractionalPeriod)
             .WithTimeout(TDuration::Seconds(5)))
             .ThrowOnError();
     }
+
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, ScheduleUpdate)
+TEST(TReconfigurableThroughputThrottlerTest, TestScheduleUpdate)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(1));
@@ -108,7 +109,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ScheduleUpdate)
     EXPECT_LE(duration, 6000u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, Update)
+TEST(TReconfigurableThroughputThrottlerTest, TestUpdate)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(1));
@@ -122,7 +123,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Update)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 2000u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, Cancel)
+TEST(TReconfigurableThroughputThrottlerTest, TestCancel)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(1));
@@ -139,7 +140,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Cancel)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 100u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, ReconfigureSchedulesUpdatesProperly)
+TEST(TReconfigurableThroughputThrottlerTest, TestReconfigureSchedulesUpdatesProperly)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(1));
@@ -160,7 +161,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ReconfigureSchedulesUpdatesProperly
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 5000u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, SetLimit)
+TEST(TReconfigurableThroughputThrottlerTest, TestSetLimit)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(1));
@@ -181,7 +182,7 @@ TEST(TReconfigurableThroughputThrottlerTest, SetLimit)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 5000u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, ReconfigureMustRescheduleUpdate)
+TEST(TReconfigurableThroughputThrottlerTest, TestReconfigureMustRescheduleUpdate)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(1));
@@ -201,7 +202,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ReconfigureMustRescheduleUpdate)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 3000u); // Reconfigure must have rescheduled the update
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, Overdraft)
+TEST(TReconfigurableThroughputThrottlerTest, TestOverdraft)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(100));
@@ -215,7 +216,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Overdraft)
 
 #if !defined(_asan_enabled_) && !defined(_msan_enabled_) && !defined(_tsan_enabled_)
 
-TEST(TReconfigurableThroughputThrottlerTest, Stress)
+TEST(TReconfigurableThroughputThrottlerTest, StressTest)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(100));
@@ -243,7 +244,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Stress)
 
 #endif
 
-TEST(TReconfigurableThroughputThrottlerTest, FractionalLimit)
+TEST(TReconfigurableThroughputThrottlerTest, TestFractionalLimit)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(0.5));
@@ -257,7 +258,7 @@ TEST(TReconfigurableThroughputThrottlerTest, FractionalLimit)
     EXPECT_LE(duration, 4000u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, ZeroLimit)
+TEST(TReconfigurableThroughputThrottlerTest, TestZeroLimit)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(0));
@@ -278,7 +279,7 @@ TEST(TReconfigurableThroughputThrottlerTest, ZeroLimit)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 1000u);
 }
 
-TEST(TReconfigurableThroughputThrottlerTest, Release)
+TEST(TReconfigurableThroughputThrottlerTest, TestRelease)
 {
     auto throttler = CreateReconfigurableThroughputThrottler(
         TThroughputThrottlerConfig::Create(100));

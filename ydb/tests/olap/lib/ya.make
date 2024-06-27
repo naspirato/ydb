@@ -15,10 +15,5 @@ PY3_LIBRARY()
         library/python/testing/yatest_common
         ydb/public/sdk/python
     )
-    IF (NOT OPENSOURCE)
-    PEERDIR(
-        contrib/python/yandexcloud
-    )
-    ENDIF()
 
 END()

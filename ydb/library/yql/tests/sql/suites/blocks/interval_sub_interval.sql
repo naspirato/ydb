@@ -1,4 +1,5 @@
 USE plato;
+pragma UseBlocks;
 
 SELECT
     a.ni - b.ni,

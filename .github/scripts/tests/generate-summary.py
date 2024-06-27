@@ -253,7 +253,7 @@ def render_testlist_html(rows, fn):
         fp.write(content)
 
 
-def write_summary(summary: TestSummary, test_log_url: str):
+def write_summary(summary: TestSummary):
     summary_fn = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_fn:
         fp = open(summary_fn, "at")
@@ -261,7 +261,7 @@ def write_summary(summary: TestSummary, test_log_url: str):
         fp = sys.stdout
 
     if summary.is_empty:
-        fp.write(f":red_circle: Test run completed, no test results found. Please check [test logs]({test_log_url}).")
+        fp.write(":red_circle: Test run completed, no test results found. Please check build logs.")
     else:
         for line in summary.render(add_footnote=True):
             fp.write(f"{line}\n")
@@ -294,11 +294,11 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str, test_log_file_url: str):
+def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str):
     if summary.is_empty:
         return [
             f"Test run completed, no test results found for commit {pr.head.sha}. "
-            f"Please check [test log]({test_log_file_url})."
+            f"Please check build logs."
         ]
     elif summary.is_failed:
         result = f"Some tests failed, follow the links below."
@@ -308,17 +308,10 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: st
     body = [
         result
     ]
-    links = []
 
     if test_history_url:
-        links.append(f"[Test history]({test_history_url})")
-
-    if test_log_file_url:
-        links.append(f"[Test log]({test_log_file_url})")
-
-    if links:
         body.append("")
-        body.append(" | ".join(links))
+        body.append(f"[Test history]({test_history_url})")
 
     body.extend(summary.render())
 
@@ -330,7 +323,6 @@ def main():
     parser.add_argument("--summary-out-path", required=True)
     parser.add_argument("--summary-url-prefix", required=True)
     parser.add_argument('--test-history-url', required=False)
-    parser.add_argument('--test-log-url', required=False)
     parser.add_argument('--build-preset', default="default-linux-x86-64-relwithdebinfo", required=False)
     parser.add_argument('--status-report-file', required=False)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
@@ -344,7 +336,7 @@ def main():
     title_path = list(zip(paths, paths, paths))
 
     summary = gen_summary(args.summary_url_prefix, args.summary_out_path, title_path)
-    write_summary(summary, args.test_log_url)
+    write_summary(summary)
 
     if os.environ.get("GITHUB_EVENT_NAME") in ("pull_request", "pull_request_target"):
         gh = Github(auth=GithubAuth.Token(os.environ["GITHUB_TOKEN"]))
@@ -354,23 +346,22 @@ def main():
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
 
-        text = get_comment_text(pr, summary, args.test_history_url, args.test_log_url)
+        text = get_comment_text(pr, summary, args.test_history_url)
 
         if summary.is_empty | summary.is_failed:
             color = 'red'
-            overall_status = "failure"
+            overall_status="failure"
         else:
             color = 'green'
-            overall_status = "success"
+            overall_status="success"
 
         run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
 
         update_pr_comment_text(pr, args.build_preset, run_number, color, text='\n'.join(text), rewrite=False)
 
         if args.status_report_file:
-            with open(args.status_report_file, 'w') as fo:
-                fo.write(overall_status)
-
+            with open(args.status_report_file,'w') as fo:
+                fo.write( overall_status )
 
 if __name__ == "__main__":
     main()

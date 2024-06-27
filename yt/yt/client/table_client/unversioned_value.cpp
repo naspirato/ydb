@@ -11,8 +11,6 @@
 
 #endif
 
-#include <yt/yt/library/numeric/util.h>
-
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -35,15 +33,13 @@ TFingerprint GetFarmFingerprint(const TUnversionedValue& value)
             return NYT::FarmFingerprint(value.Data.String, value.Length);
 
         case EValueType::Int64:
-            // NB: We use BitCast here instead of std::bit_cast for supporting build with C++17.
-            return NYT::FarmFingerprint(BitCast<ui64>(value.Data.Int64));
+            return NYT::FarmFingerprint(std::bit_cast<ui64>(value.Data.Int64));
 
         case EValueType::Uint64:
             return NYT::FarmFingerprint(value.Data.Uint64);
 
         case EValueType::Double:
-            // NB: We use BitCast here instead of std::bit_cast for supporting build with C++17.
-            return NYT::FarmFingerprint(BitCast<ui64>(value.Data.Double));
+            return NYT::FarmFingerprint(std::bit_cast<ui64>(value.Data.Double));
 
         case EValueType::Boolean:
             return NYT::FarmFingerprint(static_cast<ui64>(value.Data.Boolean));

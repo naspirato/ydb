@@ -20,7 +20,6 @@ struct TComputeActorAsyncInputHelper {
     TIssuesBuffer IssuesBuffer;
     bool Finished = false;
     const NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
-    const NKikimr::NMiniKQL::TType* ValueType = nullptr;
     TMaybe<TInstant> PendingWatermark = Nothing();
 public:
     TComputeActorAsyncInputHelper(
@@ -63,7 +62,7 @@ public:
         const i64 freeSpace = GetFreeSpace();
         if (freeSpace > 0) {
             TMaybe<TInstant> watermark;
-            NKikimr::NMiniKQL::TUnboxedValueBatch batch(ValueType);
+            NKikimr::NMiniKQL::TUnboxedValueBatch batch;
             Y_ABORT_UNLESS(AsyncInput);
             bool finished = false;
             const i64 space = AsyncInput->GetAsyncInputData(batch, watermark, finished, std::min(freeSpace, asyncInputPushLimit));

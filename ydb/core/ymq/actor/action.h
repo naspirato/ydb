@@ -77,14 +77,11 @@ public:
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;
         }
-        bool enableThrottling = (Action_ != EAction::CreateQueue);
         this->Send(MakeSqsServiceID(this->SelfId().NodeId()),
             MakeHolder<TSqsEvents::TEvGetConfiguration>(
                 RequestId_,
                 UserName_,
                 GetQueueName(),
-                FolderId_,
-                enableThrottling,
                 configurationFlags)
         );
     }
@@ -640,16 +637,17 @@ private:
             return;
         }
 
-        if (ev->Get()->Throttled) {
-            MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
-            SendReplyAndDie();
-            return;
-        }
-
-        if (TDerived::NeedExistingQueue() && !ev->Get()->QueueExists) {
-            MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
-            SendReplyAndDie();
-            return;
+        if (TDerived::NeedExistingQueue()) {
+            if (ev->Get()->Throttled) {
+                MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
+                SendReplyAndDie();
+                return;
+            }
+            if (!ev->Get()->QueueExists) {
+                MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
+                SendReplyAndDie();
+                return;
+            }
         }
 
         Y_ABORT_UNLESS(SchemeCache_);

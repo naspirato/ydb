@@ -5,7 +5,6 @@
 #include "pythonic/include/types/nditerator.hpp"
 #include "pythonic/include/types/traits.hpp"
 #include "pythonic/include/types/tuple.hpp"
-#include "pythonic/include/utils/allocate.hpp"
 #include "pythonic/include/utils/int_.hpp"
 #include "pythonic/include/utils/nested_container.hpp"
 #include "pythonic/include/utils/seq.hpp"
@@ -20,7 +19,7 @@ namespace types
 
   template <typename T>
   struct dynamic_tuple {
-    using container_type = std::vector<T, utils::allocator<T>>;
+    using container_type = std::vector<T>;
     utils::shared_ref<container_type> data;
 
     using value_type = T;

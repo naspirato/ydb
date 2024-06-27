@@ -19,7 +19,7 @@ namespace {
         NYql::TExprNode::TPtr ReplaceInto = nullptr;
     };
 
-    bool IsOlap(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
+    bool IsColumnTable(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
         if (!tableSettings) {
             return false;
         }
@@ -85,8 +85,6 @@ namespace {
             return std::nullopt;
         }
 
-        const bool isOlap = IsOlap(settings.TableSettings);
-
         const auto& insertData = writeArgs.Get(3);
         if (insertData.Ptr()->Content() == "Void") {
             return std::nullopt;
@@ -138,7 +136,7 @@ namespace {
             const auto name = item->GetName();
             auto currentType = item->GetItemType();
 
-            const bool notNull = primariKeyColumns.contains(name) && isOlap;
+            const bool notNull = primariKeyColumns.contains(name) && IsColumnTable(settings.TableSettings);
 
             if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
                 currentType = currentType->Cast<NYql::TOptionalExprType>()->GetItemType();
@@ -171,19 +169,6 @@ namespace {
 
         const auto topLevelRead = NYql::FindTopLevelRead(insertData.Ptr());
 
-        NYql::TExprNode::TListType insertSettings;
-        insertSettings.push_back(
-            exprCtx.NewList(pos, {
-                exprCtx.NewAtom(pos, "mode"),
-                exprCtx.NewAtom(pos, "replace"),
-            }));
-        if (!isOlap) {
-            insertSettings.push_back(
-                exprCtx.NewList(pos, {
-                    exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
-                }));
-        }
-
         const auto insert = exprCtx.NewCallable(pos, "Write!", {
             topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
             exprCtx.NewCallable(pos, "DataSink", {
@@ -199,7 +184,12 @@ namespace {
                 }),
             }),
             insertData.Ptr(),
-            exprCtx.NewList(pos, std::move(insertSettings)),
+            exprCtx.NewList(pos, {
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "mode"),
+                    exprCtx.NewAtom(pos, "replace"),
+                }),
+            }),
         });
 
         TCreateTableAsResult result;

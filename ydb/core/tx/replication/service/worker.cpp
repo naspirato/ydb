@@ -1,7 +1,6 @@
 #include "logging.h"
 #include "worker.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
@@ -12,17 +11,15 @@
 
 namespace NKikimr::NReplication::NService {
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data, TInstant createTime)
+TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data)
     : Offset(offset)
     , Data(data)
-    , CreateTime(createTime)
 {
 }
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant createTime)
+TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data)
     : Offset(offset)
     , Data(std::move(data))
-    , CreateTime(createTime)
 {
 }
 
@@ -42,7 +39,6 @@ void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
     out << "{"
         << " Offset: " << Offset
         << " Data: " << Data.size() << "b"
-        << " CreateTime: " << CreateTime.ToStringUpToSeconds()
     << " }";
 }
 
@@ -63,17 +59,6 @@ TString TEvWorker::TEvGone::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " Status: " << Status
         << " ErrorDescription: " << ErrorDescription
-    << " }";
-}
-
-TEvWorker::TEvStatus::TEvStatus(TDuration lag)
-    : Lag(lag)
-{
-}
-
-TString TEvWorker::TEvStatus::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {"
-        << " Lag: " << Lag
     << " }";
 }
 
@@ -162,17 +147,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        if (InFlightData) {
-            const auto& records = InFlightData->Records;
-            auto it = MinElementBy(records, [](const auto& record) {
-                return record.CreateTime;
-            });
-
-            if (it != records.end()) {
-                Lag = TlsActivationContext->Now() - it->CreateTime;
-            }
-        }
-
         InFlightData.Reset();
         if (Reader) {
             Send(ev->Forward(Reader));
@@ -234,22 +208,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
         PassAway();
     }
 
-    void ScheduleLagReport() {
-        const auto random = TDuration::MicroSeconds(TAppData::RandomProvider->GenRand64() % LagReportInterval.MicroSeconds());
-        Schedule(LagReportInterval + random, new TEvents::TEvWakeup());
-    }
-
-    void ReportLag() {
-        ScheduleLagReport();
-
-        if (!Reader || !Writer) {
-            return;
-        }
-
-        Send(Parent, new TEvWorker::TEvStatus(Lag));
-        Lag = TDuration::Zero();
-    }
-
     void PassAway() override {
         for (auto* actor : {&Reader, &Writer}) {
             Send(*actor, new TEvents::TEvPoison());
@@ -270,7 +228,6 @@ public:
         : Parent(parent)
         , Reader(std::move(createReaderFn))
         , Writer(std::move(createWriterFn))
-        , Lag(TDuration::Zero())
     {
     }
 
@@ -280,7 +237,6 @@ public:
         }
 
         Become(&TThis::StateWork);
-        ScheduleLagReport();
     }
 
     STATEFN(StateWork) {
@@ -289,21 +245,17 @@ public:
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvData, Handle);
             hFunc(TEvWorker::TEvGone, Handle);
-            sFunc(TEvents::TEvWakeup, ReportLag);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
 private:
     static constexpr ui32 MaxAttempts = 3;
-    static constexpr TDuration LagReportInterval = TDuration::Seconds(7);
-
     const TActorId Parent;
     mutable TMaybe<TString> LogPrefix;
     TActorInfo Reader;
     TActorInfo Writer;
     THolder<TEvWorker::TEvData> InFlightData;
-    TDuration Lag;
 };
 
 IActor* CreateWorker(

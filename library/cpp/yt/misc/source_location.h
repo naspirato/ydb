@@ -10,12 +10,13 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TStringBuilderBase;
-
 // TODO(dgolear): Drop when LLVM-14 is eradicated.
 #ifdef __cpp_lib_source_location
 
-void FormatValue(TStringBuilderBase* builder, const std::source_location& location, TStringBuf /*spec*/);
+class TStringBuilderBase;
+
+void FormatValue(TStringBuilderBase* builder, const std::source_location& location, TStringBuf /*format*/);
+TString ToString(const std::source_location& location);
 
 #endif // __cpp_lib_source_location
 
@@ -41,10 +42,6 @@ public:
     bool operator<(const TSourceLocation& other) const;
     bool operator==(const TSourceLocation& other) const;
 
-#ifdef __cpp_lib_source_location
-    static TSourceLocation FromStd(const std::source_location& location);
-#endif // __cpp_lib_source_location
-
 private:
     const char* FileName_;
     int Line_;
@@ -52,13 +49,7 @@ private:
 };
 
 //! Defines a macro to record the current source location.
-#ifdef __cpp_lib_source_location
-#define FROM_HERE ::NYT::TSourceLocation::FromStd(std::source_location::current())
-#else
 #define FROM_HERE ::NYT::TSourceLocation(__FILE__, __LINE__)
-#endif // __cpp_lib_source_location
-
-void FormatValue(TStringBuilderBase* builder, const TSourceLocation& location, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

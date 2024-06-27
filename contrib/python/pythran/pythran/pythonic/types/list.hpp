@@ -8,7 +8,6 @@
 #include "pythonic/types/bool.hpp"
 #include "pythonic/types/slice.hpp"
 #include "pythonic/types/tuple.hpp"
-#include "pythonic/utils/allocate.hpp"
 #include "pythonic/utils/reserve.hpp"
 #include "pythonic/utils/shared_ref.hpp"
 
@@ -557,7 +556,7 @@ namespace types
   template <class T>
   void list<T>::reserve(size_t n)
   {
-    if (n > _data->capacity())
+    if(n > _data->capacity())
       _data->reserve((n / 2) * 3);
   }
   template <class T>
@@ -584,7 +583,7 @@ namespace types
   template <class T>
   void list<T>::clear()
   {
-    _data->clear();
+      _data->clear();	
   }
 
   // TODO: have to raise a valueError

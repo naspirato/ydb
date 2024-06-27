@@ -10,25 +10,18 @@
 #undef GetMessage
 #endif
 
-void TProtoToYaml::FillEnum(YAML::Node property, const ::google::protobuf::EnumDescriptor* enumDescriptor, const TEnumSettings& enumSettings) {
+void TProtoToYaml::FillEnum(YAML::Node property, const ::google::protobuf::EnumDescriptor* enumDescriptor) {
     auto enm = property["enum"];
     auto valueCount = enumDescriptor->value_count();
     TString defaultValue;
     for (int i = 0; i < valueCount; ++i) {
         auto enumValueDescriptor = enumDescriptor->value(i);
-        auto enumName = enumValueDescriptor->name();
-        if (enumSettings.ConvertToLowerCase) {
-            enumName = to_lower(enumName);
-        }
+        enm.push_back(enumValueDescriptor->name());
         if (!defaultValue) {
-            defaultValue = enumName;
-            if (enumSettings.SkipDefaultValue) {
-                continue;
-            }
+            defaultValue = enumValueDescriptor->name();
         }
-        enm.push_back(enumName);
     }
-    if (defaultValue && !enumSettings.SkipDefaultValue) {
+    if (defaultValue) {
         property["default"] = defaultValue;
     }
 }

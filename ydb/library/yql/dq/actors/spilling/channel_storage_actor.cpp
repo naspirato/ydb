@@ -114,8 +114,6 @@ private:
         // Complete the future
         it->second.SetValue();
         WritingBlobs_.erase(it);
-
-        WakeUp_();
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {

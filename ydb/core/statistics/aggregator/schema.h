@@ -44,25 +44,11 @@ struct TAggregatorSchema : NIceDb::Schema {
         >;
     };
 
-    struct ScanOperations : Table<5> {
-        struct OperationId    : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct OwnerId        : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct LocalPathId    : Column<3, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<OperationId>;
-        using TColumns = TableColumns<
-            OperationId,
-            OwnerId,
-            LocalPathId
-        >;
-    };
-
     using TTables = SchemaTables<
         SysParams,
         BaseStats,
         Statistics,
-        ScanTables,
-        ScanOperations
+        ScanTables
     >;
 
     using TSettings = SchemaSettings<
@@ -75,7 +61,6 @@ struct TAggregatorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_ScanTableOwnerId = 3;
     static constexpr ui64 SysParam_ScanTableLocalPathId = 4;
     static constexpr ui64 SysParam_ScanStartTime = 5;
-    static constexpr ui64 SysParam_LastScanOperationId = 6;
 };
 
 } // NKikimr::NStat

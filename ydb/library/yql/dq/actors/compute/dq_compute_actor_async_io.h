@@ -202,50 +202,40 @@ struct IDqComputeActorAsyncOutput {
 };
 
 struct IDqAsyncLookupSource {
-    using TKeyTypeHelper = NKikimr::NMiniKQL::TKeyTypeContanerHelper<true, true, false>;
-    using TUnboxedValueMap = THashMap<
-            NUdf::TUnboxedValue,
-            NUdf::TUnboxedValue,
-            NKikimr::NMiniKQL::TValueHasher,
-            NKikimr::NMiniKQL::TValueEqual,
-            NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>
-    >;
     struct TEvLookupRequest: NActors::TEventLocal<TEvLookupRequest, TDqComputeEvents::EvLookupRequest> {
-        TEvLookupRequest(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, TUnboxedValueMap&& request)
+        TEvLookupRequest(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, NKikimr::NMiniKQL::TUnboxedValueVector&& keys)
             : Alloc(alloc)
-            , Request(std::move(request))
+            , Keys(std::move(keys))
         {
         }
         ~TEvLookupRequest() {
             auto guard = Guard(*Alloc);
-            TKeyTypeHelper empty;
-            Request = TUnboxedValueMap{0, empty.GetValueHash(), empty.GetValueEqual()};
+            Keys = NKikimr::NMiniKQL::TUnboxedValueVector{};
         }
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-        TUnboxedValueMap Request;
-    };
 
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        NKikimr::NMiniKQL::TUnboxedValueVector Keys;
+    };
     struct TEvLookupResult: NActors::TEventLocal<TEvLookupResult, TDqComputeEvents::EvLookupResult> {
-        TEvLookupResult(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, TUnboxedValueMap&& result)
+        TEvLookupResult(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, NKikimr::NMiniKQL::TKeyPayloadPairVector&& data)
             : Alloc(alloc)
-            , Result(std::move(result))
+            , Data(std::move(data))
         {
         }
         ~TEvLookupResult() {
             auto guard = Guard(*Alloc.get());
-            TKeyTypeHelper empty;
-            Result = TUnboxedValueMap{0, empty.GetValueHash(), empty.GetValueEqual()};
+            Data = NKikimr::NMiniKQL::TKeyPayloadPairVector{};
         }
 
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-        TUnboxedValueMap Result;
+        NKikimr::NMiniKQL::TKeyPayloadPairVector Data;
     };
 
     virtual size_t GetMaxSupportedKeysInRequest() const = 0;
     //Initiate lookup for requested keys
     //Only one request at a time is allowed. Request must contain no more than GetMaxSupportedKeysInRequest() keys
-    //Upon completion, results are sent in TEvLookupResult event to the preconfigured actor
-    virtual void AsyncLookup(TUnboxedValueMap&& request) = 0;
+    //Upon completion, results are sent in a TEvLookupResult to the preconfigured actor
+    virtual void AsyncLookup(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) = 0;
 protected:
     ~IDqAsyncLookupSource() {}
 };
@@ -276,7 +266,6 @@ public:
 
     struct TLookupSourceArguments {
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> KeyTypeHelper;
         NActors::TActorId ParentId;
         google::protobuf::Any LookupSource; //provider specific data source
         const NKikimr::NMiniKQL::TStructType* KeyType;

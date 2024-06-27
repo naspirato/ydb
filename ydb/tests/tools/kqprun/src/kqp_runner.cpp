@@ -89,8 +89,7 @@ class TKqpRunner::TImpl {
 public:
     enum class EQueryType {
         ScriptQuery,
-        YqlScriptQuery,
-        AsyncQuery
+        YqlScriptQuery
     };
 
     explicit TImpl(const TRunnerOptions& options)
@@ -144,10 +143,6 @@ public:
         case EQueryType::YqlScriptQuery:
             status = YdbSetup_.YqlScriptRequest(query, action, traceId, meta, ResultSets_);
             break;
-
-        case EQueryType::AsyncQuery:
-            YdbSetup_.QueryRequestAsync(query, action, traceId);
-            return true;
         }
 
         TYdbSetup::StopTraceOpt();
@@ -166,10 +161,6 @@ public:
         }
 
         return true;
-    }
-
-    void WaitAsyncQueries() const {
-        YdbSetup_.WaitAsyncQueries();
     }
 
     bool FetchScriptResults() {
@@ -203,14 +194,12 @@ public:
     }
 
     void PrintScriptResults() const {
-        if (Options_.ResultOutput) {
-            Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
-            for (size_t i = 0; i < ResultSets_.size(); ++i) {
-                if (ResultSets_.size() > 1) {
-                    *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
-                }
-                PrintScriptResult(ResultSets_[i]);
+        Cout << CoutColors_.Cyan() << "Writing script query results" << CoutColors_.Default() << Endl;
+        for (size_t i = 0; i < ResultSets_.size(); ++i) {
+            if (ResultSets_.size() > 1) {
+                *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
             }
+            PrintScriptResult(ResultSets_[i]);
         }
     }
 
@@ -306,7 +295,7 @@ private:
 
     void PrintScriptProgress(const TString& plan) const {
         if (Options_.InProgressStatisticsOutputFile) {
-            TFileOutput outputStream(Options_.InProgressStatisticsOutputFile);
+            TFileOutput outputStream(*Options_.InProgressStatisticsOutputFile);
             outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistics" << Endl;
 
             auto convertedPlan = plan;
@@ -407,14 +396,6 @@ bool TKqpRunner::ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction act
 
 bool TKqpRunner::ExecuteYqlScript(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
     return Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::YqlScriptQuery);
-}
-
-void TKqpRunner::ExecuteQueryAsync(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
-    Impl_->ExecuteQuery(query, action, traceId, TImpl::EQueryType::AsyncQuery);
-}
-
-void TKqpRunner::WaitAsyncQueries() const {
-    Impl_->WaitAsyncQueries();
 }
 
 bool TKqpRunner::FetchScriptResults() {

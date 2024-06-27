@@ -1,6 +1,6 @@
 import argparse
 import contextlib
-from shutil import copytree
+from distutils import dir_util
 import os
 import shutil
 import subprocess as sp
@@ -9,7 +9,6 @@ import zipfile
 import sys
 
 import process_command_files as pcf
-import java_command_file as jcf
 
 
 def parse_args(args):
@@ -78,10 +77,12 @@ def main():
             ts.write(' '.join(srcs))
 
     if ktsrcs:
+        temp_kt_sources_file = 'temp.kt.sources.list'
+        with open(temp_kt_sources_file, 'w') as ts:
+            ts.write(' '.join(ktsrcs + srcs))
         kt_classes_dir = 'kt_cls'
         mkdir_p(kt_classes_dir)
-
-        jcf.call_java_with_command_file(
+        sp.check_call(
             [
                 opts.java_bin,
                 '-Didea.max.content.load.filesize=30720',
@@ -92,16 +93,16 @@ def main():
                 '-d',
                 kt_classes_dir,
             ]
-            + ktc_opts,
-            wrapped_args=ktsrcs + srcs,
+            + ktc_opts
+            + ['@' + temp_kt_sources_file]
         )
         classpath = os.pathsep.join([kt_classes_dir, classpath])
 
     if srcs:
-        jcf.call_java_with_command_file(
+        sp.check_call(
             [opts.javac_bin, '-nowarn', '-g', '-classpath', classpath, '-encoding', 'UTF-8', '-d', classes_dir]
-            + javac_opts,
-            wrapped_args=srcs,
+            + javac_opts
+            + ['@' + temp_sources_file]
         )
 
     for s in jsrcs:
@@ -114,7 +115,7 @@ def main():
                 zf.extractall(classes_dir)
 
     if ktsrcs:
-        copytree(kt_classes_dir, classes_dir, dirs_exist_ok=True)
+        dir_util.copy_tree(kt_classes_dir, classes_dir)
 
     if opts.vcs_mf:
         sp.check_call([opts.jar_bin, 'cfm', opts.jar_output, opts.vcs_mf, os.curdir], cwd=classes_dir)

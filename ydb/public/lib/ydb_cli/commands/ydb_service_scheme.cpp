@@ -407,11 +407,6 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
 
     Cout << Endl << "State: " << desc.GetState();
     switch (desc.GetState()) {
-    case NReplication::TReplicationDescription::EState::Running:
-        if (const auto& lag = desc.GetRunningState().GetLag()) {
-            Cout << Endl << "Lag: " << *lag;
-        }
-        break;
     case NReplication::TReplicationDescription::EState::Error:
         Cout << Endl << "Issues: " << desc.GetErrorState().GetIssues().ToOneLineString();
         break;

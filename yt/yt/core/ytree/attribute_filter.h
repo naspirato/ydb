@@ -156,7 +156,8 @@ void Deserialize(TAttributeFilter& attributeFilter, NYson::TYsonPullParserCursor
 void FormatValue(
     TStringBuilderBase* builder,
     const TAttributeFilter& attributeFilter,
-    TStringBuf /*spec*/);
+    TStringBuf /*format*/);
+TString ToString(const TAttributeFilter& attributeFilter);
 
 ////////////////////////////////////////////////////////////////////////////////
 

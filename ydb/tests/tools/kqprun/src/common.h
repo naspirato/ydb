@@ -14,22 +14,19 @@ namespace NKqpRun {
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 
 struct TYdbSetupSettings {
-    ui32 NodeCount = 1;
+    i32 NodeCount = 1;
     TString DomainName = "Root";
     TDuration InitializationTimeout = TDuration::Seconds(10);
 
     bool MonitoringEnabled = false;
-    ui16 MonitoringPortOffset = 0;
     bool TraceOptEnabled = false;
-    TString LogOutputFile;
+    TMaybe<TString> LogOutputFile;
 
     TString YqlToken;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     TIntrusivePtr<NYql::IYtGateway> YtGateway;
     NKikimrConfig::TAppConfig AppConfig;
-
-    ui64 InFlightLimit = 0;
 };
 
 
@@ -47,11 +44,11 @@ struct TRunnerOptions {
         FullProto,  // Columns, rows and types in proto string format
     };
 
-    IOutputStream* ResultOutput = nullptr;
+    IOutputStream* ResultOutput = &Cout;
     IOutputStream* SchemeQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
-    TString InProgressStatisticsOutputFile;
+    TMaybe<TString> InProgressStatisticsOutputFile;
 
     EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;

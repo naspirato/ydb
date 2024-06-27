@@ -139,7 +139,6 @@ public:
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
 
     virtual std::function<void()> GetWakeupCallback() const = 0;
-    virtual TTxId GetTxId() const = 0;
 };
 
 class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
@@ -162,10 +161,6 @@ public:
     };
 
     std::function<void()> GetWakeupCallback() const override {
-        return {};
-    }
-
-    TTxId GetTxId() const override {
         return {};
     }
 

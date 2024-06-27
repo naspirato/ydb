@@ -63,7 +63,7 @@ public:
         if (!!Self->ProgressTxController->GetPlannedTx()) {
             Self->EnqueueProgressTx(ctx);
         }
-        Self->SetupIndexation();
+        Self->EnqueueBackgroundActivities(false);
     }
 
 private:

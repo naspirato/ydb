@@ -3,7 +3,6 @@
 #include "defs.h"
 
 #include <ydb/library/actors/queues/mpmc_ring_queue.h>
-#include <ydb/library/actors/queues/observer/observer.h>
 
 
 namespace NActors::NQueueBench {
@@ -14,16 +13,16 @@ namespace NActors::NQueueBench {
         virtual std::optional<ui32> TryPop() = 0;
     };
 
-    template <ui32 SizeBits, typename TObserver>
-    using TTryPush = bool (TMPMCRingQueue<SizeBits, TObserver>::*)(ui32 value);
-    template <ui32 SizeBits, typename TObserver>
-    using TTryPop = std::optional<ui32> (TMPMCRingQueue<SizeBits, TObserver>::*)();
+    template <ui32 SizeBits>
+    using TTryPush = bool (TMPMCRingQueue<SizeBits>::*)(ui32 value);
+    template <ui32 SizeBits>
+    using TTryPop = std::optional<ui32> (TMPMCRingQueue<SizeBits>::*)();
 
-    template <ui32 SizeBits, typename TObserver, TTryPush<SizeBits, TObserver> TryPushMethod, TTryPop<SizeBits, TObserver> TryPopMethod>
+    template <ui32 SizeBits, TTryPush<SizeBits> TryPushMethod, TTryPop<SizeBits> TryPopMethod>
     struct TMPMCQueueBase : IQueue {
-        TMPMCRingQueue<SizeBits, TObserver> *Queue;
+        TMPMCRingQueue<SizeBits> *Queue;
 
-        TMPMCQueueBase(TMPMCRingQueue<SizeBits, TObserver> *queue)
+        TMPMCQueueBase(TMPMCRingQueue<SizeBits> *queue)
             : Queue(queue)
         {}
 
@@ -35,27 +34,27 @@ namespace NActors::NQueueBench {
         }
     };
 
-    template <ui32 SizeBits, typename TObserver=void>
-    using TVerySlowQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPushSlow, &TMPMCRingQueue<SizeBits, TObserver>::TryPopReallySlow>;
+    template <ui32 SizeBits>
+    using TVerySlowQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPushSlow, &TMPMCRingQueue<SizeBits>::TryPopReallySlow>;
 
-    template <ui32 SizeBits, typename TObserver=void>
-    using TSlowQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPushSlow, &TMPMCRingQueue<SizeBits, TObserver>::TryPopSlow>;
+    template <ui32 SizeBits>
+    using TSlowQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPushSlow, &TMPMCRingQueue<SizeBits>::TryPopSlow>;
 
-    template <ui32 SizeBits, typename TObserver=void>
-    using TFastQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPush, &TMPMCRingQueue<SizeBits, TObserver>::TryPopFast>;
+    template <ui32 SizeBits>
+    using TFastQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopFast>;
 
-    template <ui32 SizeBits, typename TObserver=void>
-    using TVeryFastQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPush, &TMPMCRingQueue<SizeBits, TObserver>::TryPopReallyFast>;
+    template <ui32 SizeBits>
+    using TVeryFastQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopReallyFast>;
 
-    template <ui32 SizeBits, typename TObserver=void>
-    using TSingleQueue = TMPMCQueueBase<SizeBits, TObserver, &TMPMCRingQueue<SizeBits, TObserver>::TryPush, &TMPMCRingQueue<SizeBits, TObserver>::TryPopSingleConsumer>;
+    template <ui32 SizeBits>
+    using TSingleQueue = TMPMCQueueBase<SizeBits, &TMPMCRingQueue<SizeBits>::TryPush, &TMPMCRingQueue<SizeBits>::TryPopSingleConsumer>;
 
-    template <ui32 SizeBits, typename TObserver=void>
+    template <ui32 SizeBits>
     struct TAdaptiveQueue : IQueue {
-        TMPMCRingQueue<SizeBits, TObserver> *Queue;
-        typename TMPMCRingQueue<SizeBits, TObserver>::EPopMode State = TMPMCRingQueue<SizeBits, TObserver>::EPopMode::ReallySlow;
+        TMPMCRingQueue<SizeBits> *Queue;
+        typename TMPMCRingQueue<SizeBits>::EPopMode State = TMPMCRingQueue<SizeBits>::EPopMode::ReallySlow;
 
-        TAdaptiveQueue(TMPMCRingQueue<SizeBits, TObserver> *queue)
+        TAdaptiveQueue(TMPMCRingQueue<SizeBits> *queue)
             : Queue(queue)
         {}
 
@@ -65,16 +64,6 @@ namespace NActors::NQueueBench {
         std::optional<ui32> TryPop() final {
             return Queue->TryPop(State);
         }
-    };
-
-
-    template <ui32 SizeBits>
-    using TMPMCRingQueueWithStats = TMPMCRingQueue<SizeBits, TStatsObserver>;
-
-    template <template <ui32, typename> typename TAdaptor>
-    struct TAdaptorWithStats {
-        template <ui32 SizeBits>
-        using Type = TAdaptor<SizeBits, TStatsObserver>;
     };
 
 

@@ -17,9 +17,6 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/util/count_min_sketch.h>
-#include <ydb/core/util/intrusive_heap.h>
-
-#include <util/generic/intrlist.h>
 
 #include <random>
 
@@ -113,7 +110,6 @@ private:
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleScan::TPtr& ev);
-    void Handle(TEvStatistics::TEvGetScanStatus::TPtr& ev);
 
     void Initialize();
     void Navigate();
@@ -121,17 +117,15 @@ private:
     void NextRange();
     void SaveStatisticsToTable();
     void DeleteStatisticsFromTable();
+    void ScheduleNextScan();
 
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
-    void PersistCurrentScan(NIceDb::TNiceDb& db);
-    void PersistStartKey(NIceDb::TNiceDb& db);
-    void PersistLastScanOperationId(NIceDb::TNiceDb& db);
+    void PersistScanTableId(NIceDb::TNiceDb& db);
+    void PersistScanStartTime(NIceDb::TNiceDb& db);
 
     void ResetScanState(NIceDb::TNiceDb& db);
-    void ScheduleNextScan(NIceDb::TNiceDb& db);
-    void StartScan(NIceDb::TNiceDb& db, TPathId pathId);
-    void FinishScan(NIceDb::TNiceDb& db);
-
+    void RescheduleScanTable(NIceDb::TNiceDb& db);
+    void DropScanTable(NIceDb::TNiceDb& db);
 
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
@@ -161,10 +155,7 @@ private:
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
-            hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
             hFunc(TEvPrivate::TEvScheduleScan, Handle);
-            hFunc(TEvStatistics::TEvGetScanStatus, Handle);
-
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     LOG_CRIT(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -213,7 +204,7 @@ private:
     //
 
     TTableId ScanTableId; // stored in local db
-    std::unordered_set<TActorId> ReplyToActorIds;
+    TActorId ReplyToActorId;
 
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
@@ -229,51 +220,29 @@ private:
     };
     std::deque<TRange> ShardRanges;
 
+    bool InitStartKey = true;
     TSerializedCellVec StartKey; // stored in local db
 
     std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches; // stored in local db
 
     static constexpr TDuration ScanIntervalTime = TDuration::Hours(24);
-    static constexpr TDuration ScheduleScanIntervalTime = TDuration::Seconds(1);
 
     struct TScanTable {
         TPathId PathId;
         ui64 SchemeShardId = 0;
         TInstant LastUpdateTime;
-
-        size_t HeapIndexByTime = -1;
-
-        struct THeapIndexByTime {
-            size_t& operator()(TScanTable& value) const {
-                return value.HeapIndexByTime;
-            }
-        };
-
-        struct TLessByTime {
-            bool operator()(const TScanTable& l, const TScanTable& r) const {
-                return l.LastUpdateTime < r.LastUpdateTime;
-            }
-        };
     };
-    std::unordered_map<TPathId, TScanTable> ScanTables; // stored in local db
-
-    std::unordered_map<ui64, std::unordered_set<TPathId>> ScanTablesBySchemeShard;
-
-    typedef TIntrusiveHeap<TScanTable, TScanTable::THeapIndexByTime, TScanTable::TLessByTime>
-        TScanTableQueueByTime;
-    TScanTableQueueByTime ScanTablesByTime;
-
-    struct TScanOperation : public TIntrusiveListItem<TScanOperation> {
-        ui64 OperationId = 0;
-        TPathId PathId;
-        std::unordered_set<TActorId> ReplyToActorIds;
+    struct TScanTableLess {
+        bool operator()(const TScanTable& l, const TScanTable& r) {
+            return l.LastUpdateTime > r.LastUpdateTime;
+        }
     };
-    TIntrusiveList<TScanOperation> ScanOperations; // stored in local db
-    std::unordered_map<TPathId, TScanOperation> ScanOperationsByPathId;
+    typedef std::priority_queue<TScanTable, std::vector<TScanTable>, TScanTableLess>
+        TScanTableQueue;
 
-    ui64 LastScanOperationId = 0; // stored in local db
-
-    TInstant ScanStartTime;
+    TScanTableQueue ScanTablesByTime; // stored in local db
+    std::unordered_map<ui64, std::unordered_set<TPathId>> ScanTablesBySchemeShard; // stored in local db
+    TInstant ScanStartTime; // stored in local db
 };
 
 } // NKikimr::NStat

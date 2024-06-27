@@ -1589,7 +1589,7 @@ static PyObject *PySSL_version(PySSLSocket *self)
     return PyUnicode_FromString(version);
 }
 
-#if HAVE_NPN
+#if defined(OPENSSL_NPN_NEGOTIATED) && !defined(OPENSSL_NO_NEXTPROTONEG)
 static PyObject *PySSL_selected_npn_protocol(PySSLSocket *self) {
     const unsigned char *out;
     unsigned int outlen;
@@ -2117,7 +2117,7 @@ static PyMethodDef PySSLMethods[] = {
      PySSL_peercert_doc},
     {"cipher", (PyCFunction)PySSL_cipher, METH_NOARGS},
     {"version", (PyCFunction)PySSL_version, METH_NOARGS},
-#if HAVE_NPN
+#ifdef OPENSSL_NPN_NEGOTIATED
     {"selected_npn_protocol", (PyCFunction)PySSL_selected_npn_protocol, METH_NOARGS},
 #endif
 #if HAVE_ALPN

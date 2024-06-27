@@ -19,6 +19,7 @@ struct TProtocolVersion
 };
 
 void FormatValue(TStringBuilderBase* builder, TProtocolVersion version, TStringBuf spec);
+TString ToString(TProtocolVersion protocolVersion);
 
 ////////////////////////////////////////////////////////////////////////////////
 

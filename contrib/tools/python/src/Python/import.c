@@ -2465,7 +2465,7 @@ get_parent(PyObject *globals, char *buf, Py_ssize_t *p_buflen, int level)
                                 "Module name too long");
                 return NULL;
             }
-            memcpy(buf, start, len);
+            strncpy(buf, start, len);
             buf[len] = '\0';
             pkgname = PyString_FromString(buf);
             if (pkgname == NULL) {
@@ -2563,7 +2563,7 @@ load_next(PyObject *mod, PyObject *altmod, char **p_name, char *buf,
                         "Module name too long");
         return NULL;
     }
-    memcpy(p, name, len);
+    strncpy(p, name, len);
     p[len] = '\0';
     *p_buflen = p+len-buf;
 
@@ -2577,7 +2577,7 @@ load_next(PyObject *mod, PyObject *altmod, char **p_name, char *buf,
                 Py_DECREF(result);
                 return NULL;
             }
-            memcpy(buf, name, len);
+            strncpy(buf, name, len);
             buf[len] = '\0';
             *p_buflen = len;
         }

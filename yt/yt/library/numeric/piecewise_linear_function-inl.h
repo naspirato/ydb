@@ -4,8 +4,6 @@
 #include "piecewise_linear_function.h"
 #endif
 
-#include <library/cpp/yt/string/format.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -393,7 +391,7 @@ TPiecewiseLinearFunction<TValue> TPiecewiseLinearFunction<TValue>::Create(
     if (criticalPoints.front() != leftBound) {
         throw yexception()
             << "Left bound of the function must be its first critical point (CriticalPoints: ["
-            << NYT::ToString(criticalPoints)
+            << NDetail::ToString(criticalPoints)
             << "], LeftBound: " << leftBound << ")";
     }
     YT_VERIFY(criticalPoints.front() == leftBound);

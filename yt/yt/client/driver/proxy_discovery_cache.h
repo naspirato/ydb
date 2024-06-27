@@ -26,6 +26,7 @@ struct TProxyDiscoveryRequest
 };
 
 void FormatValue(TStringBuilderBase* builder, const TProxyDiscoveryRequest& request, TStringBuf spec);
+TString ToString(const TProxyDiscoveryRequest& request);
 
 ////////////////////////////////////////////////////////////////////////////////
 

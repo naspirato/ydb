@@ -4,7 +4,7 @@
 
 #include <library/cpp/yt/coding/varint.h>
 
-#include <library/cpp/yt/string/guid.h>
+#include <util/generic/guid.h>
 
 namespace NYT::NKafka {
 
@@ -137,11 +137,11 @@ public:
         return result;
     }
 
-    TGuid ReadUuid() override
+    TGUID ReadUuid() override
     {
         TString value;
         ReadString(&value, 16);
-        return TGuid::FromString(value);
+        return GetGuid(value);
     }
 
     void ReadString(TString* result, int length) override
@@ -173,7 +173,7 @@ public:
         if (needReadCount) {
             size = ReadInt32();
         }
-        BytesOffsets_.push_back(Offset_);
+        BytesBegins_.push_back(Offset_);
         return size;
     }
 
@@ -183,22 +183,22 @@ public:
         if (needReadCount) {
             size = ReadUnsignedVarInt() - 1;
         }
-        BytesOffsets_.push_back(Offset_);
+        BytesBegins_.push_back(Offset_);
         return size;
     }
 
     i32 GetReadBytesCount() override
     {
-        if (!BytesOffsets_.empty()) {
-            return Offset_ - BytesOffsets_.back();
+        if (!BytesBegins_.empty()) {
+            return Offset_ - BytesBegins_.back();
         }
         return 0;
     }
 
     void FinishReadBytes() override
     {
-        if (!BytesOffsets_.empty()) {
-            return BytesOffsets_.pop_back();
+        if (!BytesBegins_.empty()) {
+            return BytesBegins_.pop_back();
         }
     }
 
@@ -225,7 +225,7 @@ private:
     const TSharedRef Data_;
     i64 Offset_ = 0;
 
-    std::vector<i64> BytesOffsets_;
+    std::vector<i64> BytesBegins_;
 
     template <typename T>
     T DoReadInt()
@@ -314,9 +314,9 @@ public:
         Size_ += WriteVarUint32(Buffer_.begin() + Size_, value);
     }
 
-    void WriteUuid(TGuid value) override
+    void WriteUuid(TGUID value) override
     {
-        WriteString(ToString(value));
+        WriteString(value.AsUuidString());
     }
 
     void WriteErrorCode(EErrorCode value) override
@@ -378,14 +378,14 @@ public:
     void StartBytes() override
     {
         WriteInt32(0);
-        BytesOffsets_.push_back(Size_);
+        BytesBegins_.push_back(Size_);
     }
 
     void FinishBytes() override
     {
-        YT_VERIFY(!BytesOffsets_.empty());
-        DoWriteInt<int32_t>(Size_ - BytesOffsets_.back(), BytesOffsets_.back() - sizeof(int32_t));
-        BytesOffsets_.pop_back();
+        YT_VERIFY(!BytesBegins_.empty());
+        DoWriteInt<int32_t>(Size_ - BytesBegins_.back(), BytesBegins_.back() - sizeof(int32_t));
+        BytesBegins_.pop_back();
     }
 
     TSharedRef Finish() override
@@ -403,7 +403,7 @@ private:
     TSharedMutableRef Buffer_;
     i64 Size_ = 0;
 
-    std::vector<i64> BytesOffsets_;
+    std::vector<i64> BytesBegins_;
 
     template <typename T>
     void DoWriteInt(T value, std::optional<i64> position = std::nullopt)

@@ -1,4 +1,4 @@
--- ignore runonopt plan diff
+-- ignore runonopt plan diff, skip force_blocks
 USE plato;
 
 $filtered = select * from Input where value != "xxx";

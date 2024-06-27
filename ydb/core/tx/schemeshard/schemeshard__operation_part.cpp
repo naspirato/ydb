@@ -11,6 +11,13 @@ struct TDebugEvent {
 };
 
 template <>
+struct TDebugEvent<NBackgroundTasks::TEvAddTaskResult> {
+    static TString ToString(const NBackgroundTasks::TEvAddTaskResult::TPtr& ev) {
+        return ev->Get()->GetDebugString();
+    }
+};
+
+template <>
 struct TDebugEvent<TEvPrivate::TEvOperationPlan> {
     static TString ToString(const TEvPrivate::TEvOperationPlan::TPtr& ev) {
         return TStringBuilder() << "TEvOperationPlan {"

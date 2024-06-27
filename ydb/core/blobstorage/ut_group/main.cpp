@@ -123,7 +123,6 @@ public:
         cFunc(TEvBlobStorage::EvDropDonor, Ignore);
         cFunc(TEvBlobStorage::EvGroupStatReport, Ignore);
         cFunc(TEvBlobStorage::EvNotifyVDiskGenerationChange, Ignore);
-        cFunc(TEvents::TSystem::Gone, Ignore);
 
         fFunc(TEvBlobStorage::EvPut, ForwardToProxy);
         fFunc(TEvBlobStorage::EvGet, ForwardToProxy);

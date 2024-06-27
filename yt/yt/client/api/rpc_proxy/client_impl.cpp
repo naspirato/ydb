@@ -778,7 +778,7 @@ TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
 {
     auto proxy = CreateApiServiceProxy();
 
-    // COMPAT(nadya73): Use PullConsumer (not PullQueueConsumer) for compatibility with old clusters.
+    // Use PullConsumer (not PullQueueConsumer) for backward compatibility.
     auto req = proxy.PullConsumer();
     req->SetResponseHeavy(true);
     SetTimeoutOptions(*req, options);
@@ -900,8 +900,8 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
         }
 
         return TCreateQueueProducerSessionResult{
-            .SequenceNumber = FromProto<i64>(rsp->sequence_number()),
-            .Epoch = FromProto<i64>(rsp->epoch()),
+            .SequenceNumber = FromProto<ui64>(rsp->sequence_number()),
+            .Epoch = FromProto<ui64>(rsp->epoch()),
             .UserMeta = std::move(userMeta),
         };
     }));
@@ -1509,24 +1509,6 @@ TFuture<void> TClient::AbortJob(
     if (options.InterruptTimeout) {
         req->set_interrupt_timeout(NYT::ToProto<i64>(*options.InterruptTimeout));
     }
-
-    return req->Invoke().As<void>();
-}
-
-TFuture<void> TClient::DumpJobProxyLog(
-    NJobTrackerClient::TJobId jobId,
-    NJobTrackerClient::TOperationId operationId,
-    const NYPath::TYPath& path,
-    const TDumpJobProxyLogOptions& options)
-{
-    auto proxy = CreateApiServiceProxy();
-
-    auto req = proxy.DumpJobProxyLog();
-    SetTimeoutOptions(*req, options);
-
-    ToProto(req->mutable_job_id(), jobId);
-    ToProto(req->mutable_operation_id(), operationId);
-    ToProto(req->mutable_path(), path);
 
     return req->Invoke().As<void>();
 }
@@ -2154,12 +2136,6 @@ TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     if (options.AccessControlObject) {
         req->set_access_control_object(*options.AccessControlObject);
     }
-    if (options.AccessControlObjects) {
-        auto* protoAccessControlObjects = req->mutable_access_control_objects();
-        for (const auto& aco : *options.AccessControlObjects) {
-            protoAccessControlObjects->add_items(aco);
-        }
-    }
 
     for (const auto& file : options.Files) {
         auto* protoFile = req->add_files();
@@ -2342,12 +2318,6 @@ TFuture<void> TClient::AlterQuery(
     }
     if (options.AccessControlObject) {
         req->set_access_control_object(*options.AccessControlObject);
-    }
-    if (options.AccessControlObjects) {
-        auto* protoAccessControlObjects = req->mutable_access_control_objects();
-        for (const auto& aco : *options.AccessControlObjects) {
-            protoAccessControlObjects->add_items(aco);
-        }
     }
 
     return req->Invoke().AsVoid();
@@ -2552,19 +2522,19 @@ TFuture<void> TClient::PausePipeline(
     return req->Invoke().AsVoid();
 }
 
-TFuture<TPipelineState> TClient::GetPipelineState(
+TFuture<TPipelineStatus> TClient::GetPipelineStatus(
     const NYPath::TYPath& pipelinePath,
-    const TGetPipelineStateOptions& options)
+    const TGetPipelineStatusOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
-    auto req = proxy.GetPipelineState();
+    auto req = proxy.GetPipelineStatus();
     SetTimeoutOptions(*req, options);
 
     req->set_pipeline_path(pipelinePath);
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatePtr& rsp) {
-        return TPipelineState{
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineStatusPtr& rsp) {
+        return TPipelineStatus{
             .State = FromProto<NFlow::EPipelineState>(rsp->state()),
         };
     }));

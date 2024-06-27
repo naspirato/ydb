@@ -26,8 +26,6 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <ydb/core/protos/config.pb.h>
-
 namespace NKikimr {
 namespace NDataShard {
 

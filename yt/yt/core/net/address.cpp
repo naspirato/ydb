@@ -751,6 +751,11 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStrin
     }
 }
 
+TString ToString(const TIP6Address& address)
+{
+    return ToStringViaBuilder(address);
+}
+
 bool operator == (const TIP6Address& lhs, const TIP6Address& rhs)
 {
     return ::memcmp(lhs.GetRawBytes(), rhs.GetRawBytes(), TIP6Address::ByteSize) == 0;
@@ -941,6 +946,11 @@ void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStrin
             network.GetAddress(),
             network.GetMaskSize());
     }
+}
+
+TString ToString(const TIP6Network& network)
+{
+    return ToStringViaBuilder(network);
 }
 
 void Deserialize(TIP6Network& value, INodePtr node)

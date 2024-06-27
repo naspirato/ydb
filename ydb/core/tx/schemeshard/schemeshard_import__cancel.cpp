@@ -85,10 +85,6 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                 }
             }
 
-            if (importInfo->State == TImportInfo::EState::Cancelled) {
-                importInfo->EndTime = TAppData::TimeProvider->Now();
-            }
-
             Self->PersistImportState(db, importInfo);
             SendNotificationsIfFinished(importInfo);
             return respond(Ydb::StatusIds::SUCCESS);
@@ -187,7 +183,6 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
         }
 
         importInfo->State = TImportInfo::EState::Cancelled;
-        importInfo->EndTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, importInfo);
 
         SendNotificationsIfFinished(importInfo);

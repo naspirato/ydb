@@ -2,7 +2,6 @@
 
 #include "flat_stat_table.h"
 #include "flat_table_subset.h"
-#include "flat_stat_table_btree_index_histogram.h"
 
 namespace NKikimr::NTable {
 
@@ -12,15 +11,11 @@ using TGroupId = NPage::TGroupId;
 using TFrames = NPage::TFrames;
 using TBtreeIndexNode = NPage::TBtreeIndexNode;
 using TChild = TBtreeIndexNode::TChild;
-using TColumns = TBtreeIndexNode::TColumns;
 using TCells = NPage::TCells;
 
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
     auto& meta = part->IndexPages.GetBTree(groupId);
 
-    if (rowId == 0) {
-        return 0;
-    }
     if (rowId >= meta.RowCount) {
         return meta.DataSize;
     }
@@ -51,10 +46,6 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
 
     auto& meta = part->IndexPages.GetBTree(groupId);
 
-    if (rowId == 0) {
-        historicRowId = 0;
-        return 0;
-    }
     if (rowId >= part->IndexPages.GetBTree({}).RowCount) {
         historicRowId = meta.RowCount;
         return meta.DataSize;
@@ -110,7 +101,7 @@ void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* f
     }
 }
 
-bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+bool AddDataSize(const TPartView& part, TStats& stats, IPages* env) {
     bool ready = true;
 
     if (!part.Slices || part.Slices->empty()) {
@@ -122,8 +113,6 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
         auto channel = part->GetGroupChannel(groupId);
         
         for (const auto& slice : *part.Slices) {
-            yieldHandler();
-
             stats.RowCount += slice.EndRowId() - slice.BeginRowId();
             
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
@@ -145,8 +134,6 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
         TGroupId groupId{groupIndex};
         auto channel = part->GetGroupChannel(groupId);
         for (const auto& slice : *part.Slices) {
-            yieldHandler();
-            
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.EndRowId(), env, ready);
             if (ready && endDataSize > beginDataSize) {
@@ -161,8 +148,6 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
         TGroupId groupId{0, true};
         auto channel = part->GetGroupChannel(groupId);
         for (const auto& slice : *part.Slices) {
-            yieldHandler();
-            
             TRowId beginRowId, endRowId;
             bool readySlice = true;
             ui64 beginDataSize = GetPrevHistoricDataSize(part.Part.Get(), groupId, slice.BeginRowId(), env, beginRowId, readySlice);
@@ -181,8 +166,6 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
         TGroupId groupId{groupIndex, true};
         auto channel = part->GetGroupChannel(groupId);
         for (const auto& slice : historicSlices) {
-            yieldHandler();
-            
             ui64 beginDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.first, env, ready);
             ui64 endDataSize = GetPrevDataSize(part.Part.Get(), groupId, slice.second, env, ready);
             if (ready && endDataSize > beginDataSize) {
@@ -196,22 +179,23 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
 }
 
-inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+inline bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
     stats.Clear();
 
     bool ready = true;
     for (const auto& part : subset.Flatten) {
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
-        ready &= AddDataSize(part, stats, env, yieldHandler);
+        ready &= AddDataSize(part, stats, env);
     }
 
     if (!ready) {
         return false;
     }
 
-    ready &= BuildStatsHistogramsBTreeIndex(subset, stats, histogramBucketsCount, env, yieldHandler);
+    // TODO: build histogram here
+    Y_UNUSED(rowCountResolution, dataSizeResolution);
 
-    return ready;
+    return true;
 }
 
 }

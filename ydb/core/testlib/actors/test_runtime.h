@@ -10,8 +10,6 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/future.h>
 
-#include <ydb/core/protos/key.pb.h>
-
 namespace NKikimr {
     struct TAppData;
 }

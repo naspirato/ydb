@@ -84,9 +84,7 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     exprt.SetId(exportInfo->Id);
     exprt.SetStatus(Ydb::StatusIds::SUCCESS);
     
-    if (exportInfo->StartTime != TInstant::Zero()) {
-        *exprt.MutableStartTime() = SecondsToProtoTimeStamp(exportInfo->StartTime.Seconds());
-    }
+    *exprt.MutableStartTime() = SecondsToProtoTimeStamp(exportInfo->StartTime.Seconds());
     if (exportInfo->EndTime != TInstant::Zero()) {
         *exprt.MutableEndTime() = SecondsToProtoTimeStamp(exportInfo->EndTime.Seconds());
     }

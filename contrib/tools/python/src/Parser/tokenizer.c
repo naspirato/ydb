@@ -656,14 +656,9 @@ translate_newlines(const char *s, int exec_input, struct tok_state *tok) {
     }
     *current = '\0';
     final_length = current - buf + 1;
-    if (final_length < needed_length && final_length) {
+    if (final_length < needed_length && final_length)
         /* should never fail */
-        char* result = PyMem_REALLOC(buf, final_length);
-        if (result == NULL) {
-            PyMem_FREE(buf);
-        }
-        buf = result;
-    }
+        buf = PyMem_REALLOC(buf, final_length);
     return buf;
 }
 

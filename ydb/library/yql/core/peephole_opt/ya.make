@@ -11,7 +11,6 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/core/common_opt
     ydb/library/yql/core/type_ann
-    library/cpp/svnversion
 )
 
 YQL_LAST_ABI_VERSION()

@@ -66,14 +66,12 @@ class YdbCluster:
         return deepcopy(cls._cluster_info)
 
     @staticmethod
-    def _create_ydb_driver(endpoint, database, oauth=None, iam_file=None):
+    def _create_ydb_driver(endpoint, database, oauth):
         credentials = None
         LOGGER.info(f"Connecting to {endpoint} to {database} ydb_access_token is set {oauth is not None}")
 
         if oauth is not None:
             credentials = ydb.AccessTokenCredentials(oauth)
-        elif iam_file is not None:
-            credentials = ydb.iam.ServiceAccountCredentials.from_file(iam_file)
 
         driver_config = ydb.DriverConfig(
             endpoint,
@@ -96,7 +94,7 @@ class YdbCluster:
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
             cls._ydb_driver = cls._create_ydb_driver(
-                cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None)
+                cls.ydb_endpoint, cls.ydb_database, os.getenv('OLAP_YDB_OAUTH', None)
             )
         return cls._ydb_driver
 

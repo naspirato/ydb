@@ -155,38 +155,26 @@ void AdjustHeapBack(TIterator begin, TIterator end)
 }
 
 template <class TIterator, class TComparer, class TOnAssign>
-void ExtractHeap(TIterator begin, TIterator end, TIterator current, TComparer comparer, TOnAssign onAssign)
+void ExtractHeap(TIterator begin, TIterator end, TComparer comparer, TOnAssign onAssign)
 {
     YT_ASSERT(begin != end);
     auto newEnd = end - 1;
-    if (current == newEnd) {
-        return;
-    }
-    std::swap(*current, *newEnd);
-    onAssign(std::distance(begin, current));
+    std::swap(*begin, *newEnd);
+    onAssign(0);
     onAssign(std::distance(begin, newEnd));
-    SiftDown(std::move(begin), std::move(newEnd), std::move(current), comparer, onAssign);
-}
-
-template <class TIterator, class TComparer, class TOnAssign>
-void ExtractHeap(TIterator begin, TIterator end, TComparer comparer, TOnAssign onAssign)
-{
-    auto current = begin;
-    ExtractHeap(std::move(begin), std::move(end), std::move(current), comparer, onAssign);
+    SiftDown(begin, newEnd, begin, comparer, onAssign);
 }
 
 template <class TIterator, class TComparer>
 void ExtractHeap(TIterator begin, TIterator end, TComparer comparer)
 {
-    auto current = begin;
-    ExtractHeap(std::move(begin), std::move(end), std::move(current), comparer, [] (size_t) {});
+    ExtractHeap(std::move(begin), std::move(end), comparer, [] (size_t) {});
 }
 
 template <class TIterator>
 void ExtractHeap(TIterator begin, TIterator end)
 {
-    auto current = begin;
-    ExtractHeap(std::move(begin), std::move(end), std::move(current), std::less<>(), [] (size_t) {});
+    ExtractHeap(std::move(begin), std::move(end), std::less<>(), [] (size_t) {});
 }
 
 template <class TIterator, class TComparer, class TOnAssign>

@@ -1,3 +1,5 @@
+pragma UseBlocks;
+
 select
     key,
     subkey,

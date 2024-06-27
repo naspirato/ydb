@@ -1,4 +1,5 @@
 USE plato;
+pragma UseBlocks;
 
 select
     k1,

@@ -26,7 +26,8 @@ struct TOperationIdOrAlias
     operator size_t() const;
 };
 
-void FormatValue(TStringBuilderBase* builder, const TOperationIdOrAlias& operationIdOrAlias, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TOperationIdOrAlias& operationIdOrAlias, TStringBuf format);
+TString ToString(const TOperationIdOrAlias& operationIdOrAlias);
 
 // NB: TOperationIdOrAlias corresponds to a oneof group of fields in proto representation,
 // so we use an enclosing proto message object to properly serialize or deserialize it.

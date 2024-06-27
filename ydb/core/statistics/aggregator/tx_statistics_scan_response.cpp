@@ -60,7 +60,7 @@ struct TStatisticsAggregator::TTxStatisticsScanResponse : public TTxBase {
         }
 
         Self->StartKey = range.EndKey;
-        Self->PersistStartKey(db);
+        Self->PersistSysParam(db, Schema::SysParam_StartKey, Self->StartKey.GetBuffer());
 
         return true;
     }

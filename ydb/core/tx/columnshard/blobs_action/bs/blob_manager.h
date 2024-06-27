@@ -134,7 +134,8 @@ struct TBlobManagerCounters {
 // The implementation of BlobManager that hides all GC-related details
 class TBlobManager : public IBlobManager, public TCommonBlobsTracker {
 private:
-    static constexpr ui64 GC_INTERVAL_SECONDS = 30;
+    static constexpr size_t BLOB_COUNT_TO_TRIGGER_GC_DEFAULT = 1000;
+    static constexpr ui64 GC_INTERVAL_SECONDS_DEFAULT = 60;
 
 private:
     using TBlobAddress = NBlobOperations::NBlobStorage::TBlobAddress;
@@ -143,6 +144,8 @@ private:
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     const ui32 CurrentGen;
     ui32 CurrentStep;
+    TControlWrapper BlobCountToTriggerGC;
+    TControlWrapper GCIntervalSeconds;
     std::optional<TGenStep> CollectGenStepInFlight;
     // Lists of blobs that need Keep flag to be set
     std::map<TGenStep, std::set<TLogoBlobID>> BlobsToKeep;

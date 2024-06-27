@@ -37,8 +37,6 @@
 #include <util/string/split.h>
 #include <util/string/vector.h>
 
-#include <ydb/core/protos/auth.pb.h>
-
 namespace NKikimr {
 namespace NKqp {
 

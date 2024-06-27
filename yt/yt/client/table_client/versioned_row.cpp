@@ -443,7 +443,7 @@ void FormatValue(TStringBuilderBase* builder, const TVersionedValue& value, TStr
         value.Timestamp);
 }
 
-void FormatValue(TStringBuilderBase* builder, const TVersionedRow& row, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, TVersionedRow row, TStringBuf /*format*/)
 {
     if (!row) {
         builder->AppendString("<null>");
@@ -479,14 +479,34 @@ void FormatValue(TStringBuilderBase* builder, const TVersionedRow& row, TStringB
     builder->AppendChar(']');
 }
 
-void FormatValue(TStringBuilderBase* builder, const TMutableVersionedRow& row, TStringBuf /*spec*/)
+void FormatValue(TStringBuilderBase* builder, TMutableVersionedRow row, TStringBuf /*format*/)
 {
-    FormatValue(builder, TVersionedRow(row), TStringBuf{"v"});
+    FormatValue(builder, TVersionedRow(row), {});
 }
 
-void FormatValue(TStringBuilderBase* builder, const TVersionedOwningRow& row, TStringBuf /*spec*/)
+void FormatValue(TStringBuilderBase* builder, TVersionedOwningRow row, TStringBuf /*format*/)
 {
-    FormatValue(builder, TVersionedRow(row), TStringBuf{"v"});
+    FormatValue(builder, TVersionedRow(row), {});
+}
+
+TString ToString(const TVersionedValue& value)
+{
+    return ToStringViaBuilder(value);
+}
+
+TString ToString(TVersionedRow row)
+{
+    return ToStringViaBuilder(row);
+}
+
+TString ToString(TMutableVersionedRow row)
+{
+    return ToString(TVersionedRow(row));
+}
+
+TString ToString(const TVersionedOwningRow& row)
+{
+    return ToString(row.Get());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

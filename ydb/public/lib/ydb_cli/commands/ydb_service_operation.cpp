@@ -3,7 +3,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_export/export.h>
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
 #include <util/string/builder.h>
@@ -101,8 +100,6 @@ int TCommandGetOperation::Run(TConfig& config) {
         }
     case Ydb::TOperationId::BUILD_INDEX:
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
-    case Ydb::TOperationId::SCRIPT_EXECUTION:
-        return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
@@ -137,7 +134,6 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"export/s3", &ListOperations<NExport::TExportToS3Response>},
         {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
-        {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
     };
     if (config.UseExportToYt) {
         KindToHandler.emplace("export", &ListOperations<NExport::TExportToYtResponse>); // deprecated

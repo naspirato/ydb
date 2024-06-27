@@ -550,7 +550,6 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         bool pgTypesEnabled,
-        bool datetime64TypesEnabled,        
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -2743,9 +2742,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TVector<TItem> Items;
 
     TSet<TActorId> Subscribers;
-
-    TInstant StartTime = TInstant::Zero();
-    TInstant EndTime = TInstant::Zero();
 
     explicit TImportInfo(
             const ui64 id,

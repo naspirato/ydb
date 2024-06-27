@@ -216,10 +216,7 @@ namespace {
                     case FIND_AND_CONSUME: {
                         StringPiece text(piece);
                         std::vector<TUnboxedValue> matches;
-                        for (StringPiece w; !text.empty() && RE2::FindAndConsume(&text, *Regexp, &w);) {
-                            if (w.size() == 0) {
-                                text.remove_prefix(1);
-                            }
+                        for (StringPiece w; RE2::FindAndConsume(&text, *Regexp, &w);) {
                             matches.emplace_back(valueBuilder->SubString(args[0], std::distance(piece.begin(), w.begin()), w.size()));
                         }
                         return valueBuilder->NewList(matches.data(), matches.size());

@@ -312,7 +312,7 @@ void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev
     }
 
     StateStorageInfo.KnownGeneration = msg->CurrentGeneration;
-    StateStorageInfo.KnownStep = msg->CurrentStep;
+    StateStorageInfo.Signature.Reset(msg->Signature.Release());
 
     if (msg->Status == NKikimrProto::OK && msg->CurrentLeader) {
         FollowerInfo.KnownLeaderID = msg->CurrentLeader;

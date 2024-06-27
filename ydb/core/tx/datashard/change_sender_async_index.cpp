@@ -128,10 +128,8 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 
-        auto& evRecords = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
-
-        for (auto& recordPtr : evRecords) {
-            const auto& record = *recordPtr;
+        for (auto recordPtr : ev->Get()->Records) {
+            const auto& record = *recordPtr->Get<TChangeRecord>();
 
             if (record.GetOrder() <= LastRecordOrder) {
                 continue;
@@ -332,9 +330,8 @@ private:
 
 class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
-    , public NChangeExchange::TBaseChangeSender<TChangeRecord>
+    , public NChangeExchange::TBaseChangeSender
     , public NChangeExchange::IChangeSenderResolver
-    , public NChangeExchange::ISenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
     TStringBuf GetLogPrefix() const {
@@ -707,6 +704,10 @@ class TAsyncIndexChangeSenderMain
         return StateBase(ev);
     }
 
+    TActorId GetChangeServer() const override {
+        return DataShard.ActorId;
+    }
+
     void Resolve() override {
         ResolveIndex();
     }
@@ -715,11 +716,31 @@ class TAsyncIndexChangeSenderMain
         return KeyDesc && KeyDesc->GetPartitions();
     }
 
-    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
-    const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
-    NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return NKikimrSchemeOp::ECdcStreamFormatProto; }
+    ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const override {
+        Y_ABORT_UNLESS(KeyDesc);
+        Y_ABORT_UNLESS(KeyDesc->GetPartitions());
 
-    IActor* CreateSender(ui64 partitionId) const override {
+        const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey());
+        Y_ABORT_UNLESS(range.Point);
+
+        TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
+            KeyDesc->GetPartitions().begin(), KeyDesc->GetPartitions().end(), true,
+            [&](const TKeyDesc::TPartitionInfo& partition, bool) {
+                const int compares = CompareBorders<true, false>(
+                    partition.Range->EndKeyPrefix.GetCells(), range.From,
+                    partition.Range->IsInclusive || partition.Range->IsPoint,
+                    range.InclusiveFrom || range.Point, KeyDesc->KeyColumnTypes
+                );
+
+                return (compares < 0);
+            }
+        );
+
+        Y_ABORT_UNLESS(it != KeyDesc->GetPartitions().end());
+        return it->ShardId; // partition = shard
+    }
+
+    IActor* CreateSender(ui64 partitionId) override {
         return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, IndexTablePathId, TagMap);
     }
 
@@ -730,8 +751,7 @@ class TAsyncIndexChangeSenderMain
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        auto& records = std::get<std::shared_ptr<TChangeRecordContainer<NKikimr::NDataShard::TChangeRecord>>>(ev->Get()->Records)->Records;
-        ProcessRecords(std::move(records));
+        ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
@@ -778,7 +798,7 @@ public:
 
     explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, this, dataShard.ActorId, indexPathId)
+        , TBaseChangeSender(this, this, indexPathId)
         , DataShard(dataShard)
         , UserTableId(userTableId)
         , IndexTableVersion(0)

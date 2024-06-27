@@ -45,6 +45,11 @@ void FormatValue(TStringBuilderBase* builder, const TProxyDiscoveryRequest& requ
         request.IgnoreBalancers);
 }
 
+TString ToString(const TProxyDiscoveryRequest& request)
+{
+    return ToStringViaBuilder(request);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProxyDiscoveryCache

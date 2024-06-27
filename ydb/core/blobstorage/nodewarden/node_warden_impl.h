@@ -335,8 +335,6 @@ namespace NKikimr::NStorage {
                 bool ReadOnly;
             };
             std::optional<TRuntimeData> RuntimeData;
-            bool ShutdownPending = false;
-            bool RestartAfterShutdown = false;
 
             // Last VDiskId reported to Node Whiteboard.
             std::optional<TVDiskID> WhiteboardVDiskId;
@@ -388,15 +386,13 @@ namespace NKikimr::NStorage {
         };
 
         std::map<TVSlotId, TVDiskRecord> LocalVDisks;
-        THashMap<TActorId, TVSlotId> VDiskIdByActor;
         std::map<TVSlotId, ui64> SlayInFlight;
         std::set<ui32> PDiskRestartInFlight;
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
 
         void DestroyLocalVDisk(TVDiskRecord& vdisk);
         void PoisonLocalVDisk(TVDiskRecord& vdisk);
-        void StartLocalVDiskActor(TVDiskRecord& vdisk);
-        void HandleGone(STATEFN_SIG);
+        void StartLocalVDiskActor(TVDiskRecord& vdisk, TDuration yardInitDelay);
         void ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);
 
         // process VDisk configuration
@@ -649,8 +645,6 @@ namespace NKikimr::NStorage {
 
                 hFunc(TEvNodeWardenQueryBaseConfig, Handle);
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
-
-                fFunc(TEvents::TSystem::Gone, HandleGone);
 
                 default:
                     EnqueuePendingMessage(ev);

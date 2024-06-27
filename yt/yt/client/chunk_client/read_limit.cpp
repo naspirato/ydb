@@ -246,40 +246,51 @@ size_t TLegacyReadLimit::SpaceUsed() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FormatValue(TStringBuilderBase* builder, const TLegacyReadLimit& limit, TStringBuf /*spec*/)
+TString ToString(const TLegacyReadLimit& limit)
 {
-    builder->AppendChar('{');
+    using ::ToString;
+
+    TStringBuilder builder;
+    builder.AppendChar('{');
 
     bool firstToken = true;
-    auto append = [&] (const char* label, const auto& value) {
+    auto append = [&] (const char* label, TStringBuf value) {
         if (!firstToken) {
-            builder->AppendString(", ");
+            builder.AppendString(", ");
         }
         firstToken = false;
-        builder->AppendFormat("%v: %v", label, value);
+        builder.AppendString(label);
+        builder.AppendString(": ");
+        builder.AppendString(value);
     };
 
     if (limit.HasLegacyKey()) {
-        append("Key", limit.GetLegacyKey());
+        append("Key", ToString(limit.GetLegacyKey()));
     }
 
     if (limit.HasRowIndex()) {
-        append("RowIndex", limit.GetRowIndex());
+        append("RowIndex", ToString(limit.GetRowIndex()));
     }
 
     if (limit.HasOffset()) {
-        append("Offset", limit.GetOffset());
+        append("Offset", ToString(limit.GetOffset()));
     }
 
     if (limit.HasChunkIndex()) {
-        append("ChunkIndex", limit.GetChunkIndex());
+        append("ChunkIndex", ToString(limit.GetChunkIndex()));
     }
 
     if (limit.HasTabletIndex()) {
-        append("TabletIndex", limit.GetTabletIndex());
+        append("TabletIndex", ToString(limit.GetTabletIndex()));
     }
 
-    builder->AppendChar('}');
+    builder.AppendChar('}');
+    return builder.Flush();
+}
+
+void FormatValue(TStringBuilderBase* builder, const TLegacyReadLimit& limit, TStringBuf spec)
+{
+    FormatValue(builder, ToString(limit), spec);
 }
 
 bool IsTrivial(const TLegacyReadLimit& limit)
@@ -677,40 +688,51 @@ bool TReadLimit::operator == (const TReadLimit& other) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FormatValue(TStringBuilderBase* builder, const TReadLimit& readLimit, TStringBuf /*spec*/)
+TString ToString(const TReadLimit& readLimit)
 {
-    builder->AppendChar('{');
+    using ::ToString;
+
+    TStringBuilder builder;
+    builder.AppendChar('{');
 
     bool firstToken = true;
-    auto append = [&] (const char* label, const auto& value) {
+    auto append = [&] (const char* label, TStringBuf value) {
         if (!firstToken) {
-            builder->AppendString(", ");
+            builder.AppendString(", ");
         }
         firstToken = false;
-        builder->AppendFormat("%v: %v", label, value);
+        builder.AppendString(label);
+        builder.AppendString(": ");
+        builder.AppendString(value);
     };
 
     if (readLimit.KeyBound()) {
-        append("Key", readLimit.KeyBound());
+        append("Key", ToString(readLimit.KeyBound()));
     }
 
     if (readLimit.GetRowIndex()) {
-        append("RowIndex", readLimit.GetRowIndex());
+        append("RowIndex", ToString(readLimit.GetRowIndex()));
     }
 
     if (readLimit.GetOffset()) {
-        append("Offset", readLimit.GetOffset());
+        append("Offset", ToString(readLimit.GetOffset()));
     }
 
     if (readLimit.GetChunkIndex()) {
-        append("ChunkIndex", readLimit.GetChunkIndex());
+        append("ChunkIndex", ToString(readLimit.GetChunkIndex()));
     }
 
     if (readLimit.GetTabletIndex()) {
-        append("TabletIndex", readLimit.GetTabletIndex());
+        append("TabletIndex", ToString(readLimit.GetTabletIndex()));
     }
 
-    builder->AppendChar('}');
+    builder.AppendChar('}');
+    return builder.Flush();
+}
+
+void FormatValue(TStringBuilderBase* builder, const TReadLimit& readLimit, TStringBuf spec)
+{
+    FormatValue(builder, ToString(readLimit), spec);
 }
 
 void ToProto(NProto::TReadLimit* protoReadLimit, const TReadLimit& readLimit)
@@ -853,10 +875,10 @@ TReadRange::TReadRange(
     int keyLength)
 {
     if (range.has_lower_limit()) {
-        LowerLimit_ = TReadLimit(range.lower_limit(), /* isUpper */ false, keyLength);
+        LowerLimit_ = TReadLimit(range.lower_limit(), /* isUpper */false, keyLength);
     }
     if (range.has_upper_limit()) {
-        UpperLimit_ = TReadLimit(range.upper_limit(), /* isUpper */ true, keyLength);
+        UpperLimit_ = TReadLimit(range.upper_limit(), /* isUpper */true, keyLength);
     }
 }
 
@@ -918,7 +940,7 @@ void Serialize(const TReadRange& readLimit, NYson::IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NProto::TReadLimit, /*key*/ 4, TUnversionedOwningRow)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NProto::TReadLimit, /*key*/4, TUnversionedOwningRow)
 
 ////////////////////////////////////////////////////////////////////////////////
 

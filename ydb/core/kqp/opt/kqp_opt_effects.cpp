@@ -217,8 +217,7 @@ bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input, TExprCont
 #undef DBG
 }
 
-TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const TCoAtomList& columns,
-        const TKqpUpsertRowsSettings& settings, TExprContext& ctx) {
+TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const TCoAtomList& columns, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
     return Build<TDqStage>(ctx, expr.Pos())
@@ -240,9 +239,6 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const 
                 .Settings<TKqpTableSinkSettings>()
                     .Table(table)
                     .Columns(columns)
-                    .InconsistentWrite(settings.AllowInconsistentWrites
-                        ? ctx.NewAtom(expr.Pos(), "true")
-                        : ctx.NewAtom(expr.Pos(), "false"))
                     .Settings()
                         .Build()
                     .Build()
@@ -296,7 +292,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
-            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), node.Columns(), settings, ctx);
+            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), node.Columns(), ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -334,9 +330,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Settings<TKqpTableSinkSettings>()
                 .Table(node.Table())
                 .Columns(node.Columns())
-                .InconsistentWrite(settings.AllowInconsistentWrites
-                    ? ctx.NewAtom(node.Pos(), "true")
-                    : ctx.NewAtom(node.Pos(), "false"))
                 .Settings()
                     .Build()
                 .Build()
@@ -346,7 +339,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Name("row")
             .Done();
 
-        if (table.Metadata->Kind == EKikimrTableKind::Olap || settings.AllowInconsistentWrites) {
+        if (table.Metadata->Kind == EKikimrTableKind::Olap) {
             // OLAP is expected to write into all shards (hash partitioning),
             // so we use serveral sinks for this without union all.
             // (TODO: shuffle by shard instead of DqCnMap)

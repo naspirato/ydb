@@ -167,9 +167,7 @@ namespace NSQLTranslationV1 {
         enum class EStrategy {
             Default,
             SortedMerge,
-            StreamLookup,
-            ForceMap,
-            ForceGrace
+            StreamLookup
         };
         EStrategy Strategy = EStrategy::Default;
     };

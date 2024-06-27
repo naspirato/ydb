@@ -9,6 +9,10 @@ ADDINCL(
 
 YQL_LAST_ABI_VERSION()
 
+SRCS(
+    events.cpp
+)
+
 PEERDIR(
     ydb/core/base
     ydb/core/kqp/common
@@ -23,10 +27,6 @@ IF (CLANG AND NOT WITH_VALGRIND)
 
     CFLAGS (
         -DARCADIA_BUILD -DUSE_PARQUET
-    )
-
-    SRCS(
-        events.cpp
     )
 
 ENDIF()

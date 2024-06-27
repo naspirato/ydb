@@ -1,3 +1,5 @@
+pragma UseBlocks;
+pragma EmitAggApply;
 USE plato;
 
 SELECT

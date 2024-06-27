@@ -1,5 +1,4 @@
 #include "clickbench.h"
-#include "data_generator.h"
 
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/string_utils/csv/csv.h>
@@ -162,10 +161,6 @@ void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EC
 
 THolder<IWorkloadQueryGenerator> TClickbenchWorkloadParams::CreateGenerator() const {
     return MakeHolder<TClickbenchWorkloadGenerator>(*this);
-}
-
-TWorkloadDataInitializer::TList TClickbenchWorkloadParams::CreateDataInitializers() const {
-    return {std::make_shared<TClickbenchWorkloadDataInitializerGenerator>(*this)};
 }
 
 TString TClickbenchWorkloadParams::GetWorkloadName() const {

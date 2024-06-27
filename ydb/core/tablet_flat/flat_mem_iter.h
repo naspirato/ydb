@@ -240,8 +240,7 @@ namespace NTable {
          */
         bool SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                               NTable::ITransactionMapSimplePtr committedTransactions,
-                              NTable::ITransactionObserverSimplePtr transactionObserver,
-                              const NTable::ITransactionSet& decidedTransactions) noexcept
+                              NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 
@@ -251,10 +250,6 @@ namespace NTable {
             // Skip uncommitted deltas
             while (chain->RowVersion.Step == Max<ui64>() && !committedTransactions.Find(chain->RowVersion.TxId)) {
                 transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
-                if (chain->Rop != ERowOp::Erase && !decidedTransactions.Contains(chain->RowVersion.TxId)) {
-                    // This change may commit and change the iteration result
-                    stats.UncertainErase = true;
-                }
                 if (!(chain = chain->Next)) {
                     CurrentVersion = nullptr;
                     return false;
@@ -272,20 +267,12 @@ namespace NTable {
                 auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                 Y_ABORT_UNLESS(commitVersion);
                 if (*commitVersion <= rowVersion) {
-                    if (!decidedTransactions.Contains(chain->RowVersion.TxId)) {
-                        // This change may rollback and change the iteration result
-                        stats.UncertainErase = true;
-                    }
                     return true;
                 }
                 transactionObserver.OnSkipCommitted(*commitVersion, chain->RowVersion.TxId);
             }
 
             stats.InvisibleRowSkips++;
-            if (chain->Rop != ERowOp::Erase) {
-                // We are skipping non-erase op, so any erase below cannot be trusted
-                stats.UncertainErase = true;
-            }
 
             while ((chain = chain->Next)) {
                 if (chain->RowVersion.Step != Max<ui64>()) {
@@ -299,10 +286,6 @@ namespace NTable {
                 } else {
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion && *commitVersion <= rowVersion) {
-                        if (!decidedTransactions.Contains(chain->RowVersion.TxId)) {
-                            // This change may rollback and change the iteration result
-                            stats.UncertainErase = true;
-                        }
                         CurrentVersion = chain;
                         return true;
                     }
@@ -312,16 +295,7 @@ namespace NTable {
                         stats.InvisibleRowSkips++;
                     } else {
                         transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
-                        if (decidedTransactions.Contains(chain->RowVersion.TxId)) {
-                            // This is a decided uncommitted change and will never be committed
-                            // Make sure we don't mark possible erase below as uncertain
-                            continue;
-                        }
                     }
-                }
-                if (chain->Rop != ERowOp::Erase) {
-                    // We are skipping non-erase op, so any erase below cannot be trusted
-                    stats.UncertainErase = true;
                 }
             }
 

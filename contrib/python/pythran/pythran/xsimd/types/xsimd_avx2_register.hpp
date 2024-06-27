@@ -25,6 +25,7 @@ namespace xsimd
     {
         static constexpr bool supported() noexcept { return XSIMD_WITH_AVX2; }
         static constexpr bool available() noexcept { return true; }
+        static constexpr unsigned version() noexcept { return generic::version(2, 2, 0); }
         static constexpr char const* name() noexcept { return "avx2"; }
     };
 

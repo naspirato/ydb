@@ -1,3 +1,5 @@
+pragma UseBlocks;
+
 select
     i8,
     i16     == i32,
@@ -20,5 +22,5 @@ select
     1/0     <= ui8opt,
     0       >  i64,
     ui64    >= 8u,
-from plato.Input
+from plato.Input 
 order by i8;

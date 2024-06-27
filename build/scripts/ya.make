@@ -90,7 +90,6 @@ ELSEIF (PY3)
         generate_pom.py
         generate_win_vfs.py
         go_proto_wrapper.py
-        java_command_file.py
         java_pack_to_file.py
         jni_swig.py
         kt_copy.py

@@ -51,7 +51,7 @@ public:
                 .WithSchemaVersion(0) // not used
                 .Build();
 
-            const auto& record = *recordPtr;
+            const auto& record = *recordPtr->Get<TChangeRecord>();
             Self->PersistChangeRecord(db, record);
 
             ChangeRecords.push_back(IDataShardChangeCollector::TChange{

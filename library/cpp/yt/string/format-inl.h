@@ -473,19 +473,19 @@ template <class T, class TPolicy>
 void FormatValue(TStringBuilderBase* builder, const TMaybe<T, TPolicy>& value, TStringBuf spec);
 
 // std::optional
-template <CFormattable T>
+template <class T>
 void FormatValue(TStringBuilderBase* builder, const std::optional<T>& value, TStringBuf spec);
 
 // std::pair
-template <CFormattable A, CFormattable B>
+template <class A, class B>
 void FormatValue(TStringBuilderBase* builder, const std::pair<A, B>& value, TStringBuf spec);
 
 // std::tuple
-template <CFormattable... Ts>
+template <class... Ts>
 void FormatValue(TStringBuilderBase* builder, const std::tuple<Ts...>& value, TStringBuf spec);
 
 // TEnumIndexedArray
-template <class E, CFormattable T>
+template <class E, class T>
 void FormatValue(TStringBuilderBase* builder, const TEnumIndexedArray<E, T>& collection, TStringBuf spec);
 
 // One-valued ranges
@@ -531,7 +531,7 @@ inline void FormatValue(TStringBuilderBase* builder, std::nullopt_t, TStringBuf 
 }
 
 // std::optional: generic T
-template <CFormattable T>
+template <class T>
 void FormatValue(TStringBuilderBase* builder, const std::optional<T>& value, TStringBuf spec)
 {
     if (value.has_value()) {
@@ -542,7 +542,7 @@ void FormatValue(TStringBuilderBase* builder, const std::optional<T>& value, TSt
 }
 
 // std::pair
-template <CFormattable A, CFormattable B>
+template <class A, class B>
 void FormatValue(TStringBuilderBase* builder, const std::pair<A, B>& value, TStringBuf spec)
 {
     builder->AppendChar('{');
@@ -553,7 +553,7 @@ void FormatValue(TStringBuilderBase* builder, const std::pair<A, B>& value, TStr
 }
 
 // std::tuple
-template <CFormattable... Ts>
+template <class... Ts>
 void FormatValue(TStringBuilderBase* builder, const std::tuple<Ts...>& value, TStringBuf spec)
 {
     builder->AppendChar('{');
@@ -571,7 +571,7 @@ void FormatValue(TStringBuilderBase* builder, const std::tuple<Ts...>& value, TS
 }
 
 // TEnumIndexedArray
-template <class E, CFormattable T>
+template <class E, class T>
 void FormatValue(TStringBuilderBase* builder, const TEnumIndexedArray<E, T>& collection, TStringBuf spec)
 {
     builder->AppendChar('{');
@@ -712,12 +712,12 @@ concept CFormatter = CInvocable<T, void(size_t, TStringBuilderBase*, TStringBuf)
 template <CFormatter TFormatter>
 void RunFormatter(
     TStringBuilderBase* builder,
-    TStringBuf format,
+    TStringBuf fmt,
     const TFormatter& formatter)
 {
     size_t argIndex = 0;
-    auto current = std::begin(format);
-    auto end = std::end(format);
+    auto current = std::begin(fmt);
+    auto end = std::end(fmt);
     while (true) {
         // Scan verbatim part until stop symbol.
         auto verbatimBegin = current;
@@ -819,26 +819,44 @@ void RunFormatter(
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class... TArgs>
-void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&... args)
+void Format(TStringBuilderBase* builder, TStaticFormat<TArgs...> fmt, TArgs&&... args)
 {
-    // NB(arkady-e1ppa): "if constexpr" is done in order to prevent
-    // compiler from emitting "No matching function to call"
-    // when arguments are not formattable.
-    // Compiler would crash in TFormatString ctor
-    // anyway (e.g. program would not compile) but
-    // for some reason it does look ahead and emits
-    // a second error.
-    if constexpr ((CFormattable<TArgs> && ...)) {
-        NYT::NDetail::TValueFormatter<0, TArgs...> formatter(args...);
-        NYT::NDetail::RunFormatter(builder, format.Get(), formatter);
-    }
+    NYT::NDetail::TValueFormatter<0, TArgs...> formatter(args...);
+    NYT::NDetail::RunFormatter(builder, fmt.Get(), formatter);
 }
 
 template <class... TArgs>
-TString Format(TFormatString<TArgs...> format, TArgs&&... args)
+void Format(TStringBuilderBase* builder, TRuntimeFormat fmt, TArgs&&... args)
+{
+    // NB(arkady-e1ppa): StaticFormat performs the
+    // formattability check of the args in a way
+    // that provides more useful information
+    // than a simple static_assert with conjunction.
+    // Additionally, the latter doesn't work properly
+    // for older clang version.
+    static constexpr auto argsChecker = [] {
+        TStaticFormat<TArgs...>::CheckFormattability();
+        return 42;
+    } ();
+    Y_UNUSED(argsChecker);
+
+    NYT::NDetail::TValueFormatter<0, TArgs...> formatter(args...);
+    NYT::NDetail::RunFormatter(builder, fmt.Get(), formatter);
+}
+
+template <class... TArgs>
+TString Format(TStaticFormat<TArgs...> fmt, TArgs&&... args)
 {
     TStringBuilder builder;
-    Format(&builder, format, std::forward<TArgs>(args)...);
+    Format(&builder, fmt, std::forward<TArgs>(args)...);
+    return builder.Flush();
+}
+
+template <class... TArgs>
+TString Format(TRuntimeFormat fmt, TArgs&&... args)
+{
+    TStringBuilder builder;
+    Format(&builder, fmt, std::forward<TArgs>(args)...);
     return builder.Flush();
 }
 
@@ -847,40 +865,40 @@ TString Format(TFormatString<TArgs...> format, TArgs&&... args)
 template <size_t Length, class TVector>
 void FormatVector(
     TStringBuilderBase* builder,
-    const char (&format)[Length],
+    const char (&fmt)[Length],
     const TVector& vec)
 {
     NYT::NDetail::TRangeFormatter<typename TVector::value_type> formatter(vec);
-    NYT::NDetail::RunFormatter(builder, format, formatter);
+    NYT::NDetail::RunFormatter(builder, fmt, formatter);
 }
 
 template <class TVector>
 void FormatVector(
     TStringBuilderBase* builder,
-    TStringBuf format,
+    TStringBuf fmt,
     const TVector& vec)
 {
     NYT::NDetail::TRangeFormatter<typename TVector::value_type> formatter(vec);
-    NYT::NDetail::RunFormatter(builder, format, formatter);
+    NYT::NDetail::RunFormatter(builder, fmt, formatter);
 }
 
 template <size_t Length, class TVector>
 TString FormatVector(
-    const char (&format)[Length],
+    const char (&fmt)[Length],
     const TVector& vec)
 {
     TStringBuilder builder;
-    FormatVector(&builder, format, vec);
+    FormatVector(&builder, fmt, vec);
     return builder.Flush();
 }
 
 template <class TVector>
 TString FormatVector(
-    TStringBuf format,
+    TStringBuf fmt,
     const TVector& vec)
 {
     TStringBuilder builder;
-    FormatVector(&builder, format, vec);
+    FormatVector(&builder, fmt, vec);
     return builder.Flush();
 }
 

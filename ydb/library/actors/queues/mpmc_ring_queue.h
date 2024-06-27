@@ -9,82 +9,142 @@
 
 namespace NActors {
 
+struct TMPMCRingQueueStats {
 
-#define DEFINE_HAS_STATIC_METHOD_CONCEPT(STATIC_METHOD)   \
-    template <typename T>                                 \
-    concept HasStaticMethod ## STATIC_METHOD = requires { \
-        { T:: STATIC_METHOD } -> std::same_as<void(&)()>; \
-    };                                                    \
-// DEFINE_HAS_STATIC_METHOD_CONCEPT
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveSuccessSlowPush)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveSuccessFastPush)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveChangeFastPushToSlowPush)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedPush)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedSlowPushAttempt)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveSuccessSingleConsumerPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedSingleConsumerPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedSingleConsumerPopAttempt)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveMoveTailBecauseHeadOvertakesInReallySlowPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedReallySlowPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveSuccessSlowPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedSlowPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedSlowPopAttempt)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveMoveTailBecauseHeadOvertakesInSlowPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveChangeReallySlowPopToSlowPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveSuccessFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveMoveTailBecauseHeadOvertakesInFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedFastPopAttempt)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveSuccessReallyFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedReallyFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFailedReallyFastPopAttempt)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveInvalidatedSlotInSlowPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveInvalidatedSlotInFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveInvalidatedSlotInReallyFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFoundOldSlotInSlowPush)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFoundOldSlotInFastPush)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFoundOldSlotInSlowPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFoundOldSlotInFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveFoundOldSlotInReallyFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongPush10It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongSlowPop10It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongFastPop10It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongReallyFastPop10It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongPush100It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongSlowPop100It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongFastPop100It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongReallyFastPop100It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongPush1000It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongSlowPop1000It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongFastPop1000It)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveLongReallyFastPop1000It)
+    struct TStats {
+        ui64 SuccessPushes = 0;
+        ui64 SuccessSlowPushes = 0;
+        ui64 SuccessFastPushes = 0;
 
-    // FOR DEBUG PURPOSES
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveAfterReserveSlotInFastPush)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveAfterReserveSlotInFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveAfterReserveSlotInReallyFastPop)
-    DEFINE_HAS_STATIC_METHOD_CONCEPT(ObserveAfterIncorectlyChangeSlotGenerationInReallyFastPop)
-#undef DEFINE_HAS_STATIC_METHOD_CONCEPT
+        ui64 FailedPushes = 0;
+        ui64 FailedSlowPushAttempts = 0;
 
-template <ui32 MaxSizeBits, typename TObserver=void>
+        ui64 ChangesFastPushToSlowPush = 0;
+        ui64 ChangesReallySlowPopToSlowPop = 0;
+
+        ui64 SuccessPops = 0;
+        ui64 SuccessSingleConsumerPops = 0;
+        ui64 SuccessSlowPops = 0;
+        ui64 SuccessFastPops = 0;
+        ui64 SuccessReallyFastPops = 0;
+
+        ui64 FailedPops = 0;
+        ui64 FailedSingleConsumerPops = 0;
+        ui64 FailedSingleConsumerPopAttempts = 0;
+        ui64 FailedReallySlowPops = 0;
+        ui64 FailedSlowPops = 0;
+        ui64 FailedSlowPopAttempts = 0;
+        ui64 FailedFastPops = 0;
+        ui64 FailedFastPopAttempts = 0;
+        ui64 FailedReallyFastPops = 0;
+        ui64 FailedReallyFastPopAttempts = 0;
+
+
+        ui64 InvalidatedSlots = 0;
+        ui64 InvalidatedSlotsInSlowPop = 0;
+        ui64 InvalidatedSlotsInFastPop = 0;
+        ui64 InvalidatedSlotsInReallyFastPop = 0;
+
+        ui64 MoveTailBecauseHeadOvertakesInReallySlowPop = 0;
+        ui64 MoveTailBecauseHeadOvertakesInFastPop = 0;
+
+        TStats& operator += (const TStats &other) {
+            SuccessPushes += other.SuccessPushes;
+            SuccessSlowPushes += other.SuccessSlowPushes;
+            SuccessFastPushes += other.SuccessFastPushes;
+            ChangesFastPushToSlowPush += other.ChangesFastPushToSlowPush;
+            ChangesReallySlowPopToSlowPop += other.ChangesReallySlowPopToSlowPop;
+            FailedPushes += other.FailedPushes;
+            FailedSlowPushAttempts += other.FailedSlowPushAttempts;
+
+            SuccessPops += other.SuccessPops;
+            SuccessSingleConsumerPops += other.SuccessSingleConsumerPops;
+            SuccessSlowPops += other.SuccessSlowPops;
+            SuccessFastPops += other.SuccessFastPops;
+            SuccessReallyFastPops += other.SuccessReallyFastPops;
+
+            FailedPops += other.FailedPops;
+            FailedSingleConsumerPops += other.FailedSingleConsumerPops;
+            FailedSingleConsumerPopAttempts += other.FailedSingleConsumerPopAttempts;
+            FailedReallySlowPops += other.FailedReallySlowPops;
+            FailedSlowPops += other.FailedSlowPops;
+            FailedSlowPopAttempts += other.FailedSlowPopAttempts;
+            FailedFastPops += other.FailedFastPops;
+            FailedFastPopAttempts += other.FailedFastPopAttempts;
+            FailedReallyFastPops += other.FailedReallyFastPops;
+            FailedReallyFastPopAttempts += other.FailedReallyFastPopAttempts;
+
+            MoveTailBecauseHeadOvertakesInReallySlowPop += other.MoveTailBecauseHeadOvertakesInReallySlowPop;
+            MoveTailBecauseHeadOvertakesInFastPop += other.MoveTailBecauseHeadOvertakesInFastPop;
+
+            InvalidatedSlots += other.InvalidatedSlots;
+            InvalidatedSlotsInSlowPop += other.InvalidatedSlotsInSlowPop;
+            InvalidatedSlotsInFastPop += other.InvalidatedSlotsInFastPop;
+            InvalidatedSlotsInReallyFastPop += other.InvalidatedSlotsInReallyFastPop;
+
+            return *this;
+        }
+    };
+    static thread_local TStats Stats;
+
+#ifdef MPMC_RING_QUEUE_COLLECT_STATISTICS
+    static constexpr bool CollectStatistics = true;
+#else
+    static constexpr bool CollectStatistics = false;
+#endif
+
+    template <typename  ...TArgs>
+    static void IncrementMetrics(TArgs& ...args) {
+        if constexpr (CollectStatistics) {
+            auto dummy = [](...) {};
+            dummy(++args...);
+        }
+    }
+
+#define DEFINE_INCREMENT_STATS_1(M1)                \
+    static void Increment ## M1() {                 \
+        IncrementMetrics(Stats.M1);                 \
+    }                                               \
+// end DEFINE_INCREMENT_STATS_1
+
+#define DEFINE_INCREMENT_STATS_2(M1, M2)            \
+    static void Increment ## M1() {                 \
+        IncrementMetrics(Stats.M1, Stats.M2);       \
+    }                                               \
+// end DEFINE_INCREMENT_STATS_2
+
+    DEFINE_INCREMENT_STATS_2(SuccessSlowPushes, SuccessPushes)
+    DEFINE_INCREMENT_STATS_2(SuccessFastPushes, SuccessPushes)
+    DEFINE_INCREMENT_STATS_1(ChangesFastPushToSlowPush)
+    DEFINE_INCREMENT_STATS_1(FailedPushes)
+    DEFINE_INCREMENT_STATS_1(FailedSlowPushAttempts)
+    DEFINE_INCREMENT_STATS_2(SuccessSingleConsumerPops, SuccessPops)
+    DEFINE_INCREMENT_STATS_2(FailedSingleConsumerPops, FailedPops)
+    DEFINE_INCREMENT_STATS_1(FailedSingleConsumerPopAttempts)
+    DEFINE_INCREMENT_STATS_1(MoveTailBecauseHeadOvertakesInReallySlowPop)
+    DEFINE_INCREMENT_STATS_2(FailedReallySlowPops, FailedPops)
+    DEFINE_INCREMENT_STATS_2(SuccessSlowPops, SuccessPops)
+    DEFINE_INCREMENT_STATS_2(FailedSlowPops, FailedPops)
+    DEFINE_INCREMENT_STATS_1(FailedSlowPopAttempts)
+    DEFINE_INCREMENT_STATS_1(ChangesReallySlowPopToSlowPop)
+    DEFINE_INCREMENT_STATS_2(SuccessFastPops, SuccessPops)
+    DEFINE_INCREMENT_STATS_2(FailedFastPops, FailedPops)
+    DEFINE_INCREMENT_STATS_1(MoveTailBecauseHeadOvertakesInFastPop)
+    DEFINE_INCREMENT_STATS_1(FailedFastPopAttempts)
+    DEFINE_INCREMENT_STATS_2(SuccessReallyFastPops, SuccessPops)
+    DEFINE_INCREMENT_STATS_2(FailedReallyFastPops, FailedPops)
+    DEFINE_INCREMENT_STATS_1(FailedReallyFastPopAttempts)
+    DEFINE_INCREMENT_STATS_2(InvalidatedSlotsInSlowPop, InvalidatedSlots)
+    DEFINE_INCREMENT_STATS_2(InvalidatedSlotsInFastPop, InvalidatedSlots)
+    DEFINE_INCREMENT_STATS_2(InvalidatedSlotsInReallyFastPop, InvalidatedSlots)
+
+    static TStats GetLocalStats() {
+        return Stats;
+    }
+};
+
+template <ui32 MaxSizeBits>
 struct TMPMCRingQueue {
-
-#define HAS_OBSERVE_METHOD(ENTRY_POINT) \
-    HasStaticMethodObserve ## ENTRY_POINT <TObserver>
-// HAS_OBSERVE_METHOD
-
-#define OBSERVE_WITH_CONDITION(ENTRY_POINT, CONDITION) \
-    if constexpr (HAS_OBSERVE_METHOD(ENTRY_POINT)) {               \
-        if ((CONDITION)) {                             \
-            TObserver::Observe ## ENTRY_POINT ();              \
-        }                                              \
-    } do {} while (false)                              \
-// OBSERVE_WITH_CONDITION
-
-#define OBSERVE(ENTRY_POINT) \
-    OBSERVE_WITH_CONDITION(ENTRY_POINT, true)
-// OBSERVE
- 
     static constexpr ui32 MaxSize = 1 << MaxSizeBits;
 
     enum class EPopMode {
@@ -140,10 +200,7 @@ struct TMPMCRingQueue {
 
     bool TryPushSlow(ui32 val) {
         ui64 currentTail = Tail.load(std::memory_order_relaxed);
-        for (ui32 it = 0;; ++it) {
-            OBSERVE_WITH_CONDITION(LongPush10It, it == 10);
-            OBSERVE_WITH_CONDITION(LongPush100It, it == 100);
-            OBSERVE_WITH_CONDITION(LongPush1000It, it == 1000);
+        for (;;) {
             ui32 generation = currentTail / MaxSize;
 
             std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentTail)];
@@ -152,8 +209,7 @@ struct TMPMCRingQueue {
             do {
                 if (currentSlot.compare_exchange_weak(expected, val)) {
                     Tail.compare_exchange_strong(currentTail, currentTail + 1);
-                    OBSERVE(SuccessSlowPush);
-                    OBSERVE_WITH_CONDITION(FoundOldSlotInSlowPush, (slot = TSlot::Recognise(expected), slot.Generation < generation));
+                    TMPMCRingQueueStats::IncrementSuccessSlowPushes();
                     return true;
                 }
                 slot = TSlot::Recognise(expected);
@@ -162,20 +218,19 @@ struct TMPMCRingQueue {
             if (!slot.IsEmpty) {
                 ui64 currentHead = Head.load(std::memory_order_acquire);
                 if (currentHead + MaxSize <= currentTail + std::min<ui64>(64, MaxSize - 1)) {
-                    OBSERVE(FailedPush);
+                    TMPMCRingQueueStats::IncrementFailedPushes();
                     return false;
                 }
             }
 
             SpinLockPause();
-            OBSERVE(FailedSlowPushAttempt);
+            TMPMCRingQueueStats::IncrementFailedSlowPushAttempts();
             Tail.compare_exchange_strong(currentTail, currentTail + 1, std::memory_order_acq_rel);
         }
     }
 
     bool TryPush(ui32 val) {
         ui64 currentTail = Tail.fetch_add(1, std::memory_order_relaxed);
-        OBSERVE(AfterReserveSlotInFastPush);
         ui32 generation = currentTail / MaxSize;
 
         std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentTail)];
@@ -183,14 +238,13 @@ struct TMPMCRingQueue {
         ui64 expected = TSlot::MakeEmpty(generation);
         do {
             if (currentSlot.compare_exchange_weak(expected, val)) {
-                OBSERVE(SuccessFastPush);
-                OBSERVE_WITH_CONDITION(FoundOldSlotInFastPush, (slot = TSlot::Recognise(expected), slot.Generation < generation));
+                TMPMCRingQueueStats::IncrementSuccessFastPushes();
                 return true;
             }
             slot = TSlot::Recognise(expected);
         } while (slot.Generation <= generation && slot.IsEmpty);
 
-        OBSERVE(ChangeFastPushToSlowPush);
+        TMPMCRingQueueStats::IncrementChangesFastPushToSlowPush();
         return TryPushSlow(val);
     }
 
@@ -211,19 +265,19 @@ struct TMPMCRingQueue {
                 ui64 globalHead = LocalGeneration * MaxSize + LocalHead;
                 if (currentTail <= globalHead) {
                     Tail.compare_exchange_strong(currentTail, globalHead);
-                    OBSERVE(FailedSingleConsumerPop);
+                    TMPMCRingQueueStats::IncrementFailedSingleConsumerPops();
                     return std::nullopt;
                 }
                 if (currentSlot.compare_exchange_strong(expected, TSlot::MakeEmpty(LocalGeneration + 1))) {
                     ShiftLocalHead();
                 }
-                OBSERVE(FailedSingleConsumerPopAttempt);
+                TMPMCRingQueueStats::IncrementFailedSingleConsumerPopAttempts();
                 SpinLockPause();
                 continue;
             }
             currentSlot.store(TSlot::MakeEmpty(LocalGeneration + 1), std::memory_order_release);
             ShiftLocalHead();
-            OBSERVE(SuccessSingleConsumerPop);
+            TMPMCRingQueueStats::IncrementSuccessSingleConsumerPops();
             return slot.Value;
         }
     }
@@ -276,15 +330,15 @@ struct TMPMCRingQueue {
         while (currentHead > currentTail) {
             if (Tail.compare_exchange_weak(currentTail, currentHead)) {
                 currentTail = currentHead;
-                OBSERVE(MoveTailBecauseHeadOvertakesInReallySlowPop);
+                TMPMCRingQueueStats::IncrementMoveTailBecauseHeadOvertakesInReallySlowPop();
             }
         }
         if (currentHead == currentTail) {
-            OBSERVE(FailedReallySlowPop);
+            TMPMCRingQueueStats::IncrementFailedReallySlowPops();
             return std::nullopt;
         }
 
-        OBSERVE(ChangeReallySlowPopToSlowPop);
+        TMPMCRingQueueStats::IncrementChangesReallySlowPopToSlowPop();
         return TryPopSlow(currentHead);
     }
 
@@ -292,10 +346,7 @@ struct TMPMCRingQueue {
         if (!currentHead) {
             currentHead = Head.load(std::memory_order_acquire);
         }
-        for (ui32 it = 0;; ++it) {
-            OBSERVE_WITH_CONDITION(LongSlowPop10It, it == 10);
-            OBSERVE_WITH_CONDITION(LongSlowPop100It, it == 100);
-            OBSERVE_WITH_CONDITION(LongSlowPop1000It, it == 1000);
+        for (;;) {
             ui32 generation = currentHead / MaxSize;
 
             std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentHead)];
@@ -305,7 +356,7 @@ struct TMPMCRingQueue {
 
             if (slot.Generation > generation) {
                 Head.compare_exchange_strong(currentHead, currentHead + 1);
-                OBSERVE(FailedSlowPopAttempt);
+                TMPMCRingQueueStats::IncrementFailedSlowPopAttempts();
                 SpinLockPause();
                 continue;
             }
@@ -314,7 +365,7 @@ struct TMPMCRingQueue {
                 if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(generation + 1))) {
                     if (!slot.IsEmpty) {
                         Head.compare_exchange_strong(currentHead, currentHead + 1);
-                        OBSERVE(SuccessSlowPop);
+                        TMPMCRingQueueStats::IncrementSuccessSlowPops();
                         return slot.Value;
                     }
                     break;
@@ -325,7 +376,7 @@ struct TMPMCRingQueue {
             while (!slot.IsEmpty) {
                 if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(generation + 1))) {
                     Head.compare_exchange_strong(currentHead, currentHead + 1);
-                    OBSERVE(SuccessSlowPop);
+                    TMPMCRingQueueStats::IncrementSuccessSlowPops();
                     return slot.Value;
                 }
                 slot = TSlot::Recognise(expected);
@@ -333,33 +384,32 @@ struct TMPMCRingQueue {
 
             if (slot.Generation > generation) {
                 Head.compare_exchange_strong(currentHead, currentHead + 1);
-                OBSERVE(FailedSlowPopAttempt);
+                TMPMCRingQueueStats::IncrementFailedSlowPopAttempts();
                 SpinLockPause();
                 continue;
             }
 
             ui64 currentTail = Tail.load(std::memory_order_acquire);
             if (currentTail <= currentHead) {
-                OBSERVE(FailedSlowPop);
+                TMPMCRingQueueStats::IncrementFailedSlowPops();
                 return std::nullopt;
             }
 
-            OBSERVE_WITH_CONDITION(FoundOldSlotInSlowPop, slot.Generation < generation); 
-            while (slot.Generation <= generation && slot.IsEmpty) {
+            while (slot.Generation == generation && slot.IsEmpty) {
                 if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(generation + 1))) {
                     Head.compare_exchange_strong(currentHead, currentHead + 1);
-                    OBSERVE(InvalidatedSlotInSlowPop);
-                    OBSERVE(MoveTailBecauseHeadOvertakesInSlowPop);
+                    TMPMCRingQueueStats::IncrementInvalidatedSlotsInSlowPop();
+                    TMPMCRingQueueStats::IncrementMoveTailBecauseHeadOvertakesInFastPop();
                     break;
                 }
                 slot = TSlot::Recognise(expected);
             }
 
-            OBSERVE(FailedSlowPopAttempt);
+            TMPMCRingQueueStats::IncrementFailedSlowPopAttempts();
             SpinLockPause();
             currentHead = Head.load(std::memory_order_acquire);
         }
-        OBSERVE(FailedSlowPop);
+        TMPMCRingQueueStats::IncrementFailedSlowPops();
         return std::nullopt;
     }
 
@@ -368,12 +418,8 @@ struct TMPMCRingQueue {
     }
 
     std::optional<ui32> TryPopFast() {
-        for (ui32 it = 0;; ++it) {
-            OBSERVE_WITH_CONDITION(LongFastPop10It, it == 10);
-            OBSERVE_WITH_CONDITION(LongFastPop100It, it == 100);
-            OBSERVE_WITH_CONDITION(LongFastPop1000It, it == 1000);
+        for (;;) {
             ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
-            OBSERVE(AfterReserveSlotInFastPop);
             ui32 generation = currentHead / MaxSize;
 
             std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentHead)];
@@ -382,7 +428,7 @@ struct TMPMCRingQueue {
             TSlot slot = TSlot::Recognise(expected);
 
             if (slot.Generation > generation) {
-                OBSERVE(FailedFastPopAttempt);
+                TMPMCRingQueueStats::IncrementFailedFastPopAttempts();
                 SpinLockPause();
                 continue;
             }
@@ -390,7 +436,7 @@ struct TMPMCRingQueue {
             while (generation >= slot.Generation) {
                 if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(generation + 1))) {
                     if (!slot.IsEmpty) {
-                        OBSERVE(SuccessFastPop);
+                        TMPMCRingQueueStats::IncrementSuccessFastPops();
                         return slot.Value;
                     }
                     break;
@@ -399,24 +445,27 @@ struct TMPMCRingQueue {
             }
 
             if (slot.Generation > generation) {
-                OBSERVE(FailedFastPopAttempt);
+                TMPMCRingQueueStats::IncrementFailedFastPopAttempts();
                 SpinLockPause();
                 continue;
             }
 
-            OBSERVE_WITH_CONDITION(FoundOldSlotInFastPop, slot.Generation < generation); 
-            OBSERVE_WITH_CONDITION(InvalidatedSlotInFastPop, slot.Generation <= generation); 
+            if constexpr (TMPMCRingQueueStats::CollectStatistics) {
+                if (slot.Generation <= generation) {
+                    TMPMCRingQueueStats::IncrementInvalidatedSlotsInFastPop();
+                }
+            }
 
             ui64 currentTail = Tail.load(std::memory_order_acquire);
             if (currentTail > currentHead) {
-                OBSERVE(FailedFastPopAttempt);
+                TMPMCRingQueueStats::IncrementFailedFastPopAttempts();
                 SpinLockPause();
                 continue;
             }
 
             while (currentTail <= currentHead) {
                 if (Tail.compare_exchange_weak(currentTail, currentHead + 1)) {
-                    OBSERVE(FailedFastPop);
+                    TMPMCRingQueueStats::IncrementFailedFastPops();
                     return std::nullopt;
                 }
             }
@@ -426,12 +475,8 @@ struct TMPMCRingQueue {
     }
 
     std::optional<ui32> TryPopReallyFast() {
-        for (ui32 it = 0;; ++it) {
-            OBSERVE_WITH_CONDITION(LongReallyFastPop10It, it == 10);
-            OBSERVE_WITH_CONDITION(LongReallyFastPop100It, it == 100);
-            OBSERVE_WITH_CONDITION(LongReallyFastPop1000It, it == 1000);
+        for (;;) {
             ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
-            OBSERVE(AfterReserveSlotInReallyFastPop);
             ui32 generation = currentHead / MaxSize;
 
             std::atomic<ui64> &currentSlot = Buffer[ConvertIdx(currentHead)];
@@ -439,36 +484,37 @@ struct TMPMCRingQueue {
             ui64 expected = currentSlot.exchange(TSlot::MakeEmpty(generation + 1), std::memory_order_acq_rel);
             TSlot slot = TSlot::Recognise(expected);
             if (!slot.IsEmpty) {
-                OBSERVE(SuccessReallyFastPop);
+                TMPMCRingQueueStats::IncrementSuccessReallyFastPops();
                 return slot.Value;
             }
 
             if (slot.Generation > generation) {
-                OBSERVE(AfterIncorectlyChangeSlotGenerationInReallyFastPop);
                 expected = TSlot::MakeEmpty(generation + 1);
                 TSlot slot2 = TSlot::Recognise(expected);
                 while (slot.Generation > slot2.Generation) {
                     if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty(slot.Generation))) {
                         if (!slot2.IsEmpty) {
-                            OBSERVE(SuccessReallyFastPop);
+                            TMPMCRingQueueStats::IncrementSuccessReallyFastPops();
                             return slot2.Value;
                         }
                         break;
                     }
                     slot2 = TSlot::Recognise(expected);
-                    SpinLockPause();
                 }
 
-                OBSERVE(FailedReallyFastPopAttempt);
+                TMPMCRingQueueStats::IncrementFailedReallyFastPopAttempts();
                 SpinLockPause();
                 continue;
             }
 
-            OBSERVE_WITH_CONDITION(FoundOldSlotInReallyFastPop, slot.Generation < generation); 
-            OBSERVE_WITH_CONDITION(InvalidatedSlotInReallyFastPop, slot.Generation <= generation); 
+            if constexpr (TMPMCRingQueueStats::CollectStatistics) {
+                if (slot.Generation <= generation) {
+                    TMPMCRingQueueStats::IncrementInvalidatedSlotsInReallyFastPop();
+                }
+            }
 
             if (slot.Generation > generation) {
-                OBSERVE(FailedReallyFastPopAttempt);
+                TMPMCRingQueueStats::IncrementFailedReallyFastPopAttempts();
                 SpinLockPause();
                 continue;
             }
@@ -476,7 +522,7 @@ struct TMPMCRingQueue {
             ui64 currentTail = Tail.load(std::memory_order_acquire);
             while (currentTail <= currentHead) {
                 if (Tail.compare_exchange_weak(currentTail, currentHead + 1)) {
-                    OBSERVE(FailedReallyFastPop);
+                    TMPMCRingQueueStats::IncrementFailedReallyFastPops();
                     return std::nullopt;
                 }
             }
@@ -484,9 +530,6 @@ struct TMPMCRingQueue {
             SpinLockPause();
         }
     }
-#undef OBSERVE_WITH_CONDITION
-#undef OBSERVE
-#undef HAS_OBSERVE_METHOD
 };
 
 }  // NActors

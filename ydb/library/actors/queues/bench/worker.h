@@ -190,34 +190,6 @@ namespace NActors::NQueueBench {
         TConsumerInfo *Info;
     };
 
-
-    template <typename TAction>
-    class TWorkerWithDuration {
-    public:
-        TWorkerWithDuration(TAction action, TDuration duration)
-            : Action(action)
-            , Duration(duration)
-            , StartTime()
-        {}
-
-        TThreadAction Do() {
-            if (!StartTime) {
-                StartTime = TInstant::Now();
-            } else if (++Iteration % 1024 == 0 && TInstant::Now() - StartTime > Duration) {
-                return {.Action=EThreadAction::Kill};
-            }
-            if (Action()) {
-                return {.Action=EThreadAction::Continue};
-            }
-            return {.Action=EThreadAction::Kill};
-        }
-
-        TAction Action;
-        TDuration Duration;
-        TInstant StartTime;
-        ui32 Iteration = 0;
-    };
-
     template <typename TWorker, typename TStatsCollector=void>
     class TTestThread : public ISimpleThread {
     public:
@@ -239,7 +211,7 @@ namespace NActors::NQueueBench {
             case EThreadAction::Kill:
                 if constexpr (!std::is_same_v<std::decay_t<TStatsCollector>, void>) {
                     if (StatsCollector) {
-                        auto stats = TStatsCollector::TStatsSource::GetLocalStats();
+                        auto stats = NActors::TMPMCRingQueueStats::GetLocalStats();
                         // Cerr << (TStringBuilder() << "thread: " << (ui64)this << " pushes: " << stats.SuccessPushes.load() << Endl);
                         StatsCollector->AddStats(stats);
                     }

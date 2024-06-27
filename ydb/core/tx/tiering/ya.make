@@ -2,6 +2,9 @@ LIBRARY()
 
 SRCS(
     common.cpp
+    tier_cleaner.cpp
+    path_cleaner.cpp
+    GLOBAL cleaner_task.cpp
     manager.cpp
     GLOBAL external_data.cpp
     snapshot.cpp

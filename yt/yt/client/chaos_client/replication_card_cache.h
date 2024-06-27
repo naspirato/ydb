@@ -18,6 +18,7 @@ struct TReplicationCardCacheKey
 };
 
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardCacheKey& key, TStringBuf /*spec*/);
+TString ToString(const TReplicationCardCacheKey& key);
 
 ////////////////////////////////////////////////////////////////////////////////
 

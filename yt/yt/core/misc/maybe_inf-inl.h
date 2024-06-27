@@ -114,13 +114,21 @@ T TMaybeInf<T>::UnsafeToUnderlying() const noexcept
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-void FormatValue(TStringBuilderBase* builder, TMaybeInf<T> value, TStringBuf spec)
+void FormatValue(TStringBuilderBase* builder, TMaybeInf<T> value, TStringBuf format)
 {
     if (value.IsFinite()) {
-        FormatValue(builder, value.ToUnderlying(), spec);
+        FormatValue(builder, value.ToUnderlying(), format);
     } else {
-        FormatValue(builder, "inf", spec);
+        FormatValue(builder, "inf", format);
     }
+}
+
+template <class T>
+TString ToString(TMaybeInf<T> value)
+{
+    TStringBuilder builder;
+    FormatValue(&builder, value);
+    return builder.Flush();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

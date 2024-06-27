@@ -33,7 +33,8 @@ void SetCurrentAuthenticationIdentity(const TAuthenticationIdentity* identity);
 //! Returns the root identity, which is the default one.
 const TAuthenticationIdentity& GetRootAuthenticationIdentity();
 
-void FormatValue(TStringBuilderBase* builder, const TAuthenticationIdentity& value, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TAuthenticationIdentity& value, TStringBuf format);
+TString ToString(const TAuthenticationIdentity& value);
 
 void Serialize(const TAuthenticationIdentity& identity, NYson::IYsonConsumer* consumer);
 

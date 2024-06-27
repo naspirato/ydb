@@ -45,6 +45,12 @@ void FormatValue(TStringBuilderBase* builder, const std::variant<Ts...>& variant
     NDetail::TVariantFormatter<0, Ts...>::Do(builder, variant, spec);
 }
 
+template <class... Ts>
+TString ToString(const std::variant<Ts...>& variant)
+{
+    return ToStringViaBuilder(variant);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

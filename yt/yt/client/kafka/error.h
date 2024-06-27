@@ -6,7 +6,7 @@ namespace NYT::NKafka {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM_WITH_UNDERLYING_TYPE(EErrorCode, i16,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EErrorCode, int16_t,
     ((UnknownServerError)           (-1))
     ((None)                         (0))
     ((TopicAuthorizationFailed)     (29))

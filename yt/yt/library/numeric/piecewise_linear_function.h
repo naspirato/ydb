@@ -2,6 +2,7 @@
 
 #include "algorithm_helpers.h"
 #include "binary_search.h"
+#include "vector_format.h"
 
 #include <library/cpp/testing/gtest/friend.h>
 

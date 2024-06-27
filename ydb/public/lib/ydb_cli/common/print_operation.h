@@ -5,7 +5,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -28,10 +27,6 @@ void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS
 /// Index build
 void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EOutputFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EOutputFormat format);
-
-/// QueryService
-void PrintOperation(const NYdb::NQuery::TScriptExecutionOperation& operation, EOutputFormat format);
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScriptExecutionOperation>& operations, EOutputFormat format);
 
 }
 }

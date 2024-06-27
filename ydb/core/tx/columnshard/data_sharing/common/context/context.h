@@ -15,7 +15,7 @@ private:
     YDB_READONLY(TTabletId, DestinationTabletId, (TTabletId)0);
     YDB_READONLY_DEF(THashSet<TTabletId>, SourceTabletIds);
     YDB_READONLY(bool, Moving, false);
-    TSnapshot SnapshotBarrier = TSnapshot::Zero();
+    std::optional<TSnapshot> SnapshotBarrier;
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
 public:
     TTransferContext() = default;
@@ -23,6 +23,8 @@ public:
     TString DebugString() const;
 
     const TSnapshot& GetSnapshotBarrierVerified() const;
+
+    void SetSnapshotBarrier(const TSnapshot& snapshot);
 
     TTransferContext(const TTabletId destination, const THashSet<TTabletId>& sources, const TSnapshot& snapshotBarrier, const bool moving, const std::optional<ui64> txId = {});
     NKikimrColumnShardDataSharingProto::TTransferContext SerializeToProto() const;

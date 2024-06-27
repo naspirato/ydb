@@ -97,11 +97,16 @@ void FromProto(
     }
 }
 
-void FormatValue(TStringBuilderBase* builder, const TSortColumns& sortColumns, TStringBuf /* spec */)
+void FormatValue(TStringBuilderBase* builder, const TSortColumns& sortColumns, TStringBuf /* format */)
 {
     builder->AppendFormat("{ColumnNames: %v, Comparator: %v}",
         GetColumnNames(sortColumns),
         GetComparator(sortColumns));
+}
+
+TString ToString(const TSortColumns& sortColumns)
+{
+    return ToStringViaBuilder(sortColumns);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

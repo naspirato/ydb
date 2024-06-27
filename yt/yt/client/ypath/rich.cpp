@@ -689,10 +689,15 @@ TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)
     return builder.Flush();
 }
 
-void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec)
+TString ToString(const TRichYPath& path)
 {
     // NB: we intentionally use Text format since string-representation of rich ypath should be readable.
-    FormatValue(builder, ConvertToString(path, EYsonFormat::Text), spec);
+    return ConvertToString(path, EYsonFormat::Text);
+}
+
+void FormatValue(TStringBuilderBase* builder, const TRichYPath& path, TStringBuf spec)
+{
+    FormatValue(builder, ToString(path), spec);
 }
 
 std::vector<TRichYPath> Normalize(const std::vector<TRichYPath>& paths)

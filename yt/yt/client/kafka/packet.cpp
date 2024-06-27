@@ -19,9 +19,8 @@ struct TPacketDecoderTag
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPacketTranscoderBase
+struct TPacketTranscoderBase
 {
-protected:
     union {
         int MessageSize;
         char Data[sizeof(int)];
@@ -190,7 +189,11 @@ public:
         YT_ASSERT(flags == EPacketFlags::None);
         YT_ASSERT(!messageParts.Empty());
 
-        Header_.MessageSize = messageParts.ByteSize();
+        i64 messageSize = 0;
+        for (const auto& messagePart : messageParts) {
+            messageSize += messagePart.size();
+        }
+        Header_.MessageSize = messageSize;
         std::reverse(std::begin(Header_.Data), std::end(Header_.Data));
 
         MessageParts_ = std::move(messageParts);

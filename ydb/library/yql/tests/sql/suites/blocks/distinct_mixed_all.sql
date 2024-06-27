@@ -1,3 +1,5 @@
+pragma UseBlocks;
+pragma EmitAggApply;
 pragma yt.UsePartitionsByKeysForFinalAgg="false";
 
 USE plato;

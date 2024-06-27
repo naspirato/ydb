@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
+
 #include <ydb/core/protos/grpc.grpc.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -56,6 +58,10 @@ class TGRpcService
 public:
     TGRpcService();
 
+    void SetDynamicNodeAuthParams(const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams) {
+        DynamicNodeAuthorizationParams = dynamicNodeAuthorizationParams;
+    }
+
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
     void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
 
@@ -90,6 +96,8 @@ private:
     std::function<void()> InitCb_;
     // In flight request management.
     NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
+
+    TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams = {};
 };
 
 }

@@ -3,7 +3,6 @@
 #include <library/cpp/json/json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/library/accessor/accessor.h>
 
 #include <vector>
 
@@ -21,13 +20,10 @@ struct TTestInfo {
     double Mean = 0;
     double Median = 0;
     double Std = 0;
-    TDuration UnixBench;
     std::vector<TDuration> ClientTimings; // timings captured by the client application. these timings include time RTT between server and the client application.
     std::vector<TDuration> ServerTimings; // query timings measured by the server.
 
     explicit TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDuration>&& serverTimings);
-    void operator +=(const TTestInfo& other);
-    void operator /=(const ui32 count);
 };
 
 class TQueryResultInfo {
@@ -55,10 +51,10 @@ public:
 
 class TQueryBenchmarkResult {
 private:
-    YDB_READONLY_DEF(TString, ErrorInfo);
-    YDB_READONLY_DEF(TString, YSONResult);
-    YDB_READONLY_DEF(TQueryResultInfo, QueryResult);
-    YDB_READONLY_DEF(TDuration, ServerTiming);
+    TString ErrorInfo;
+    TString YSONResult;
+    TQueryResultInfo QueryResult;
+    TDuration ServerTiming;
     TQueryBenchmarkResult() = default;
 public:
     static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult, const TDuration& serverTiming) {
@@ -73,8 +69,20 @@ public:
         result.ErrorInfo = error;
         return result;
     }
-    operator bool() const {
-        return !ErrorInfo;
+    bool operator!() const {
+        return !!ErrorInfo;
+    }
+    const TString& GetErrorInfo() const {
+        return ErrorInfo;
+    }
+    TDuration GetServerTiming() const {
+        return ServerTiming;
+    }
+    const TString& GetYSONResult() const {
+        return YSONResult;
+    }
+    const TQueryResultInfo& GetQueryResult() const {
+        return QueryResult;
     }
 };
 

@@ -26,7 +26,6 @@ TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializati
     auto layoutPolicy = storeInfo.GetTablesLayoutPolicy();
     auto currentLayout = context.GetSSOperationContext()->SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(
         storeInfo.GetColumnShards(), *context.GetSSOperationContext()->SS));
-    currentLayout.RemoveGroupsWithPathId(context.GetOriginalEntity().GetPathId());
     auto tablePtr = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(context.GetOriginalEntity().GetPathId());
     if (context.GetModification()->GetAlterColumnTable().GetReshardColumnTable().GetIncrease()) {
         const ui32 shardsCount = inStoreTable.GetTableInfoPtrVerified()->GetColumnShards().size();

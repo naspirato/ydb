@@ -1,4 +1,6 @@
 use plato;
+pragma EmitAggApply;
+pragma UseBlocks;
 pragma yt.UsePartitionsByKeysForFinalAgg="false";
 
 SELECT
@@ -8,7 +10,7 @@ SELECT
     Pg::min(a),
     Pg::max(a),
     Pg::min(c),
-    Pg::max(c),
+    Pg::max(c),    
     Pg::avg(c),
     Pg::avg(PgCast(1p,pgint4)),
     Pg::avg(PgCast(1p,pgint8)),

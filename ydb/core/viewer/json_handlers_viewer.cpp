@@ -7,8 +7,7 @@
 #include "json_vdiskinfo.h"
 #include "json_pdiskinfo.h"
 #include "json_describe.h"
-#include "json_describe_topic.h"
-#include "json_describe_consumer.h"
+#include "json_local_rpc.h"
 #include "json_hotkeys.h"
 #include "json_sysinfo.h"
 #include "json_tabletinfo.h"
@@ -40,7 +39,6 @@
 #include "json_graph.h"
 #include "json_render.h"
 #include "json_autocomplete.h"
-#include "check_access.h"
 
 namespace NKikimr::NViewer {
 
@@ -83,7 +81,6 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/graph", new TJsonHandler<TJsonGraph>);
     jsonHandlers.AddHandler("/viewer/render", new TJsonHandler<TJsonRender>);
     jsonHandlers.AddHandler("/viewer/autocomplete", new TJsonHandler<TJsonAutocomplete>);
-    jsonHandlers.AddHandler("/viewer/check_access", new TJsonHandler<TCheckAccess>);
 }
 
 }

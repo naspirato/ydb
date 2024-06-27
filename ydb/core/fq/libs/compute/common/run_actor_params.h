@@ -14,7 +14,6 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_gateway.h>
-#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
 
@@ -76,8 +75,7 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& operationId,
         const ::NFq::NConfig::TYdbStorageConfig& computeConnection,
         TDuration resultTtl,
-        std::map<TString, Ydb::TypedValue>&& queryParameters,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+        std::map<TString, Ydb::TypedValue>&& queryParameters
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -140,7 +138,6 @@ struct TRunActorParams { // TODO2 : Change name
     ::NFq::NConfig::TYdbStorageConfig ComputeConnection;
     TDuration ResultTtl;
     std::map<TString, Ydb::TypedValue> QueryParameters;
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
 };
 
 } /* NFq */

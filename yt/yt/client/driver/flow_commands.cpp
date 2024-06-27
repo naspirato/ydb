@@ -314,13 +314,13 @@ void TPausePipelineCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TGetPipelineStateCommand::Register(TRegistrar /*registrar*/)
+void TGetPipelineStatusCommand::Register(TRegistrar /*registrar*/)
 { }
 
-void TGetPipelineStateCommand::DoExecute(ICommandContextPtr context)
+void TGetPipelineStatusCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
-    auto result = WaitFor(client->GetPipelineState(PipelinePath, Options))
+    auto result = WaitFor(client->GetPipelineStatus(PipelinePath, Options))
         .ValueOrThrow();
 
     context->ProduceOutputValue(TYsonString(ToString(result.State)));

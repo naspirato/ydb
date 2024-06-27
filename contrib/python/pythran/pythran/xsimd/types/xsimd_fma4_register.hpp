@@ -25,6 +25,7 @@ namespace xsimd
     {
         static constexpr bool supported() noexcept { return XSIMD_WITH_FMA4; }
         static constexpr bool available() noexcept { return true; }
+        static constexpr unsigned version() noexcept { return generic::version(1, 4, 4); }
         static constexpr char const* name() noexcept { return "fma4"; }
     };
 

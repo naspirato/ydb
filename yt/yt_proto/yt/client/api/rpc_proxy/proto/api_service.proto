@@ -644,7 +644,7 @@ message TRspSelectRows
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqAdvanceQueueConsumer
+message TReqAdvanceConsumer
 {
     optional NYT.NProto.TGuid transaction_id = 1;
     optional string consumer_path = 2;
@@ -654,32 +654,9 @@ message TReqAdvanceQueueConsumer
     optional int64 new_offset = 6;
 }
 
-message TRspAdvanceQueueConsumer
+message TRspAdvanceConsumer
 {
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-message TReqPushQueueProducer
-{
-    optional NYT.NProto.TGuid transaction_id = 1;
-    optional string producer_path = 2;
-    optional string queue_path = 3;
-    optional string session_id = 4;
-    optional int64 epoch = 5;
-    optional bytes user_meta = 6; // YSON
-    optional int64 sequence_number = 7;
-
-    required TRowsetDescriptor rowset_descriptor = 200;
-}
-
-message TRspPushQueueProducer
-{
-    optional int64 last_sequence_number = 1;
-    optional int64 skipped_row_count = 2;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 
 message TRowBatchReadOptions
 {
@@ -793,8 +770,8 @@ message TReqCreateQueueProducerSession
 
 message TRspCreateQueueProducerSession
 {
-    optional int64 sequence_number = 1;
-    optional int64 epoch = 2;
+    optional uint64 sequence_number = 1;
+    optional uint64 epoch = 2;
     optional bytes user_meta = 3; // YSON
 }
 
@@ -2527,19 +2504,6 @@ message TRspAbortJob
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-message TReqDumpJobProxyLog
-{
-    required NYT.NProto.TGuid job_id = 1;
-    required NYT.NProto.TGuid operation_id = 2;
-    required string path = 3; // YPath
-}
-
-message TRspDumpJobProxyLog
-{
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // STREAMING
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -2922,12 +2886,12 @@ message TRspStopPipeline
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqGetPipelineState
+message TReqGetPipelineStatus
 {
     required string pipeline_path = 1;
 }
 
-message TRspGetPipelineState
+message TRspGetPipelineStatus
 {
     // TODO(babenko): provide native proto enum
     required int32 state = 1; // EPipelineState
@@ -3181,11 +3145,6 @@ message TReqStartQuery
         required EContentType type = 3;
     }
 
-    message TAccessControlObjects
-    {
-        repeated string items = 1;
-    }
-
     required string query_tracker_stage = 1;
     required EQueryEngine engine = 2;
     required string query = 3;
@@ -3193,8 +3152,7 @@ message TReqStartQuery
     optional bool draft = 5;
     optional bytes annotations = 6; // YSON
     repeated TQueryFile files = 7;
-    optional string access_control_object = 8; // deprecated
-    optional TAccessControlObjects access_control_objects = 9;
+    optional string access_control_object = 8;
 }
 
 message TRspStartQuery
@@ -3268,14 +3226,13 @@ message TQuery
     optional uint64 finish_time = 6; // TInstant
     optional bytes settings = 7; // YSON
     optional string user = 8;
-    optional string access_control_object = 9; // deprecated
+    optional string access_control_object = 9;
     optional EQueryState state = 10;
     optional int64 result_count = 11;
     optional bytes progress = 12; // YSON
     optional NYT.NProto.TError error = 13;
     optional bytes annotations = 14; // YSON
     optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
-    optional bytes access_control_objects = 16; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3321,16 +3278,10 @@ message TRspListQueries
 
 message TReqAlterQuery
 {
-    message TAccessControlObjects
-    {
-        repeated string items = 1;
-    }
-
     required string query_tracker_stage = 1;
     required NYT.NProto.TGuid query_id = 2;
     optional bytes annotations = 3; // YSON
-    optional string access_control_object = 4; // deprecated
-    optional TAccessControlObjects access_control_objects = 5;
+    optional string access_control_object = 4;
 }
 
 message TRspAlterQuery

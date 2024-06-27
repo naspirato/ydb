@@ -119,7 +119,8 @@ public:
     TOwningKeyBound ToOwning() const;
 };
 
-void FormatValue(TStringBuilderBase* builder, const TKeyBound& keyBound, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TKeyBound& keyBound, TStringBuf format);
+TString ToString(const TKeyBound& keyBound);
 
 void Serialize(const TKeyBound& keyBound, NYson::IYsonConsumer* consumer);
 
@@ -132,7 +133,8 @@ public:
     operator TKeyBound() const;
 };
 
-void FormatValue(TStringBuilderBase* builder, const TOwningKeyBound& keyBound, TStringBuf spec);
+void FormatValue(TStringBuilderBase* builder, const TOwningKeyBound& keyBound, TStringBuf format);
+TString ToString(const TOwningKeyBound& keyBound);
 
 void Serialize(const TOwningKeyBound& keyBound, NYson::IYsonConsumer* consumer);
 void Deserialize(TOwningKeyBound& keyBound, const NYTree::INodePtr& node);

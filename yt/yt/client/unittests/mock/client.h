@@ -664,13 +664,6 @@ public:
         const TAbortJobOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<void>, DumpJobProxyLog, (
-        NJobTrackerClient::TJobId jobId,
-        NJobTrackerClient::TOperationId operationId,
-        const NYPath::TYPath& path,
-        const TDumpJobProxyLogOptions& options),
-        (override));
-
     MOCK_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (
         const TGetClusterMetaOptions& options),
         (override));
@@ -815,9 +808,9 @@ public:
         const TPausePipelineOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TPipelineState>, GetPipelineState, (
+    MOCK_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStateOptions& options),
+        const TGetPipelineStatusOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (

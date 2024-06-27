@@ -24,6 +24,7 @@ using TGprString = std::unique_ptr<char, void(*)(void*)>;
 TGprString MakeGprString(char* str);
 
 TStringBuf ToStringBuf(const grpc_slice& slice);
+TString ToString(const grpc_slice& slice);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -294,8 +295,6 @@ std::optional<TString> ParseIssuerFromX509(TStringBuf x509String);
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc::NGrpc
-
-void FormatValue(NYT::TStringBuilderBase* builder, const grpc_slice& slice, TStringBuf spec);
 
 #define HELPERS_INL_H_
 #include "helpers-inl.h"

@@ -44,9 +44,9 @@ TErrorOr<TEtag> ParseEtag(TStringBuf etagString)
     return result;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TEtag& tag, TStringBuf /*spec*/)
+TString ToString(const TEtag& Etag)
 {
-    builder->AppendFormat("%v:%v", tag.Id, tag.Revision);
+    return Format("%v:%v", Etag.Id, Etag.Revision);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

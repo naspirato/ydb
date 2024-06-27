@@ -1,6 +1,5 @@
 RECURSE(
     actors
-    actors_factory
     common
     compressors
     credentials

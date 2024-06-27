@@ -61,7 +61,6 @@ public:
         NFile::TYtFileServices::TPtr ytServices,
         NActors::TActorId parentId,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         NYql::NYt::NSource::TLookupSource&& lookupSource,
@@ -72,7 +71,6 @@ public:
         : YtServices(ytServices)
         , ParentId(std::move(parentId))
         , Alloc(alloc)
-        , KeyTypeHelper(keyTypeHelper)
         , FunctionRegistry(functionRegistry)
         , LookupSource(std::move(lookupSource))
         , KeyType(keyType)
@@ -80,17 +78,17 @@ public:
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)
         , MaxKeysInRequest(maxKeysInRequest)
+        , KeyTypeHelper(keyType)
         , Data(10,
-            KeyTypeHelper->GetValueHash(),
-            KeyTypeHelper->GetValueEqual()
+            KeyTypeHelper.GetValueHash(),
+            KeyTypeHelper.GetValueEqual()
         )
     {
     }
     ~TYtLookupActor() {
         auto guard = Guard(*Alloc);
-        KeyTypeHelper.reset();
-        TKeyTypeHelper empty;
-        Data = IDqAsyncLookupSource::TUnboxedValueMap{0, empty.GetValueHash(), empty.GetValueEqual()};
+        KeyTypeHelper = TKeyTypeHelper{};
+        Data = TTableData(0, KeyTypeHelper.GetValueHash(), KeyTypeHelper.GetValueEqual());
     }
 
 
@@ -156,18 +154,19 @@ private: //IDqAsyncLookupSource
     size_t GetMaxSupportedKeysInRequest() const override {
         return MaxKeysInRequest;
     }
-    void AsyncLookup(IDqAsyncLookupSource::TUnboxedValueMap&& request) override {
-        YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " Got LookupRequest for " << request.size() << " keys";
+    void AsyncLookup(const NKikimr::NMiniKQL::TUnboxedValueVector& keys) override {
+        YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " Got LookupRequest for " << keys.size() << " keys";
         Y_ABORT_IF(InProgress);
-        Y_ABORT_IF(request.size() > MaxKeysInRequest);
+        Y_ABORT_IF(keys.size() > MaxKeysInRequest);
         InProgress = true;
         auto guard = Guard(*Alloc);
-        for (const auto& [k, _]: request) {
-            if (const auto* v = Data.FindPtr(k)) {
-                request[k] = *v;
-            }
+        NKikimr::NMiniKQL::TKeyPayloadPairVector lookupResult;
+        lookupResult.reserve(keys.size());
+        for (const  auto& k: keys) {
+            const auto it = Data.find(k);
+            lookupResult.emplace_back(k, it != Data.end() ? it->second : NUdf::TUnboxedValue{});
         }
-        auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(request));
+        auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(lookupResult));
         TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
         InProgress = false;
     }
@@ -178,7 +177,7 @@ private: //events
         hFunc(NActors::TEvents::TEvPoison, Handle);
     )
     void Handle(IDqAsyncLookupSource::TEvLookupRequest::TPtr ev) {
-        AsyncLookup(std::move(ev->Get()->Request));
+        AsyncLookup(ev->Get()->Keys);
     }
     void Handle(NActors::TEvents::TEvPoison::TPtr) {
         PassAway();
@@ -194,7 +193,6 @@ private:
     NFile::TYtFileServices::TPtr YtServices;
     const NActors::TActorId ParentId;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-    std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
     const NKikimr::NMiniKQL::IFunctionRegistry& FunctionRegistry;
     NYql::NYt::NSource::TLookupSource LookupSource;
     const NKikimr::NMiniKQL::TStructType* const KeyType;
@@ -203,15 +201,22 @@ private:
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
     const size_t MaxKeysInRequest;
     std::atomic_bool InProgress;
-    
-    IDqAsyncLookupSource::TUnboxedValueMap Data;
+    using TKeyTypeHelper = NKikimr::NMiniKQL::TKeyTypeContanerHelper<true, true, false>;
+    TKeyTypeHelper KeyTypeHelper;
+    using TTableData = std::unordered_map<
+        NUdf::TUnboxedValue,
+        NUdf::TUnboxedValue,
+        NKikimr::NMiniKQL::TValueHasher,
+        NKikimr::NMiniKQL::TValueEqual,
+        NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>
+    >;
+    TTableData Data;
 };
 
 std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateYtLookupActor(
     NFile::TYtFileServices::TPtr ytServices,
     NActors::TActorId parentId,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-    std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     NYql::NYt::NSource::TLookupSource&& lookupSource,
     const NKikimr::NMiniKQL::TStructType* keyType,
@@ -224,7 +229,6 @@ std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateYtLookupActo
         ytServices,
         parentId,
         alloc,
-        keyTypeHelper,
         functionRegistry,
         typeEnv,
         std::move(lookupSource),

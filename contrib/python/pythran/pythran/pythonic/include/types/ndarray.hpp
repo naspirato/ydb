@@ -825,8 +825,8 @@ namespace builtins
     template <>
     struct _build_gexpr<1> {
       template <class E, class... S>
-        auto
-      operator()(E const &a, S const &...slices) -> decltype(E(a)(slices...));
+      types::numpy_gexpr<E, types::normalize_t<S>...>
+      operator()(E const &a, S const &...slices);
     };
 
     template <class E>

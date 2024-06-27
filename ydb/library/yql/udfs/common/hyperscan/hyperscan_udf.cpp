@@ -201,10 +201,7 @@ namespace {
             }
 
             if (args[0]) {
-                // XXX: StringRef data might not be a NTBS, though the function
-                // <TRegExMatch::Match> expects ASCIIZ string. Explicitly copy
-                // the given argument string and append the NUL terminator to it.
-                const TString input(args[0].AsStringRef());
+                const std::string_view input(args[0].AsStringRef());
                 if (Y_UNLIKELY(Mode == THyperscanMatch::EMode::MULTI)) {
                     auto callback = [items] (TOptions id, ui64 /* from */, ui64 /* to */) {
                         items[id] = TUnboxedValuePod(true);

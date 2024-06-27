@@ -2209,8 +2209,6 @@ namespace NKikimr {
 
         void PassAway() override {
             VDiskCountersBase->RemoveSubgroupChain(CountersChain);
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0,
-                MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));
             TActorBootstrapped::PassAway();
         }
     };

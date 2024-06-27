@@ -401,9 +401,7 @@ void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
 
         Output << table;
     } else { /* old format plan */
-        throw TMisuseException() << "Got no logical plan from the server. "
-            "Most likely, server version is old and does not support logical plans yet. "
-            "Try also using \"--execution-plan\" option to see the execution plan";
+        PrintJson(plan.GetStringRobust());
     }
 }
 

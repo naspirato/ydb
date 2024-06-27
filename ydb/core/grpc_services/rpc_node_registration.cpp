@@ -4,6 +4,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/nameservice.h>
@@ -23,24 +24,30 @@ using TEvNodeRegistrationRequest = TGrpcRequestOperationCall<Ydb::Discovery::Nod
 class TNodeRegistrationRPC : public TActorBootstrapped<TNodeRegistrationRPC> {
     using TActorBase = TActorBootstrapped<TNodeRegistrationRPC>;
 
+    struct TNodeAuthorizationResult {
+        bool IsAuthorized = false;
+        bool IsCertificateUsed = false;
+
+        operator bool() const {
+            return IsAuthorized;
+        }
+    };
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TNodeRegistrationRPC(IRequestOpCtx* request)
-        : Request(request)
+    TNodeRegistrationRPC(IRequestOpCtx* request, const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams)
+        : Request(request), DynamicNodeAuthorizationParams(dynamicNodeAuthorizationParams)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
         auto req = dynamic_cast<TEvNodeRegistrationRequest*>(Request.get());
         Y_ABORT_UNLESS(req, "Unexpected request type for TNodeRegistrationRPC");
-
-        if (!CheckAccess()) {
-            Status = Ydb::StatusIds::UNAUTHORIZED;
-            Request->RaiseIssue(NYql::TIssue("Cannot authorize node. Access denied"));
+        const TNodeAuthorizationResult nodeAuthorizationResult = IsNodeAuthorized(req->FindClientCert());
+        if (!nodeAuthorizationResult.IsAuthorized) {
             SendReplyAndDie(ctx);
-            return;
         }
 
         auto dinfo = AppData(ctx)->DomainsInfo;
@@ -69,7 +76,7 @@ public:
         if (request->has_path()) {
             nodeBrokerRequest->Record.SetPath(request->path());
         }
-        nodeBrokerRequest->Record.SetAuthorizedByCertificate(IsNodeAuthorizedByCertificate);
+        nodeBrokerRequest->Record.SetAuthorizedByCertificate(nodeAuthorizationResult.IsCertificateUsed);
 
         NTabletPipe::SendData(ctx, NodeBrokerPipe, nodeBrokerRequest.Release());
 
@@ -169,20 +176,38 @@ public:
     }
 
 private:
-    bool CheckAccess() {
-        const auto& serializedToken = Request->GetSerializedToken();
-        // Empty serializedToken means token is not required. Checked in secure_request.h
-        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
-            NACLib::TUserToken token(serializedToken);
-            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
-                if (token.IsExist(sid)) {
-                    IsNodeAuthorizedByCertificate = true;
-                    return true;
-                }
+    TNodeAuthorizationResult IsNodeAuthorized(const TVector<TStringBuf>& nodeAuthValues) {
+        TNodeAuthorizationResult result {.IsAuthorized = false, .IsCertificateUsed = false};
+        auto* appdata = AppData();
+        if (appdata && appdata->FeatureFlags.GetEnableDynamicNodeAuthorization() && DynamicNodeAuthorizationParams) {
+            if (nodeAuthValues.empty()) {
+                Request->RaiseIssue(NYql::TIssue("Cannot authorize node. Node has not provided certificate"));
+                Status = Ydb::StatusIds::UNAUTHORIZED;
+                return result;
             }
-            return false;
+            const auto& pemCert = nodeAuthValues.front();
+            TMap<TString, TString> subjectDescription;
+            X509CertificateReader::X509Ptr x509cert = X509CertificateReader::ReadCertAsPEM(pemCert);
+            for(const auto& term: X509CertificateReader::ReadSubjectTerms(x509cert)) {
+                subjectDescription.insert(term);
+            }
+
+            if (!DynamicNodeAuthorizationParams.IsSubjectDescriptionMatched(subjectDescription)) {
+                Status = Ydb::StatusIds::UNAUTHORIZED;
+                Request->RaiseIssue(NYql::TIssue("Cannot authorize node by certificate"));
+                return result;
+            }
+            auto request = TEvNodeRegistrationRequest::GetProtoRequest(Request);
+            const auto& host = request->host();
+            if (!DynamicNodeAuthorizationParams.IsHostMatchAttributeCN(host)) {
+                Status = Ydb::StatusIds::UNAUTHORIZED;
+                Request->RaiseIssue(NYql::TIssue("Cannot authorize node with host: " + host));
+                return result;
+            }
+            result.IsCertificateUsed = true;
         }
-        return true;
+        result.IsAuthorized = true;
+        return result;;
     }
 
     static void CopyNodeInfo(Ydb::Discovery::NodeInfo* dst, const NKikimrNodeBroker::TNodeInfo& src) {
@@ -259,11 +284,11 @@ private:
     Ydb::Discovery::NodeRegistrationResult Result;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TActorId NodeBrokerPipe;
-    bool IsNodeAuthorizedByCertificate = false;
+    const TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams;
 };
 
-void DoNodeRegistrationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TNodeRegistrationRPC(p.release()));
+void DoNodeRegistrationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f, const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams) {
+    f.RegisterActor(new TNodeRegistrationRPC(p.release(), dynamicNodeAuthorizationParams));
 }
 
 } // namespace NGRpcService

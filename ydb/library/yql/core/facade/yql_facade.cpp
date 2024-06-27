@@ -1343,12 +1343,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
                 source->Reset();
             }
             TypeCtx_->Reset();
-            try {
-                CleanupLastSession().GetValueSync();
-            } catch (...) {
-                ExprCtx_->IssueManager.RaiseIssue(TIssue({}, "Failed to cleanup session: " + CurrentExceptionMessage()));
-                return NThreading::MakeFuture<IGraphTransformer::TStatus>(IGraphTransformer::TStatus::Error);
-            }
+            CleanupLastSession().GetValueSync();
 
             std::function<void(const TIssuePtr& issue)> toInfo = [&](const TIssuePtr& issue) {
                 if (issue->Severity == TSeverityIds::S_ERROR

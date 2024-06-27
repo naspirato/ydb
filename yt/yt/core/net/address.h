@@ -128,6 +128,7 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStringBuf spec);
+TString ToString(const TIP6Address& address);
 
 bool operator == (const TIP6Address& lhs, const TIP6Address& rhs);
 
@@ -167,6 +168,7 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Network& network, TStringBuf spec);
+TString ToString(const TIP6Network& network);
 
 void Deserialize(TIP6Network& value, NYTree::INodePtr node);
 void Deserialize(TIP6Network& value, NYson::TYsonPullParserCursor* cursor);

@@ -1,7 +1,5 @@
 #include "store.h"
 
-#include <ydb/core/protos/config.pb.h>
-
 namespace NKikimr::NSchemeShard {
 
 TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {

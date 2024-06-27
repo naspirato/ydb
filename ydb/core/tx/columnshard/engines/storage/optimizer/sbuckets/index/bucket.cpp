@@ -2,7 +2,6 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
-#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
@@ -40,10 +39,6 @@ bool TPortionsBucket::IsLocked(const std::shared_ptr<NDataLocks::TManager>& data
         }
     }
     return false;
-}
-
-ui64 TPortionsBucket::GetMemLimit() const {
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
 }
 
 }

@@ -158,7 +158,6 @@ struct TEvYdbProxy {
             explicit TMessage(const TDataEvent::TMessageBase& msg, ECodec codec)
                 : Offset(msg.GetOffset())
                 , Data(msg.GetData())
-                , CreateTime(msg.GetCreateTime())
                 , Codec(codec)
             {
             }
@@ -177,14 +176,12 @@ struct TEvYdbProxy {
             ui64 GetOffset() const { return Offset; }
             const TString& GetData() const { return Data; }
             TString& GetData() { return Data; }
-            TInstant GetCreateTime() const { return CreateTime; }
             ECodec GetCodec() const { return Codec; }
             void Out(IOutputStream& out) const;
 
         private:
             ui64 Offset;
             TString Data;
-            TInstant CreateTime;
             ECodec Codec;
         };
 

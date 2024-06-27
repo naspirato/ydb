@@ -1,8 +1,8 @@
 #pragma once
 
 #include "public.h"
-#include "spin_lock.h"
 
+#include <util/system/spinlock.h>
 #include <util/system/src_location.h>
 
 namespace NYT::NThreading {
@@ -30,7 +30,7 @@ public:
     bool IsLocked() const noexcept;
 
 private:
-    ::NYT::NThreading::TSpinLock SpinLock_;
+    ::TSpinLock SpinLock_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -457,12 +457,11 @@ private:
     #endif
     }
 
-    void OnRequestTimeout(TPromise<TNetworkAddress> promise, TGuid requestId)
+    static void OnRequestTimeout(TPromise<TNetworkAddress> promise, TGuid requestId)
     {
         auto timeoutError
             = TError(NNet::EErrorCode::ResolveTimedOut, "Ares DNS resolve timed out");
         if (promise.TrySet(std::move(timeoutError))) {
-            TimeoutCounter_.Increment();
             YT_LOG_WARNING(
                 "Ares DNS resolve timed out (RequestId: %v)",
                 requestId);
@@ -602,7 +601,7 @@ private:
         auto promise = NewPromise<TNetworkAddress>();
 
         auto timeoutCookie = TDelayedExecutor::Submit(
-            BIND(&TAresDnsResolver::OnRequestTimeout, MakeStrong(this), promise, requestId),
+            BIND(&TAresDnsResolver::OnRequestTimeout, promise, requestId),
             Config_->MaxResolveTimeout);
 
         return std::make_unique<TResolveRequest>(TResolveRequest{

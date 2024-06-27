@@ -313,8 +313,6 @@ private:
     ui16 InternalPartsCount;
 };
 
-TKey MakeKeyFromString(const TString& s, const TPartitionId& partition);
-
 inline
 TString GetTxKey(ui64 txId)
 {

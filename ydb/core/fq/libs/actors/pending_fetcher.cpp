@@ -155,8 +155,7 @@ public:
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         const TString& tenantName,
-        NActors::TMon* monitoring,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+        NActors::TMon* monitoring
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -178,7 +177,6 @@ public:
         , InternalServiceId(MakeInternalServiceActorId())
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
-        , S3ActorsFactory(std::move(s3ActorsFactory))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -443,8 +441,7 @@ private:
             task.operation_id(),
             computeConnection,
             NProtoInterop::CastFromProto(task.result_ttl()),
-            std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
-            S3ActorsFactory
+            std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end())
             );
 
         auto runActorId =
@@ -521,7 +518,6 @@ private:
     TActorId InternalServiceId;
     NActors::TMon* Monitoring;
     TComputeConfig ComputeConfig;
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
 };
 
 
@@ -540,8 +536,7 @@ NActors::IActor* CreatePendingFetcher(
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,
-    NActors::TMon* monitoring,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
+    NActors::TMon* monitoring)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -558,8 +553,7 @@ NActors::IActor* CreatePendingFetcher(
         std::move(pqCmConnections),
         clientCounters,
         tenantName,
-        monitoring,
-        std::move(s3ActorsFactory));
+        monitoring);
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

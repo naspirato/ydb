@@ -9,7 +9,6 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
-#include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr {
@@ -273,8 +272,6 @@ NKikimrViewer::EFlag GetFlagFromUsage(double usage);
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);
-NKikimrViewer::EFlag GetViewerFlag(Ydb::Monitoring::StatusFlag::Status flag);
-
 
 } // NViewer
 } // NKikimr

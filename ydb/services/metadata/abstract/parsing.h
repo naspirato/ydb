@@ -60,11 +60,9 @@ public:
             if (auto maybeAtom = i.template Maybe<NYql::NNodes::TCoAtom>()) {
                 Features.emplace(maybeAtom.Cast().StringValue(), "");
             } else if (auto maybeTuple = i.template Maybe<NNodes::TCoNameValueTuple>()) {
-                NNodes::TCoNameValueTuple tuple = maybeTuple.Cast();
-                if (auto maybeAtom = tuple.Value().template Maybe<NNodes::TCoAtom>()) {
-                    Features.emplace(tuple.Name().Value(), maybeAtom.Cast().Value());
-                } else if (auto maybeDataCtor = tuple.Value().template Maybe<NNodes::TCoIntegralCtor>()) {
-                    Features.emplace(tuple.Name().Value(), maybeDataCtor.Cast().Literal().Cast<NNodes::TCoAtom>().Value());
+                auto tuple = maybeTuple.Cast();
+                if (auto tupleValue = tuple.Value().template Maybe<NNodes::TCoAtom>()) {
+                    Features.emplace(tuple.Name().Value(), tupleValue.Cast().Value());
                 }
             }
         }

@@ -64,7 +64,6 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 auto& transfer = *alter.MutableTransfer()->AddTransfers();
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(i);
-                transfer.SetSessionId("SPLIT_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
                 result.emplace_back(alter);
             }
             {
@@ -195,7 +194,6 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(from1);
                 transfer.AddSourceTabletIds(from2);
-                transfer.SetSessionId("MERGE_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
                 transfer.SetMoving(true);
                 result.emplace_back(alter);
             }

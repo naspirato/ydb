@@ -55,9 +55,14 @@ namespace NYT {
  */
 
 template <class... TArgs>
-void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&... args);
+void Format(TStringBuilderBase* builder, TStaticFormat<TArgs...> fmt, TArgs&&... args);
 template <class... TArgs>
-TString Format(TFormatString<TArgs...> format, TArgs&&... args);
+void Format(TStringBuilderBase* builder, TRuntimeFormat fmt, TArgs&&... args);
+
+template <class... TArgs>
+TString Format(TStaticFormat<TArgs...> fmt, TArgs&&... args);
+template <class... TArgs>
+TString Format(TRuntimeFormat fmt, TArgs&&... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -137,7 +142,7 @@ class TLazyMultiValueFormatter
     : private TNonCopyable
 {
 public:
-    TLazyMultiValueFormatter(TStringBuf format, TArgs&&... args);
+    TLazyMultiValueFormatter(TStringBuf fmt, TArgs&&... args);
 
     // NB(arkady-e1ppa): We actually have to
     // forward declare this method as above
@@ -157,7 +162,7 @@ private:
 };
 
 template <class ... Args>
-auto MakeLazyMultiValueFormatter(TStringBuf format, Args&&... args);
+auto MakeLazyMultiValueFormatter(TStringBuf fmt, Args&&... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -170,23 +175,23 @@ auto MakeLazyMultiValueFormatter(TStringBuf format, Args&&... args);
 template <size_t Length, class TVector>
 void FormatVector(
     TStringBuilderBase* builder,
-    const char (&format)[Length],
+    const char (&fmt)[Length],
     const TVector& vec);
 
 template <class TVector>
 void FormatVector(
     TStringBuilderBase* builder,
-    TStringBuf format,
+    TStringBuf fmt,
     const TVector& vec);
 
 template <size_t Length, class TVector>
 TString FormatVector(
-    const char (&format)[Length],
+    const char (&fmt)[Length],
     const TVector& vec);
 
 template <class TVector>
 TString FormatVector(
-    TStringBuf format,
+    TStringBuf fmt,
     const TVector& vec);
 
 ////////////////////////////////////////////////////////////////////////////////

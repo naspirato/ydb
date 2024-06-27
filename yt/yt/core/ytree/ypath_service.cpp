@@ -56,11 +56,9 @@ struct TCacheKey
             TRef::AreBitwiseEqual(RequestBody, other.RequestBody);
     }
 
-    friend void FormatValue(TStringBuilderBase* builder, const TCacheKey& key, TStringBuf /*spec*/)
+    friend TString ToString(const TCacheKey& key)
     {
-        Format(
-            builder,
-            "{%v %v %x}",
+        return Format("{%v %v %x}",
             key.Method,
             key.Path,
             key.RequestBodyHash);

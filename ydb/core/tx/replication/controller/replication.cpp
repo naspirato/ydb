@@ -1,4 +1,3 @@
-#include "lag_provider.h"
 #include "private_events.h"
 #include "replication.h"
 #include "secret_resolver.h"
@@ -18,17 +17,8 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TReplication::TImpl: public TLagProvider {
+class TReplication::TImpl {
     friend class TReplication;
-
-    struct TTarget: public TItemWithLag {
-        THolder<ITarget> Ptr;
-
-        explicit TTarget(ITarget* iface)
-            : Ptr(iface)
-        {
-        }
-    };
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
         if (SecretResolver) {
@@ -72,7 +62,7 @@ class TReplication::TImpl: public TLagProvider {
 
     void ProgressTargets(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Progress(ctx);
+            target->Progress(ctx);
         }
     }
 
@@ -89,7 +79,6 @@ public:
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
-        TLagProvider::AddPendingLag(id);
         return id;
     }
 
@@ -101,7 +90,7 @@ public:
     ITarget* FindTarget(ui64 id) {
         auto it = Targets.find(id);
         return it != Targets.end()
-            ? it->second.Ptr.Get()
+            ? it->second.Get()
             : nullptr;
     }
 
@@ -162,7 +151,7 @@ public:
 
     void Shutdown(const TActorContext& ctx) {
         for (auto& [_, target] : Targets) {
-            target.Ptr->Shutdown(ctx);
+            target->Shutdown(ctx);
         }
 
         for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {
@@ -185,15 +174,6 @@ public:
         SetState(EState::Error, issue);
     }
 
-    void UpdateLag(ui64 targetId, TDuration lag) {
-        auto it = Targets.find(targetId);
-        if (it == Targets.end()) {
-            return;
-        }
-
-        TLagProvider::UpdateLag(it->second, targetId, lag);
-    }
-
 private:
     const ui64 ReplicationId;
     const TPathId PathId;
@@ -203,7 +183,7 @@ private:
     EState State = EState::Ready;
     TString Issue;
     ui64 NextTargetId = 1;
-    THashMap<ui64, TTarget> Targets;
+    THashMap<ui64, THolder<ITarget>> Targets;
     THashSet<ui64> PendingAlterTargets;
     TActorId SecretResolver;
     TActorId YdbProxy;
@@ -347,14 +327,6 @@ void TReplication::RemovePendingAlterTarget(ui64 id) {
 
 bool TReplication::CheckAlterDone() const {
     return Impl->State == EState::Ready && Impl->PendingAlterTargets.empty();
-}
-
-void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
-    Impl->UpdateLag(targetId, lag);
-}
-
-const TMaybe<TDuration> TReplication::GetLag() const {
-    return Impl->GetLag();
 }
 
 }

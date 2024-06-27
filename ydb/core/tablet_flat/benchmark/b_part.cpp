@@ -17,7 +17,6 @@
 #include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_steps.h>
 
-// ya test -r -D BENCHMARK_MAKE_LARGE_PART
 #ifndef BENCHMARK_MAKE_LARGE_PART
 #define BENCHMARK_MAKE_LARGE_PART 0
 #endif
@@ -38,6 +37,8 @@ namespace {
         
         conf.WriteBTreeIndex = writeBTreeIndex;
 
+        conf.SliceSize = conf.Group(0).PageSize * 4;
+
         return conf;
     }
 
@@ -47,32 +48,23 @@ namespace {
         void SetUp(::benchmark::State& state) 
         {
             const bool useBTree = state.range(0);
-            const ui32 partsCount = state.range(1);
-            const bool groups = state.range(2);
-            const bool history = state.range(3);
+            const bool groups = state.range(1);
+            const bool history = state.range(2);
 
             ui64 rows = history ? 300000 : 1000000;
             if (BENCHMARK_MAKE_LARGE_PART) {
                 rows *= 10;
             }
             Mass = new NTest::TMass(new NTest::TModelStd(groups), rows);
-            Subset = TMake(*Mass, PageConf(Mass->Model->Scheme->Families.size(), useBTree)).Mixed(0, partsCount, TMixerRnd(partsCount), history ? 0.7 : 0);
+            Subset = TMake(*Mass, PageConf(Mass->Model->Scheme->Families.size(), useBTree)).Mixed(0, 1, TMixerOne{ }, history ? 0.7 : 0);
             
-            ui64 dataBytes = 0, dataPages = 0, indexBytes = 0;
-            ui32 bTreeLevels = 0;
             for (const auto& part : Subset->Flatten) { // single part
-                dataBytes += part->Stat.Bytes;
-                dataPages += IndexTools::CountMainPages(*part);
-                indexBytes += part->IndexesRawSize;
+                state.counters["DataBytes"] = part->Stat.Bytes;
+                state.counters["DataPages"] = IndexTools::CountMainPages(*part);
+                state.counters["IndexBytes"] = part->IndexesRawSize;
                 if (useBTree) {
-                    bTreeLevels = Max(bTreeLevels, part->IndexPages.BTreeGroups[0].LevelCount);
+                    state.counters["Levels{0}"] = part->IndexPages.BTreeGroups[0].LevelCount;
                 }
-            }
-            state.counters["DataBytes"] = dataBytes;
-            state.counters["DataPages"] = dataPages;
-            state.counters["IndexBytes"] = indexBytes;
-            if (useBTree) {
-                state.counters["Levels{0}"] = bTreeLevels;
             }
 
             if (history) {
@@ -158,7 +150,7 @@ BENCHMARK_DEFINE_F(TPartFixture, Prev)(benchmark::State& state) {
 
 BENCHMARK_DEFINE_F(TPartFixture, SeekKey)(benchmark::State& state) {
     const bool useBTree = state.range(0);
-    const ESeek seek = ESeek(state.range(4));
+    const ESeek seek = ESeek(state.range(3));
 
     TRowTool rowTool(*Subset->Scheme);
     auto tags = TVector<TTag>();
@@ -186,9 +178,9 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekKey)(benchmark::State& state) {
 }
 
 BENCHMARK_DEFINE_F(TPartFixture, DoReads)(benchmark::State& state) {
-    const bool reverse = state.range(4);
-    const ESeek seek = static_cast<ESeek>(state.range(5));
-    const ui32 items = state.range(6);
+    const bool reverse = state.range(3);
+    const ESeek seek = static_cast<ESeek>(state.range(4));
+    const ui32 items = state.range(5);
 
     for (auto _ : state) {
         auto it = Mass->Saved.Any(Rnd);
@@ -208,8 +200,8 @@ BENCHMARK_DEFINE_F(TPartFixture, DoReads)(benchmark::State& state) {
 }
 
 BENCHMARK_DEFINE_F(TPartFixture, DoCharge)(benchmark::State& state) {
-    const bool reverse = state.range(4);
-    const ui32 items = state.range(5);
+    const bool reverse = state.range(3);
+    const ui32 items = state.range(4);
 
     auto tags = TVector<TTag>();
     for (auto c : Subset->Scheme->Cols) {
@@ -234,14 +226,13 @@ BENCHMARK_DEFINE_F(TPartFixture, DoCharge)(benchmark::State& state) {
 BENCHMARK_DEFINE_F(TPartFixture, BuildStats)(benchmark::State& state) {
     for (auto _ : state) {
         TStats stats;
-        BuildStats(*Subset, stats, NDataShard::gDbStatsRowCountResolution, NDataShard::gDbStatsDataSizeResolution, NDataShard::gDbStatsHistogramBucketsCount, &Env, [](){});
+        BuildStats(*Subset, stats, NDataShard::gDbStatsRowCountResolution, NDataShard::gDbStatsDataSizeResolution, &Env, [](){});
     }
 }
 
 BENCHMARK_REGISTER_F(TPartFixture, SeekRowId)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* parts */ {4},
         /* groups: */ {0, 1},
         /* history: */ {0}})
     ->Unit(benchmark::kMicrosecond);
@@ -249,7 +240,6 @@ BENCHMARK_REGISTER_F(TPartFixture, SeekRowId)
 BENCHMARK_REGISTER_F(TPartFixture, Next)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* parts */ {4},
         /* groups: */ {0, 1},
         /* history: */ {0}})
     ->Unit(benchmark::kMicrosecond);
@@ -257,7 +247,6 @@ BENCHMARK_REGISTER_F(TPartFixture, Next)
 BENCHMARK_REGISTER_F(TPartFixture, Prev)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* parts */ {4},
         /* groups: */ {0, 1},
         /* history: */ {0}})
     ->Unit(benchmark::kMicrosecond);
@@ -265,7 +254,6 @@ BENCHMARK_REGISTER_F(TPartFixture, Prev)
 BENCHMARK_REGISTER_F(TPartFixture, SeekKey)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* parts */ {4},
         /* groups: */ {0, 1},
         /* history: */ {0},
         /* ESeek: */ {1}})
@@ -274,7 +262,6 @@ BENCHMARK_REGISTER_F(TPartFixture, SeekKey)
 BENCHMARK_REGISTER_F(TPartFixture, DoReads)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* parts */ {4},
         /* groups: */ {1},
         /* history: */ {1},
         /* reverse: */ {0},
@@ -285,7 +272,6 @@ BENCHMARK_REGISTER_F(TPartFixture, DoReads)
 BENCHMARK_REGISTER_F(TPartFixture, DoCharge)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* parts */ {4},
         /* groups: */ {1},
         /* history: */ {1},
         /* reverse: */ {0},
@@ -295,7 +281,6 @@ BENCHMARK_REGISTER_F(TPartFixture, DoCharge)
 BENCHMARK_REGISTER_F(TPartFixture, BuildStats)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* parts */ {1, 4, 10},
         /* groups: */ {0, 1},
         /* history: */ {0, 1}})
     ->Unit(benchmark::kMicrosecond);

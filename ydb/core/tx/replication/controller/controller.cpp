@@ -341,8 +341,6 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
         if (!session.HasWorker(id)) {
             StopQueue.emplace(id, nodeId);
-        } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
-            UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
@@ -368,20 +366,6 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     }
 
     ScheduleProcessQueues();
-}
-
-void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
-    auto replication = Find(id.ReplicationId());
-    if (!replication) {
-        return;
-    }
-
-    auto* target = replication->FindTarget(id.TargetId());
-    if (!target) {
-        return;
-    }
-
-    target->UpdateLag(id.WorkerId(), lag);
 }
 
 void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {

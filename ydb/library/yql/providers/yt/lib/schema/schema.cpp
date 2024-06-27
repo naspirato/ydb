@@ -940,9 +940,7 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
     YQL_ENSURE(false, "Not supported type: " << (*type)[0].AsString());
 }
 
-NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCompatibility, bool useColumnGroups) {
-    static TString DEFAULT_GROUP = "default";
-
+NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCompatibility) {
     NYT::TTableSchema schema;
     const auto& rowSpecMap = rowSpec.AsMap();
 
@@ -994,10 +992,6 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
             auto columnNode = NYT::TColumnSchema()
                 .Name(columnString);
 
-            if (useColumnGroups) {
-                columnNode.Group(DEFAULT_GROUP);
-            }
-
             bool auxField = false;
             if (useNativeTypes) {
                 auto ytType = RowSpecYqlTypeToYtNativeType(*sortedByType, nativeYtTypeFlags);
@@ -1020,21 +1014,19 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
         if (keyColumns.contains(column)) {
             continue;
         }
-        auto columnNode = NYT::TColumnSchema().Name(column);
-        if (useColumnGroups) {
-            columnNode.Group(DEFAULT_GROUP);
-        }
         if (useNativeTypes) {
             auto field = fieldNativeTypes.find(column);
             YQL_ENSURE(field != fieldNativeTypes.end());
-            columnNode.RawTypeV3(field->second);
-
+            schema.AddColumn(NYT::TColumnSchema()
+                .Name(field->first)
+                .RawTypeV3(field->second));
         } else {
             auto field = fieldTypes.find(column);
             YQL_ENSURE(field != fieldTypes.end());
-            columnNode.Type(field->second.first, /*required*/ field->second.second);
+            schema.AddColumn(NYT::TColumnSchema()
+                .Name(field->first)
+                .Type(field->second.first, /*required*/ field->second.second));
         }
-        schema.AddColumn(std::move(columnNode));
     }
 
     // add fake column to avoid slow 0-columns YT schema

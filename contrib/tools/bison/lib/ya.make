@@ -81,6 +81,7 @@ SRCS(
     quotearg.c
     sig-handler.c
     spawn-pipe.c
+    stpcpy.c
     stripslash.c
     timevar.c
     unistd.c
@@ -120,7 +121,6 @@ IF (OS_WINDOWS)
         raise.c
         sigaction.c
         sigprocmask.c
-        stpcpy.c
         strndup.c
         waitpid.c
         wcwidth.c

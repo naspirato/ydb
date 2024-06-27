@@ -12,7 +12,6 @@
 #include "pythonic/operator_/isub.hpp"
 #include "pythonic/operator_/ixor.hpp"
 #include "pythonic/types/numpy_iexpr.hpp"
-#include "pythonic/utils/allocate.hpp"
 #include "pythonic/utils/meta.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -800,12 +799,12 @@ namespace types
   numpy_gexpr<Arg, S...>::fast(F const &filter) const
   {
     long sz = filter.template shape<0>();
-    long *raw = utils::allocate<long>(sz);
+    long *raw = (long *)malloc(sz * sizeof(long));
     long n = 0;
     for (long i = 0; i < sz; ++i)
       if (filter.fast(i))
         raw[n++] = i;
-    // reallocate(raw, n);
+    // realloc(raw, n * sizeof(long));
     long shp[1] = {n};
     return this->fast(
         ndarray<long, pshape<long>>(raw, shp, types::ownership::owned));

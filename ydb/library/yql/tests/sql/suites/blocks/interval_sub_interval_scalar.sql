@@ -1,4 +1,5 @@
 USE plato;
+pragma UseBlocks;
 
 SELECT
     ni - Interval("P1D"),

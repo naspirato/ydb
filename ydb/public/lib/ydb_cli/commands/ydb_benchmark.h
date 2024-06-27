@@ -22,12 +22,10 @@ private:
     TString OutFilePath;
     ui32 IterationsCount;
     TString JsonReportFileName;
-    TString CsvReportFileName;
     TString MiniStatFileName;
     TSet<ui32> QueriesToRun;
     TSet<ui32> QueriesToSkip;
     TVector<TString> QuerySettings;
-    ui32 VerboseLevel = 0;
 };
 
 }

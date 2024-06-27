@@ -43,15 +43,7 @@ def _convertCFFToCFF2(cff, otFont):
     fdArray = topDict.FDArray if hasattr(topDict, "FDArray") else None
     charStrings = topDict.CharStrings
     globalSubrs = cff.GlobalSubrs
-    localSubrs = (
-        [getattr(fd.Private, "Subrs", []) for fd in fdArray]
-        if fdArray
-        else (
-            [topDict.Private.Subrs]
-            if hasattr(topDict, "Private") and hasattr(topDict.Private, "Subrs")
-            else []
-        )
-    )
+    localSubrs = [getattr(fd.Private, "Subrs", []) for fd in fdArray] if fdArray else []
 
     for glyphName in charStrings.keys():
         cs, fdIndex = charStrings.getItemAndSelector(glyphName)
@@ -78,21 +70,13 @@ def _convertCFFToCFF2(cff, otFont):
     for glyphName in charStrings.keys():
         cs, fdIndex = charStrings.getItemAndSelector(glyphName)
         program = cs.program
-
-        thisLocalSubrs = (
-            localSubrs[fdIndex]
-            if fdIndex
-            else (
-                getattr(topDict.Private, "Subrs", [])
-                if hasattr(topDict, "Private")
-                else []
-            )
-        )
+        if fdIndex == None:
+            fdIndex = 0
 
         # Intentionally use custom type for nominalWidthX, such that any
         # CharString that has an explicit width encoded will throw back to us.
         extractor = T2WidthExtractor(
-            thisLocalSubrs,
+            localSubrs[fdIndex] if localSubrs else [],
             globalSubrs,
             nominalWidthXError,
             0,
@@ -110,7 +94,7 @@ def _convertCFFToCFF2(cff, otFont):
                 op = program.pop(0)
                 bias = extractor.localBias if op == "callsubr" else extractor.globalBias
                 subrNumber += bias
-                subrSet = thisLocalSubrs if op == "callsubr" else globalSubrs
+                subrSet = localSubrs[fdIndex] if op == "callsubr" else globalSubrs
                 subrProgram = subrSet[subrNumber].program
                 program[:0] = subrProgram
             # Now pop the actual width
