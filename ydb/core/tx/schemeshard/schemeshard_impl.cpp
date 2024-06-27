@@ -68,8 +68,8 @@ const TSchemeLimits TSchemeShard::DefaultLimits = {};
 
 void TSchemeShard::SubscribeToTempTableOwners() {
     auto ctx = ActorContext();
-    auto& TempDirsByOwner = TempDirsState.TempDirsByOwner;
-    for (const auto& [ownerActorId, tempTables] : TempDirsByOwner) {
+    auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
+    for (const auto& [ownerActorId, tempTables] : tempTablesByOwner) {
         ctx.Send(new IEventHandle(ownerActorId, SelfId(),
                                 new TEvSchemeShard::TEvOwnerActorAck(),
                                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
@@ -435,7 +435,7 @@ void TSchemeShard::Clear() {
         UpdateBorrowedCompactionQueueMetrics();
     }
 
-    ClearTempDirsState();
+    ClearTempTablesState();
 
     ShardsWithBorrowed.clear();
     ShardsWithLoaned.clear();
@@ -1896,8 +1896,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::Paths::LastTxId>(elem->LastTxId),
                     NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::Paths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
-                    NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion),
-                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
+                    NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion)
                     );
     } else {
         db.Table<Schema::MigratedPaths>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -1914,8 +1913,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::MigratedPaths::LastTxId>(elem->LastTxId),
                     NIceDb::TUpdate<Schema::MigratedPaths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
-                    NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion),
-                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
+                    NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion)
                     );
     }
 }
@@ -4376,7 +4374,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
         BorrowedCompactionQueue->Shutdown(ctx);
     }
 
-    ClearTempDirsState();
+    ClearTempTablesState();
     if (BackgroundCleaningQueue) {
         BackgroundCleaningQueue->Shutdown(ctx);
     }
@@ -6328,7 +6326,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
-    } else if (BackgroundCleaningTxToDirPathId.contains(txId)) {
+    } else if (BackgroundCleaningTxs.contains(txId)) {
         return HandleBackgroundCleaningTransactionResult(ev);
     }
 
@@ -6384,7 +6382,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         Execute(CreateTxReply(txId), ctx);
         executed = true;
     }
-    if (BackgroundCleaningTxToDirPathId.contains(txId)) {
+    if (BackgroundCleaningTxs.contains(txId)) {
         HandleBackgroundCleaningCompletionResult(txId);
         executed = true;
     }
@@ -6558,24 +6556,24 @@ void TSchemeShard::ApplyPartitionConfigStoragePatch(
     }
 }
 
-std::optional<TTempDirInfo> TSchemeShard::ResolveTempDirInfo(const TPathId& pathId) {
+std::optional<TTempTableInfo> TSchemeShard::ResolveTempTableInfo(const TPathId& pathId) {
     auto path = TPath::Init(pathId, this);
     if (!path) {
         return std::nullopt;
     }
-    TTempDirInfo info;
+    TTempTableInfo info;
     info.Name = path.LeafName();
     info.WorkingDir = path.Parent().PathString();
 
-    auto pathInfo = PathsById.at(path.Base()->PathId);
-    if (!pathInfo) {
+    TTableInfo::TPtr table = Tables.at(path.Base()->PathId);
+    if (!table) {
         return std::nullopt;
     }
-    if (!pathInfo->TempDirOwnerActorId) {
+    if (!table->IsTemporary) {
         return std::nullopt;
     }
 
-    info.TempDirOwnerActorId = pathInfo->TempDirOwnerActorId;
+    info.OwnerActorId = table->OwnerActorId;
     return info;
 }
 

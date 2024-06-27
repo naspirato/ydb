@@ -388,7 +388,7 @@ version (void)
 
   fprintf (stdout,
            _("Copyright (C) %d Free Software Foundation, Inc.\n"),
-           PACKAGE_COPYRIGHT_YEAR);
+           2013);
 
   fputs (_("\
 This is free software; see the source for copying conditions.  There is NO\n\
@@ -476,8 +476,8 @@ enum
   LOCATIONS_OPTION = CHAR_MAX + 1,
   PRINT_LOCALEDIR_OPTION,
   PRINT_DATADIR_OPTION,
-  M4_PATH,
-  REPORT_FILE_OPTION
+  REPORT_FILE_OPTION,
+  M4_PATH
 };
 
 static struct option const long_options[] =
@@ -696,9 +696,11 @@ getargs (int argc, char *argv[])
                                       command_line_location (), true);
         break;
 
+#if 0
       case PRINT_LOCALEDIR_OPTION:
         printf ("%s\n", LOCALEDIR);
         exit (EXIT_SUCCESS);
+#endif
 
       case PRINT_DATADIR_OPTION:
         printf ("%s\n", pkgdatadir ());

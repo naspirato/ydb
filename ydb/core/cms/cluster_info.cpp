@@ -3,7 +3,6 @@
 #include "node_checkers.h"
 
 #include <ydb/core/base/nameservice.h>
-#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -262,7 +261,7 @@ TString TVDiskInfo::PrettyItemName() const
 
 TString TVDiskInfo::GetDeviceName() const
 {
-    return Sprintf("vdisk-%u-%u-%u-%u-%u", VDiskId.GroupID.GetRawId(), VDiskId.GroupGeneration,
+    return Sprintf("vdisk-%u-%u-%u-%u-%u", VDiskId.GroupID, VDiskId.GroupGeneration,
                    VDiskId.FailRealm, VDiskId.FailDomain, VDiskId.VDisk);
 }
 
@@ -278,7 +277,7 @@ bool TVDiskInfo::NameToId(const TString &name, TVDiskID &id)
     if (size != static_cast<int>(name.size()))
         return false;
 
-    id = TVDiskID(TGroupId::FromValue(group), gen, ring, domain, vdisk);
+    id = TVDiskID(group, gen, ring, domain, vdisk);
 
     return true;
 }
@@ -503,7 +502,7 @@ void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
         return;
     }
 
-    TVDiskID vdiskId(TGroupId::FromProto(&info, &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId),
+    TVDiskID vdiskId(info.GetGroupId(),
                      info.GetGroupGeneration(),
                      info.GetFailRealmIdx(),
                      info.GetFailDomainIdx(),
@@ -1009,7 +1008,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
         TStringStream ss;
         auto &group = entry.second;
         ss << "BSGroup {" << Endl
-           << "  Id: " << group.GroupId << Endl;
+           << "  Id: " << (ui32)group.GroupId << Endl;
         if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount)
             ss << "  Erasure: UNKNOWN" << Endl;
         else

@@ -20,7 +20,7 @@ namespace NKikimr {
 
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(ui32 groupId, bool isEjected, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
             const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch)
-        : GroupId(TGroupId::FromValue(groupId))
+        : GroupId(groupId)
         , NodeMon(nodeMon)
         , IsEjected(isEjected)
         , ForceWaitAllDrives(false)

@@ -21,8 +21,6 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/atomic_object.h>
 
-#include <yt/yt/core/tracing/public.h>
-
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -35,11 +33,10 @@
 namespace NYT::NRpc::NBus {
 
 using namespace NYT::NBus;
-using namespace NConcurrency;
-using namespace NTracing;
 using namespace NYPath;
 using namespace NYTree;
 using namespace NYson;
+using namespace NConcurrency;
 
 using NYT::FromProto;
 using NYT::ToProto;
@@ -1097,12 +1094,6 @@ private:
                     << TErrorAttribute("timeout", *requestControl->GetTimeout());
             }
 
-            if (!detailedError.HasTracingAttributes()) {
-                if (auto tracingAttributes = requestControl->GetTracingAttributes()) {
-                    detailedError.SetTracingAttributes(*tracingAttributes);
-                }
-            }
-
             YT_LOG_DEBUG(detailedError, "%v (RequestId: %v)",
                 reason,
                 requestControl->GetRequestId());
@@ -1196,11 +1187,6 @@ private:
         NTracing::TCurrentTraceContextGuard GetTraceContextGuard() const
         {
             return TraceContext_.MakeTraceContextGuard();
-        }
-
-        std::optional<TTracingAttributes> GetTracingAttributes() const
-        {
-            return TraceContext_.GetTracingAttributes();
         }
 
         template <typename TLock>

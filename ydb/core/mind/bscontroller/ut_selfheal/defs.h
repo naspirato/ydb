@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/mind/bscontroller/defs.h>
+
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
 

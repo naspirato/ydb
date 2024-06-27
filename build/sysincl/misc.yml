@@ -49,6 +49,7 @@
   includes:
     - error.h:       contrib/tools/bison/lib/error.h
     - obstack.h:     contrib/tools/bison/lib/obstack.h
+    - system.h
     # ucrt headers are included by bison/lib in a very specific way
     - ../ucrt/fcntl.h
     - ../ucrt/locale.h

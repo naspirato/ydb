@@ -1433,7 +1433,7 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         // Write bad DyNumber
-        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {1});
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

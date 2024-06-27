@@ -24,17 +24,10 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready && !Self->IsReplicated()) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE);
-            return true;
-        }
-
-        if (!Self->IsReplicated()) {
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST);
             return true;
         }
 

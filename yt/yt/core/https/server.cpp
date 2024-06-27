@@ -14,7 +14,6 @@
 
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
-#include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 namespace NYT::NHttps {
 
@@ -64,9 +63,6 @@ public:
         if (CertificateUpdater_) {
             YT_UNUSED_FUTURE(CertificateUpdater_->Stop());
         }
-        if (OwnPoller_) {
-            OwnPoller_->Shutdown();
-        }
     }
 
     void SetPathMatcher(const IRequestPathMatcherPtr& matcher) override
@@ -79,15 +75,9 @@ public:
         return Underlying_->GetPathMatcher();
     }
 
-    void SetOwnPoller(IPollerPtr poller)
-    {
-        OwnPoller_ = std::move(poller);
-    }
-
 private:
     const IServerPtr Underlying_;
     const TPeriodicExecutorPtr CertificateUpdater_;
-    IPollerPtr OwnPoller_;
 };
 
 static void ApplySslConfig(const TSslContextPtr&  sslContext, const TServerCredentialsConfigPtr& sslConfig)
@@ -168,14 +158,6 @@ IServerPtr CreateServer(
 IServerPtr CreateServer(const TServerConfigPtr& config, const IPollerPtr& poller)
 {
     return CreateServer(config, poller, poller, /*controlInvoker*/ nullptr);
-}
-
-IServerPtr CreateServer(const TServerConfigPtr& config, int pollerThreadCount)
-{
-    auto poller = CreateThreadPoolPoller(pollerThreadCount, config->ServerName);
-    auto server = CreateServer(config, poller);
-    StaticPointerCast<TServer>(server)->SetOwnPoller(std::move(poller));
-    return server;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

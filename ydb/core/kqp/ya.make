@@ -73,7 +73,6 @@ RECURSE(
     run_script_actor
     runtime
     session_actor
-    workload_service
 )
 
 RECURSE_FOR_TESTS(

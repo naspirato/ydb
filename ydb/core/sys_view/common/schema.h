@@ -596,12 +596,15 @@ struct Schema : NIceDb::Schema {
         NScheme::TTypeInfo _ColumnTypeInfo;
         TString _ColumnName;
         PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName) 
-            : _ColumnId(columnId), _ColumnTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeName(columnTypeName)), _ColumnName(columnName)
-        {}
+            : _ColumnId(columnId), _ColumnTypeInfo(NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeName(columnTypeName))), _ColumnName(columnName) {} 
+        
+        TString GetColumnName() const {
+            return _ColumnName;
+        }
     };
 
     struct PgTables {
-        const static TVector<PgColumn> Columns;
+        static TVector<PgColumn> Columns;
     };
 };
 

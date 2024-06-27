@@ -513,7 +513,15 @@ public:
         DoIO(&ReadDirection_, Any(control & EPollControl::Read));
 
         if (Any(control & EPollControl::ReadHup)) {
-            NotifyPeerDisconnected();
+            std::vector<TCallback<void()>> callbacks;
+            {
+                auto guard = Guard(Lock_);
+                PeerDisconnected_ = true;
+                callbacks = std::move(OnPeerDisconnected_);
+            }
+            for (const auto& cb : callbacks) {
+                cb();
+            }
         }
     }
 
@@ -557,7 +565,6 @@ public:
         YT_VERIFY(TryClose(FD_, false));
         FD_ = -1;
 
-        NotifyPeerDisconnected();
         ReadDirection_.OnShutdown();
         WriteDirection_.OnShutdown();
 
@@ -1106,19 +1113,6 @@ private:
     void AbortFromWriteTimeout()
     {
         YT_UNUSED_FUTURE(Abort(TError("Write timeout")));
-    }
-
-    void NotifyPeerDisconnected()
-    {
-        std::vector<TCallback<void()>> callbacks;
-        {
-            auto guard = Guard(Lock_);
-            PeerDisconnected_ = true;
-            callbacks = std::move(OnPeerDisconnected_);
-        }
-        for (const auto& cb : callbacks) {
-            cb();
-        }
     }
 };
 

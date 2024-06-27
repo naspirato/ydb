@@ -159,7 +159,9 @@ flush_stdout (void)
   /* POSIX states that fflush (stdout) after fclose is unspecified; it
      is safe in glibc, but not on all other platforms.  fflush (NULL)
      is always defined, but too draconian.  */
+#if !defined(_WIN32) && !defined(_WIN64)
   if (0 <= stdout_fd && is_open (stdout_fd))
+#endif
 #endif
     fflush (stdout);
 }

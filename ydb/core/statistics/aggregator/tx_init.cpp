@@ -213,13 +213,12 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->SignalTabletActive(ctx);
 
         Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
-        Self->EnableColumnStatistics = AppData(ctx)->FeatureFlags.GetEnableColumnStatistics();
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->PropagateInterval, new TEvPrivate::TEvPropagate());
         Self->Schedule(Self->ScheduleScanIntervalTime, new TEvPrivate::TEvScheduleScan());
 
-        Self->InitializeStatisticsTable();
+        Self->Initialize();
 
         if (Self->ScanTableId.PathId) {
             Self->Navigate();

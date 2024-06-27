@@ -2312,7 +2312,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
-    void UploadRow(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<TCell>& keys, const TVector<TCell>& values)
+    void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds)
     {
         auto tableDesc = DescribePath(runtime, tablePath, true, true);
         const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
@@ -2330,9 +2330,15 @@ namespace NSchemeShardUT_Private {
             scheme.AddValueColumnIds(tag);
         }
 
-        auto& row = *ev->Record.AddRows();
-        row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
-        row.SetValueColumns(TSerializedCellVec::Serialize(values));
+        for (ui32 i : recordIds) {
+            auto key = TVector<TCell>{TCell::Make(i)};
+            auto value = TVector<TCell>{TCell::Make(i)};
+            Cerr << value[0].AsBuf().Size() << Endl;
+
+            auto& row = *ev->Record.AddRows();
+            row.SetKeyColumns(TSerializedCellVec::Serialize(key));
+            row.SetValueColumns(TSerializedCellVec::Serialize(value));
+        }
 
         const auto& sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, datashardTabletId, sender, ev.Release());

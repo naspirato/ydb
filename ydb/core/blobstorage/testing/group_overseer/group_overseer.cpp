@@ -97,7 +97,7 @@ namespace NKikimr::NTesting {
                     T::EventType != TEvBlobStorage::EvInplacePatchResult &&
                     T::EventType != TEvBlobStorage::EvCollectGarbageResult &&
                     T::EventType != TEvBlobStorage::EvDiscoverResult) {
-                Y_ABORT_UNLESS(groupId == msg.GroupId.GetRawId());
+                Y_ABORT_UNLESS(groupId == msg.GroupId);
             }
 
             const auto groupStateIt = GroupStates.try_emplace(groupId, groupId).first;

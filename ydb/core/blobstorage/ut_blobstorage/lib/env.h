@@ -5,7 +5,6 @@
 #include "node_warden_mock.h"
 
 #include <ydb/core/driver_lib/version/version.h>
-#include <ydb/core/base/blobstorage_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -558,7 +557,7 @@ struct TEnvironmentSetup {
         for (const auto& vslot : baseConfig.GetVSlot()) {
             const auto& l = vslot.GetVSlotId();
             vslotToDiskMap.emplace(MakeBlobStorageVDiskID(l.GetNodeId(), l.GetPDiskId(), l.GetVSlotId()),
-                TVDiskID(TGroupId::FromProto(&vslot, &NKikimrBlobStorage::TBaseConfig_TVSlot::GetGroupId), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
+                TVDiskID(vslot.GetGroupId(), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
                 vslot.GetFailDomainIdx(), vslot.GetVDiskIdx()));
         }
         for (const auto& group : baseConfig.GetGroup()) {
@@ -571,7 +570,7 @@ struct TEnvironmentSetup {
                     const auto it = vslotToDiskMap.find(MakeBlobStorageVDiskID(l.GetNodeId(), l.GetPDiskId(), l.GetVSlotId()));
                     Y_ABORT_UNLESS(it != vslotToDiskMap.end());
                     const TVDiskID& vdiskId = it->second;
-                    Y_ABORT_UNLESS(vdiskId.GroupID.GetRawId() == groupId);
+                    Y_ABORT_UNLESS(vdiskId.GroupID == groupId);
                     Y_ABORT_UNLESS(vdiskId.GroupGeneration == group.GetGroupGeneration());
                     const bool inserted = vdisks.emplace(it->second, it->first).second;
                     Y_ABORT_UNLESS(inserted);
@@ -583,7 +582,7 @@ struct TEnvironmentSetup {
                 TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType(
                     TBlobStorageGroupType::ErasureSpeciesByName(group.GetErasureSpecies())),
                     numFailRealms, numFailDomainsPerFailRealm, numVDisksPerFailDomain);
-                TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TBaseConfig::TGroup::GetGroupId), group.GetGroupGeneration());
+                TBlobStorageGroupInfo::TDynamicInfo dyn(group.GetGroupId(), group.GetGroupGeneration());
                 for (const auto& [vdiskId, vdiskActorId] : vdisks) {
                     dyn.PushBackActorId(vdiskActorId);
                 }
@@ -596,7 +595,7 @@ struct TEnvironmentSetup {
     TActorId CreateQueueActor(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 index) {
         TBSProxyContextPtr bspctx = MakeIntrusive<TBSProxyContext>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
         auto flowRecord = MakeIntrusive<NBackpressure::TFlowRecord>();
-        auto groupInfo = GetGroupInfo(vdiskId.GroupID.GetRawId());
+        auto groupInfo = GetGroupInfo(vdiskId.GroupID);
         std::unique_ptr<IActor> actor(CreateVDiskBackpressureClient(groupInfo, vdiskId, queueId,
             MakeIntrusive<::NMonitoring::TDynamicCounters>(), bspctx,
             NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::DSProxy, index), TStringBuilder()

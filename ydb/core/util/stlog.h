@@ -2,7 +2,6 @@
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/base/blobstorage_common.h>
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/text_format.h>
 
@@ -115,9 +114,6 @@ namespace NKikimr::NStLog {
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
 
-    template<typename T> struct TIsIdWrapper { static constexpr bool value = false; };
-    template<typename TType, typename TTag> struct TIsIdWrapper<TIdWrapper<TType, TTag>> { static constexpr bool value = true; };
-
     template<typename Base, typename T>
     class TBoundParam : public Base {
         T Value;
@@ -223,8 +219,6 @@ namespace NKikimr::NStLog {
                     OutputParam(json, *begin);
                 }
                 json.CloseArray();
-            } else if constexpr (TIsIdWrapper<Tx>::value){
-                json.Write(value.GetRawId());
             } else if constexpr (std::is_constructible_v<NJson::TJsonValue, Tx>) {
                 json.Write(value);
             } else {

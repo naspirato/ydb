@@ -236,8 +236,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory()
-                .FailOnRestrictedCreateInTempZone();
+                .IsLikeDirectory();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

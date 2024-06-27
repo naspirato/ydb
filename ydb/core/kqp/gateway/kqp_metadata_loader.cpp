@@ -41,7 +41,7 @@ NavigateEntryResult CreateNavigateEntry(const TString& path,
         auto tempTablesInfoIt = tempTablesState->FindInfo(currentPath, false);
         if (tempTablesInfoIt != tempTablesState->TempTables.end()) {
             queryName = currentPath;
-            currentPath = GetTempTablePath(tempTablesState->Database, tempTablesState->SessionId, tempTablesInfoIt->first);
+            currentPath = currentPath + tempTablesState->SessionId;
         }
     }
     entry.Path = SplitPath(currentPath);

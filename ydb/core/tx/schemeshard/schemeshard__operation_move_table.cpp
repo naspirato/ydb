@@ -598,8 +598,7 @@ public:
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
-                .IsResolved()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                .IsResolved();
 
                 if (dstParent.IsUnderDeleting()) {
                     checks

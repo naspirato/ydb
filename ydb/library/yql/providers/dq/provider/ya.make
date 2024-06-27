@@ -38,7 +38,6 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/core/issue
     ydb/library/yql/utils/backtrace
-    ydb/library/yql/utils/failure_injector
     ydb/library/yql/dq/integration
     ydb/library/yql/dq/integration/transform
     ydb/library/yql/dq/transform

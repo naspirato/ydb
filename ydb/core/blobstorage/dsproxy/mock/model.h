@@ -56,10 +56,10 @@ namespace NFake {
         TMap<TLogoBlobID, TBlob> Blobs;
         // By default only NKikimrBlobStorage::StatusIsValid is set
         TStorageStatusFlags StorageStatusFlags = TStorageStatusFlags(NKikimrBlobStorage::StatusIsValid);
-        const TGroupId GroupId;
+        const ui32 GroupId;
 
     public:
-        TProxyDS(TGroupId groupId = TGroupId::Zero())
+        TProxyDS(ui32 groupId = 0)
             : GroupId(groupId)
         {}
 
@@ -265,7 +265,8 @@ namespace NFake {
 
             Y_ABORT_UNLESS(from.TabletID() == to.TabletID());
             Y_ABORT_UNLESS(from.Channel() == to.Channel());
-            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId); 
+            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId);
+
             auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, GroupId);
 
             auto process = [&](const TLogoBlobID& id, const TString& buffer) {

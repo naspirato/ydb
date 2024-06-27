@@ -308,7 +308,6 @@ public:
 
             auto& tx = txBucket.Txs[txId];
             ui64 txTotalRequestedMemory = tx.TxScanQueryMemory + resources.Memory;
-            result.TotalAllocatedQueryMemory = txTotalRequestedMemory;
             if (txTotalRequestedMemory > queryMemoryLimit) {
                 TStringBuilder reason;
                 reason << "TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: "

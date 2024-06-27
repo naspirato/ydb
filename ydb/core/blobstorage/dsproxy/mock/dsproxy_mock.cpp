@@ -106,7 +106,7 @@ namespace NKikimr {
             {}
 
 
-            TBlobStorageGroupProxyMockActor(TGroupId groupId)
+            TBlobStorageGroupProxyMockActor(ui32 groupId)
                 : TActor(&TBlobStorageGroupProxyMockActor::StateFunc)
                 , Model(MakeIntrusive<NFake::TProxyDS>(groupId))
             {}
@@ -117,7 +117,7 @@ namespace NKikimr {
         return new TBlobStorageGroupProxyMockActor(std::move(model));
     }
 
-    IActor *CreateBlobStorageGroupProxyMockActor(TGroupId groupId) {
+    IActor *CreateBlobStorageGroupProxyMockActor(ui32 groupId) {
         return new TBlobStorageGroupProxyMockActor(groupId);
     }
 

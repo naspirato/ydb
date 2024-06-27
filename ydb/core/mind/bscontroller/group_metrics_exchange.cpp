@@ -22,24 +22,23 @@ namespace NKikimr::NBsController {
             NIceDb::TNiceDb db(txc.DB);
 
             for (NKikimrBlobStorage::TGroupMetrics& item : *record.MutableGroupMetrics()) {
-                if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&item, &NKikimrBlobStorage::TGroupMetrics::GetGroupId))) {
+                if (TGroupInfo *group = Self->FindGroup(item.GetGroupId())) {
                     group->GroupMetrics = std::move(item);
 
                     TString s;
                     const bool success = group->GroupMetrics->SerializeToString(&s);
                     Y_DEBUG_ABORT_UNLESS(success);
-                    typename TGroupId::Type groupId = group->ID.GetRawId();
-                    db.Table<Schema::Group>().Key(groupId).Update<Schema::Group::Metrics>(s);
+                    db.Table<Schema::Group>().Key(group->ID).Update<Schema::Group::Metrics>(s);
                 }
             }
 
             if (record.GroupsToQuerySize()) {
                 Response.reset(new TEvBlobStorage::TEvControllerGroupMetricsExchange);
                 auto& outRecord = Response->Record;
-                for (const ui32 groupId : record.GetGroupsToQuery()) {
-                    if (TGroupInfo *group = Self->FindGroup(TGroupId::FromValue(groupId))) {
+                for (const TGroupId groupId : record.GetGroupsToQuery()) {
+                    if (TGroupInfo *group = Self->FindGroup(groupId)) {
                         auto *item = outRecord.AddGroupMetrics();
-                        item->SetGroupId(group->ID.GetRawId());
+                        item->SetGroupId(group->ID);
                         group->FillInGroupParameters(item->MutableGroupParameters());
                     }
                 }

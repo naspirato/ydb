@@ -2,7 +2,6 @@ PY23_LIBRARY()
 
 PY_SRCS(
     TOP_LEVEL
-    solomon_runner.py
     yql_utils.py
     yql_ports.py
     yqlrun.py
@@ -15,7 +14,6 @@ PY_SRCS(
 )
 
 PEERDIR(
-    contrib/python/requests
     contrib/python/six
     contrib/python/urllib3
     library/python/cyson

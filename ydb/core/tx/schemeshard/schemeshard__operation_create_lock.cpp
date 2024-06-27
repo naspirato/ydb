@@ -124,8 +124,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsLikeDirectory()
-                .FailOnRestrictedCreateInTempZone();
+                .IsLikeDirectory();
 
             if (op.GetAllowIndexImplLock()) {
                 checks.IsInsideTableIndexPath();

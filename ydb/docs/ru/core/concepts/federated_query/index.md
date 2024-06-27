@@ -15,4 +15,3 @@
 - [PostgreSQL](postgresql.md)
 - [{{ ydb-short-name }}](ydb.md)
 - [S3](s3/external_table.md)
-- [Greenplum](greenplum.md)

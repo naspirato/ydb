@@ -176,8 +176,7 @@ public:
         if (duration)
             req->Record.SetDuration(duration.GetValue());
         req->Record.SetAvailabilityMode(availabilityMode);
-        if (priority)
-            req->Record.SetPriority(priority);
+        req->Record.SetPriority(priority);
         return CheckPermissionRequest(req, code);
     }
 

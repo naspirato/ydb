@@ -240,8 +240,7 @@ public:
                                                    static_cast<ui64>(ssId));
 
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
-            result, parentPath, Transaction, /* isCreate */ true));
+        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(result, parentPath));
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
         TPath dstPath     = parentPath.Child(name);
@@ -323,7 +322,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
     const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
 
     {
-        const auto checks = NExternalDataSource::IsParentPathValid(parentPath, tx, /* isCreate */ true);
+        const auto checks = NExternalDataSource::IsParentPathValid(parentPath);
         if (!checks) {
             return errorResult(checks.GetStatus(), checks.GetError());
         }

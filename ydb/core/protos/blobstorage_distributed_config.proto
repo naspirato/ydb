@@ -239,5 +239,4 @@ message TEvNodeConfigInvokeOnRootResult {
 
 message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
-    bool NoQuorum = 2;
 }

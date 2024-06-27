@@ -52,98 +52,98 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
     case TType::EKind::Data:
         {
             auto dataType = AS_TYPE(TDataType, type);
-            switch (*dataType->GetDataSlot()) {
-            case NUdf::EDataSlot::Bool:
+            switch (dataType->GetSchemeType()) {
+            case NUdf::TDataType<bool>::Id:
                 writer.OnBooleanScalar(value.Get<bool>());
                 return;
-            case NUdf::EDataSlot::Int32:
+            case NUdf::TDataType<i32>::Id:
                 writer.OnInt64Scalar(value.Get<i32>());
                 return;
-            case NUdf::EDataSlot::Uint32:
+            case NUdf::TDataType<ui32>::Id:
                 writer.OnUint64Scalar(value.Get<ui32>());
                 return;
-            case NUdf::EDataSlot::Int64:
+            case NUdf::TDataType<i64>::Id:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::EDataSlot::Uint64:
+            case NUdf::TDataType<ui64>::Id:
                 writer.OnUint64Scalar(value.Get<ui64>());
                 return;
-            case NUdf::EDataSlot::Uint8:
+            case NUdf::TDataType<ui8>::Id:
                 writer.OnUint64Scalar(value.Get<ui8>());
                 return;
-            case NUdf::EDataSlot::Int8:
+            case NUdf::TDataType<i8>::Id:
                 writer.OnInt64Scalar(value.Get<i8>());
                 return;
-            case NUdf::EDataSlot::Uint16:
+            case NUdf::TDataType<ui16>::Id:
                 writer.OnUint64Scalar(value.Get<ui16>());
                 return;
-            case NUdf::EDataSlot::Int16:
+            case NUdf::TDataType<i16>::Id:
                 writer.OnInt64Scalar(value.Get<i16>());
                 return;
-            case NUdf::EDataSlot::Float:
+            case NUdf::TDataType<float>::Id:
                 writer.OnFloatScalar(value.Get<float>());
                 return;
-            case NUdf::EDataSlot::Double:
+            case NUdf::TDataType<double>::Id:
                 writer.OnDoubleScalar(value.Get<double>());
                 return;
 
-            case NUdf::EDataSlot::Json:
-            case NUdf::EDataSlot::Utf8:
+            case NUdf::TDataType<NUdf::TJson>::Id:
+            case NUdf::TDataType<NUdf::TUtf8>::Id:
                 // assume underlying string is utf8
                 writer.OnUtf8StringScalar(value.AsStringRef());
                 return;
 
-            case NUdf::EDataSlot::String:
-            case NUdf::EDataSlot::Uuid:
-            case NUdf::EDataSlot::DyNumber:
+            case NUdf::TDataType<char*>::Id:
+            case NUdf::TDataType<NUdf::TUuid>::Id:
+            case NUdf::TDataType<NUdf::TDyNumber>::Id:
                 writer.OnStringScalar(value.AsStringRef());
                 return;
 
-            case NUdf::EDataSlot::Decimal: {
+            case NUdf::TDataType<NUdf::TDecimal>::Id: {
                 const auto params = static_cast<TDataDecimalType*>(type)->GetParams();
                 const auto str = NDecimal::ToString(value.GetInt128(), params.first, params.second);
                 const auto size = str ? std::strlen(str) : 0;
                 writer.OnUtf8StringScalar(TStringBuf(str, size));
                 return;
             }
-            case NUdf::EDataSlot::Yson:
+            case NUdf::TDataType<NUdf::TYson>::Id:
                 EncodeRestrictedYson(writer, value.AsStringRef());
                 return;
-            case NUdf::EDataSlot::Date:
+            case NUdf::TDataType<NUdf::TDate>::Id:
                 writer.OnUint64Scalar(value.Get<ui16>());
                 return;
-            case NUdf::EDataSlot::Datetime:
+            case NUdf::TDataType<NUdf::TDatetime>::Id:
                 writer.OnUint64Scalar(value.Get<ui32>());
                 return;
-            case NUdf::EDataSlot::Timestamp:
+            case NUdf::TDataType<NUdf::TTimestamp>::Id:
                 writer.OnUint64Scalar(value.Get<ui64>());
                 return;
-            case NUdf::EDataSlot::Interval:
+            case NUdf::TDataType<NUdf::TInterval>::Id:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::EDataSlot::TzDate:
-            case NUdf::EDataSlot::TzDatetime:
-            case NUdf::EDataSlot::TzTimestamp:
-            case NUdf::EDataSlot::TzDate32:
-            case NUdf::EDataSlot::TzDatetime64:
-            case NUdf::EDataSlot::TzTimestamp64:
-            case NUdf::EDataSlot::JsonDocument: {
+            case NUdf::TDataType<NUdf::TTzDate>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
                 const NUdf::TUnboxedValue out(ValueToString(*dataType->GetDataSlot(), value));
                 writer.OnUtf8StringScalar(out.AsStringRef());
                 return;
             }
-            case NUdf::EDataSlot::Date32:
+            case NUdf::TDataType<NUdf::TDate32>::Id:
                 writer.OnInt64Scalar(value.Get<i32>());
                 return;
-            case NUdf::EDataSlot::Datetime64:
+            case NUdf::TDataType<NUdf::TDatetime64>::Id:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::EDataSlot::Timestamp64:
+            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::EDataSlot::Interval64:
+            case NUdf::TDataType<NUdf::TInterval64>::Id:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
+
+            default:
+                throw yexception() << "Unknown data type: " << dataType->GetSchemeType();
             }
         }
         break;

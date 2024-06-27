@@ -233,14 +233,8 @@ void TQueryBase::Finish(Ydb::StatusIds::StatusCode status, const TString& messag
 
 void TQueryBase::Finish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues, bool rollbackOnError) {
     if (status == Ydb::StatusIds::SUCCESS) {
-        if (FinishOk) {
-            FinishOk->Inc();
-        }
         LOG_D("Finish with SUCCESS, SessionId: " << SessionId << ", TxId: " << TxId);
     } else {
-        if (FinishError) {
-            FinishError->Inc();
-        }
         LOG_W("Finish with " << status << ", Issues: " << issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
     }
     Finished = true;
@@ -339,15 +333,9 @@ void TQueryBase::CallOnQueryResult() {
     OnQueryResult();
 }
 
-void TQueryBase::SetOperationInfo(const TString& operationName, const TString& traceId, NMonitoring::TDynamicCounterPtr counters) {
+void TQueryBase::SetLogInfo(const TString& operationName, const TString& traceId) {
     OperationName = operationName;
     TraceId = traceId;
-
-    if (counters) {
-        auto subgroup = counters->GetSubgroup("operation", OperationName);
-        FinishOk = subgroup->GetCounter("FinishOk", true);
-        FinishError = subgroup->GetCounter("FinishError", true);
-    }
 }
 
 TString TQueryBase::LogPrefix() const {

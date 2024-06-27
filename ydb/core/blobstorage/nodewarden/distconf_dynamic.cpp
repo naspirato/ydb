@@ -47,31 +47,13 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeWardenDynamicConfigPush::TPtr ev) {
-        Y_ABORT_UNLESS(StaticNodeSessionId);
-        Y_ABORT_UNLESS(ev->InterconnectSession == StaticNodeSessionId);
         auto& record = ev->Get()->Record;
-        if (record.HasConfig()) {
-            ApplyStorageConfig(record.GetConfig());
-        }
-        if (record.GetNoQuorum()) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, StaticNodeSessionId, SelfId(),
-                nullptr, 0));
-            ConnectedToStaticNode = 0;
-            StaticNodeSessionId = {};
-            ConnectToStaticNode();
-        }
+        ApplyStorageConfig(record.GetConfig());
     }
 
-    void TDistributedConfigKeeper::ApplyConfigUpdateToDynamicNodes(bool drop) {
+    void TDistributedConfigKeeper::ApplyConfigUpdateToDynamicNodes() {
         for (const auto& [sessionId, actorId] : DynamicConfigSubscribers) {
             PushConfigToDynamicNode(actorId, sessionId);
-        }
-        if (drop) {
-            Y_ABORT_UNLESS(!PartOfNodeQuorum());
-            DynamicConfigSubscribers.clear();
-            for (ui32 nodeId : std::exchange(ConnectedDynamicNodes, {})) {
-                UnsubscribeInterconnect(nodeId);
-            }
         }
     }
 
@@ -83,15 +65,6 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::HandleDynamicConfigSubscribe(STATEFN_SIG) {
         const TActorId sessionId = ev->InterconnectSession;
         Y_ABORT_UNLESS(sessionId);
-
-        const bool partOfNodeQuorum = PartOfNodeQuorum();
-        if (!partOfNodeQuorum || StorageConfig) {
-            PushConfigToDynamicNode(ev->Sender, sessionId);
-        }
-        if (!partOfNodeQuorum) {
-            return;
-        }
-
         const ui32 peerNodeId = ev->Sender.NodeId();
         if (const auto [it, inserted] = SubscribedSessions.try_emplace(peerNodeId); inserted) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Subscribe, IEventHandle::FlagTrackDelivery,
@@ -100,17 +73,15 @@ namespace NKikimr::NStorage {
         ConnectedDynamicNodes.insert(peerNodeId);
         const auto [_, inserted] = DynamicConfigSubscribers.try_emplace(sessionId, ev->Sender);
         Y_ABORT_UNLESS(inserted);
+
+        if (StorageConfig) {
+            PushConfigToDynamicNode(ev->Sender, sessionId);
+        }
     }
 
     void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId) {
         auto ev = std::make_unique<TEvNodeWardenDynamicConfigPush>();
-        auto& record = ev->Record;
-        if (StorageConfig) {
-            record.MutableConfig()->CopyFrom(*StorageConfig);
-        }
-        if (!PartOfNodeQuorum()) {
-            ev->Record.SetNoQuorum(true);
-        }
+        ev->Record.MutableConfig()->CopyFrom(*StorageConfig);
         auto handle = std::make_unique<IEventHandle>(actorId, SelfId(), ev.release());
         handle->Rewrite(TEvInterconnect::EvForward, sessionId);
         TActivationContext::Send(handle.release());

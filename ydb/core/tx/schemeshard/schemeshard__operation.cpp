@@ -878,7 +878,6 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 
         TTxTransaction mkdir;
         mkdir.SetFailOnExist(true);
-        mkdir.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
         mkdir.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         mkdir.SetWorkingDir(path.PathString());
         mkdir.MutableMkDir()->SetName(name);

@@ -118,11 +118,7 @@ public:
     void AllocatePool(const TActorContext &ctx)
     {
         auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-        auto *pool = request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool();
-        pool->CopyFrom(Pool->Config);
-        if (!pool->GetKind()) {
-            pool->SetKind(Pool->Kind);
-        }
+        request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(Pool->Config);
 
         BLOG_D(LogPrefix << "send pool request: " << request->Record.ShortDebugString());
 

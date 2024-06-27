@@ -12,10 +12,9 @@ namespace NYql {
 namespace {
 using namespace NNodes;
 
-std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
+std::array<TExprNode::TPtr, 2U> GetSchema(const TExprNode::TListType& settings) {
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("userschema")) {
-            settings.erase(it);
             return {item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr()};
         }
     }
@@ -23,7 +22,7 @@ std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
     return {};
 }
 
-TVector<TCoAtom> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExprNode::TListType& settings) {
+TVector<TCoAtom> GetUserLabels(TPositionHandle pos, TExprContext& ctx, const TExprNode::TListType& settings) {
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("labels")) {
             TVector<TCoAtom> result;
@@ -33,7 +32,6 @@ TVector<TCoAtom> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExpr
                 auto v = Build<TCoAtom>(ctx, pos).Value(StripString(label)).Done();
                 result.emplace_back(std::move(v));
             }
-            settings.erase(it);
             return result;
         }
     }
@@ -70,7 +68,7 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
     }
 
     for (const auto& label : userLabels) {
-        if (IsIn(allSystemColumns, label.Value())) {
+        if (IsIn({ SOLOMON_SCHEME_TS, SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE, SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE }, label.Value())) {
             // tmp constraint
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "System column should not be used as label name: " << label.Value()));
             return nullptr;
@@ -126,26 +124,9 @@ public:
                     return node;
                 }
 
-                auto& object = read.Arg(2).Ref();
-                if (!object.IsCallable("MrTableConcat")) {
-                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Expected MrTableConcat"));
-                    return {};
-                }
+                const auto& object = read.Arg(2).Ref();
+                YQL_ENSURE(object.IsCallable("MrTableConcat"));
 
-                const auto maybeKey = TMaybeNode<TCoKey>(&object.Head());
-                if (!maybeKey) {
-                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Expected Key"));
-                    return {};
-                }
-
-                const auto& keyArg = maybeKey.Cast().Ref().Head();
-                if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U
-                    || !keyArg.Head().IsAtom("table") || !keyArg.Tail().IsCallable(TCoString::CallableName())) {
-                    ctx.AddError(TIssue(ctx.GetPosition(keyArg.Pos()), TStringBuilder() << "Expected single table name"));
-                    return {};
-                }
-
-                const auto project = TString(keyArg.Tail().Head().Content());
                 auto cluster = read.DataSource().Cluster().StringValue();
                 if (!this->State_->Configuration->_EnableReading.Get().GetOrElse(false)) {
                     ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Reading is disabled for monitoring cluster " << cluster));
@@ -154,16 +135,11 @@ public:
 
                 auto settings = read.Ref().Child(4);
                 auto settingsList = read.Ref().Child(4)->ChildrenList();
-                auto userSchema = ExtractSchema(settingsList);
-                TVector<TCoAtom> userLabels = ExtractUserLabels(settings->Pos(), ctx, settingsList);
-
-                auto newSettings = Build<TCoNameValueTupleList>(ctx, settings->Pos())
-                                        .Add(settingsList)
-                                    .Done();
+                auto userSchema = GetSchema(settingsList);
+                TVector<TCoAtom> userLabels = GetUserLabels(settings->Pos(), ctx, settingsList);
 
                 auto soObject = Build<TSoObject>(ctx, read.Pos())
-                                  .Project<TCoAtom>().Build(project)
-                                  .Settings(newSettings)
+                                  .Settings(settings)
                                 .Done();
                 
                 TVector<TCoAtom> systemColumns;

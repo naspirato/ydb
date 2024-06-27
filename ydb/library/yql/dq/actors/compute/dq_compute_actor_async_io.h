@@ -67,7 +67,6 @@ struct IMemoryQuotaManager {
     virtual void FreeQuota(ui64 memorySize) = 0;
     virtual ui64 GetCurrentQuota() const = 0;
     virtual ui64 GetMaxMemorySize() const = 0;
-    virtual bool IsReasonableToUseSpilling() const = 0;
 };
 
 // Source/transform.

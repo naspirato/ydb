@@ -25,10 +25,9 @@ struct TStringComparer
 
 struct TStringHasher
 {
-    ui64 operator()(const TString& node, ui64 index) const
+    ui64 operator()(const TString& node, int index) const
     {
-        auto hashNode = ::THash<TStringBuf>()(node);
-        return (hashNode ^ (index << 3)) + hashNode << (index & 7);
+        return ::THash<TStringBuf>()(node + std::to_string(index));
     }
 };
 
@@ -564,7 +563,7 @@ TEST(TConsistentHashingRing, ManyNodesSimultaneouslyStress)
 
 TEST(TConsistentHashingRing, SmallTokenCount)
 {
-    const size_t testCases = 4;
+    const size_t testCases = 10;
 
     auto singleReplicaLargeResult = 0.0;
     auto manyReplicasLargeResult = 0.0;
@@ -613,8 +612,8 @@ TEST(TConsistentHashingRing, SmallTokenCount)
             /*batchSize*/ 200) / testCases;
     }
 
-    EXPECT_LE(std::fabs(singleReplicaLargeResult - singleReplicaSmallResult), 0.12);
-    EXPECT_LE(std::fabs(manyReplicasLargeResult - manyReplicasSmallResult), 0.12);
+    EXPECT_LE(std::fabs(singleReplicaLargeResult - singleReplicaSmallResult), 0.1);
+    EXPECT_LE(std::fabs(manyReplicasLargeResult - manyReplicasSmallResult), 0.1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

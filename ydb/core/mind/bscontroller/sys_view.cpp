@@ -29,11 +29,11 @@ void FillKey(NKikimrSysView::TVSlotKey* key, const TVSlotId& id) {
 }
 
 TGroupId TransformKey(const NKikimrSysView::TGroupKey& key) {
-    return TGroupId::FromProto(&key, &NKikimrSysView::TGroupKey::GetGroupId);
+    return key.GetGroupId();
 }
 
 void FillKey(NKikimrSysView::TGroupKey* key, const TGroupId& id) {
-    key->SetGroupId(id.GetRawId());
+    key->SetGroupId(id);
 }
 
 TBoxStoragePoolId TransformKey(const NKikimrSysView::TStoragePoolKey& key) {
@@ -326,7 +326,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
         NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::TVDiskKind::EVDiskKind kind, bool isBeingDeleted) {
-    pb->SetGroupId(vdiskId.GroupID.GetRawId());
+    pb->SetGroupId(vdiskId.GroupID);
     pb->SetGroupGeneration(vdiskId.GroupGeneration);
     pb->SetFailRealm(vdiskId.FailRealm);
     pb->SetFailDomain(vdiskId.FailDomain);
@@ -469,10 +469,10 @@ void TBlobStorageController::UpdateSystemViews() {
             if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                 const auto& ss = bsConfig.GetServiceSet();
                 for (const auto& group : ss.GetGroups()) {
-                    if (!SysViewChangedGroups.count(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
+                    if (!SysViewChangedGroups.count(group.GetGroupID())) {
                         continue;
                     }
-                    auto *pb = &state.Groups[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
+                    auto *pb = &state.Groups[group.GetGroupID()];
                     pb->SetGeneration(group.GetGroupGeneration());
                     pb->SetEncryptionMode(group.GetEncryptionMode());
                     pb->SetLifeCyclePhase(group.GetLifeCyclePhase());

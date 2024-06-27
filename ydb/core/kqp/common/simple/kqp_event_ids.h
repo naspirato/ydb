@@ -168,14 +168,5 @@ struct TKqpResourceInfoExchangerEvents {
     };
 };
 
-struct TKqpWorkloadServiceEvents {
-    enum EKqpWorkloadServiceEvents {
-        EvPlaceRequestIntoPool = EventSpaceBegin(TKikimrEvents::ES_KQP) + 700,
-        EvContinueRequest,
-        EvCleanupRequest,
-        EvCleanupResponse,
-    };
-};
-
 } // namespace NKqp
 } // namespace NKikimr

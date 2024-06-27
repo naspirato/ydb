@@ -26,9 +26,8 @@ import time
 import six
 import yaml
 
-
 from six.moves.urllib.parse import urlencode, urlparse, urlunparse
-from six import StringIO, BytesIO
+from six import StringIO
 
 from websocket import WebSocket, ABNF, enableTrace
 from base64 import urlsafe_b64decode
@@ -49,7 +48,7 @@ class _IgnoredIO:
 
 
 class WSClient:
-    def __init__(self, configuration, url, headers, capture_all, binary=False):
+    def __init__(self, configuration, url, headers, capture_all):
         """A websocket client with support for channels.
 
             Exec command uses different channels for different streams. for
@@ -59,10 +58,8 @@ class WSClient:
         """
         self._connected = False
         self._channels = {}
-        self.binary = binary
-        self.newline = '\n' if not self.binary else b'\n'
         if capture_all:
-            self._all = StringIO() if not self.binary else BytesIO()
+            self._all = StringIO()
         else:
             self._all = _IgnoredIO()
         self.sock = create_websocket(configuration, url, headers)
@@ -95,8 +92,8 @@ class WSClient:
         while self.is_open() and time.time() - start < timeout:
             if channel in self._channels:
                 data = self._channels[channel]
-                if self.newline in data:
-                    index = data.find(self.newline)
+                if "\n" in data:
+                    index = data.find("\n")
                     ret = data[:index]
                     data = data[index+1:]
                     if data:
@@ -200,12 +197,10 @@ class WSClient:
                 return
             elif op_code == ABNF.OPCODE_BINARY or op_code == ABNF.OPCODE_TEXT:
                 data = frame.data
-                if six.PY3 and not self.binary:
+                if six.PY3:
                     data = data.decode("utf-8", "replace")
                 if len(data) > 1:
-                    channel = data[0]
-                    if six.PY3 and not self.binary:
-                        channel = ord(channel)
+                    channel = ord(data[0])
                     data = data[1:]
                     if data:
                         if channel in [STDOUT_CHANNEL, STDERR_CHANNEL]:
@@ -523,17 +518,13 @@ def websocket_call(configuration, _method, url, **kwargs):
     _request_timeout = kwargs.get("_request_timeout", 60)
     _preload_content = kwargs.get("_preload_content", True)
     capture_all = kwargs.get("capture_all", True)
-    binary = kwargs.get('binary', False)
+
     try:
-        client = WSClient(configuration, url, headers, capture_all, binary=binary)
+        client = WSClient(configuration, url, headers, capture_all)
         if not _preload_content:
             return client
         client.run_forever(timeout=_request_timeout)
-        all = client.read_all()
-        if binary:
-            return WSResponse(all)
-        else:
-            return WSResponse('%s' % ''.join(all))
+        return WSResponse('%s' % ''.join(client.read_all()))
     except (Exception, KeyboardInterrupt, SystemExit) as e:
         raise ApiException(status=0, reason=str(e))
 

@@ -8,6 +8,7 @@ on:
       - 'stream-nb-*'
     paths-ignore:
       - 'ydb/docs/**'
+      - '.github/**'
       - '*'
 jobs:
   build_and_test:

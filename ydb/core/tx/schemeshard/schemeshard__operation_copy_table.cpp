@@ -361,8 +361,7 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                .NotUnderDeleting();
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {

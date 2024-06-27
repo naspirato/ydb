@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/util/hp_timer_helpers.h>
-#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 namespace NKikimr {
@@ -19,7 +18,7 @@ public:
         ui32 Requests;
         ui32 MaxInFlight;
         TDuration Delay = TDuration::Zero();
-        TGroupId GroupId = TGroupId::Zero();
+        ui32 GroupId = 0;
         ui32 GroupGeneration = 1;
     };
 
@@ -27,14 +26,14 @@ public:
     TInflightActor(TSettings settings)
         : RequestsToSend(settings.Requests)
         , RequestInFlight(settings.MaxInFlight)
-        , GroupId(settings.GroupId.GetRawId())
+        , GroupId(settings.GroupId)
         , Settings(settings)
     {}
 
     virtual ~TInflightActor() = default;
 
-    void SetGroupId(TGroupId groupId) {
-        GroupId = groupId.GetRawId();
+    void SetGroupId(ui32 groupId) {
+        GroupId = groupId;
     }
 
     void Bootstrap(const TActorContext&/* ctx*/) {

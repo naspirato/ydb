@@ -231,7 +231,6 @@ public:
 
     void Bootstrap() {
         EnableStatistics = AppData()->FeatureFlags.GetEnableStatistics();
-        EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics();
 
         ui32 configKind = (ui32) NKikimrConsole::TConfigItem::FeatureFlagsItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -280,7 +279,6 @@ private:
         if (config.HasFeatureFlags()) {
             const auto& featureFlags = config.GetFeatureFlags();
             EnableStatistics = featureFlags.GetEnableStatistics();
-            EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
             if (!EnableStatistics) {
                 ReplyAllFailed();
             }
@@ -309,10 +307,15 @@ private:
             for (const auto& req : request.StatRequests) {
                 auto& response = request.StatResponses.emplace_back();
                 response.Req = req;
+                if (!req.ColumnName) {
+                    response.Success = false;
+                    ++reqIndex;
+                    continue;
+                }
                 ui64 loadCookie = NextLoadQueryCookie++;
                 LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
                 Register(CreateLoadStatisticsQuery(req.PathId, request.StatType,
-                    *req.ColumnTag, loadCookie));
+                    *req.ColumnName, loadCookie));
                 ++request.ReplyCounter;
                 ++reqIndex;
             }
@@ -765,13 +768,8 @@ private:
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         auto& request = ev->Get()->Request;
-
-        if (!EnableColumnStatistics) {
-            Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-            return;
-        }
-
         auto method = request.GetMethod();
+
         if (method == HTTP_METHOD_POST) {
             auto& params = request.GetPostParams();
             auto itAction = params.find("action");
@@ -838,7 +836,6 @@ private:
 
 private:
     bool EnableStatistics = false;
-    bool EnableColumnStatistics = false;
 
     static constexpr size_t StatFanOut = 10;
 

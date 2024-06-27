@@ -49,18 +49,11 @@ std::vector<ui32> BuildWriteIndex(
     YQL_ENSURE(schemeEntry.ColumnTableInfo->Description.HasSchema());
     const auto& columns = schemeEntry.ColumnTableInfo->Description.GetSchema().GetColumns();
 
-    THashSet<ui32> inputColumnsIds;
-    for (const auto& column : inputColumns) {
-        inputColumnsIds.insert(column.GetId());
-    }
-
     THashMap<ui32, ui32> writeColumnIdToIndex;
     {
         i32 number = 0;
         for (const auto& column : columns) {
-            if (inputColumnsIds.contains(column.GetId())) {
-                writeColumnIdToIndex[column.GetId()] = number++;
-            }
+            writeColumnIdToIndex[column.GetId()] = number++;
         }
     }
 
@@ -79,22 +72,16 @@ std::vector<ui32> BuildWriteIndexKeyFirst(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     const auto& columns = schemeEntry.Columns;
 
-    THashSet<ui32> inputColumnsIds;
-    for (const auto& column : inputColumns) {
-        inputColumnsIds.insert(column.GetId());
-    }
-
     THashMap<ui32, ui32> writeColumnIdToIndex;
     {
         for (const auto& [index, column] : columns) {
             if (column.KeyOrder >= 0) {
                 writeColumnIdToIndex[column.Id] = column.KeyOrder;
-                YQL_ENSURE(inputColumnsIds.contains(column.Id));
             }
         }
         ui32 number = writeColumnIdToIndex.size();
         for (const auto& [index, column] : columns) {
-            if (column.KeyOrder < 0 && inputColumnsIds.contains(column.Id)) {
+            if (column.KeyOrder < 0) {
                 writeColumnIdToIndex[column.Id] = number++;
             }
         }
@@ -133,26 +120,18 @@ std::set<std::string> BuildNotNullColumns(const TConstArrayRef<NKikimrKqp::TKqpC
 }
 
 std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
-    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) {
     YQL_ENSURE(schemeEntry.ColumnTableInfo);
     YQL_ENSURE(schemeEntry.ColumnTableInfo->Description.HasSchema());
     const auto& columns = schemeEntry.ColumnTableInfo->Description.GetSchema().GetColumns();
 
-    THashSet<ui32> inputColumnsIds;
-    for (const auto& column : inputColumns) {
-        inputColumnsIds.insert(column.GetId());
-    }
-
     std::vector<std::pair<TString, NScheme::TTypeInfo>> result;
     result.reserve(columns.size());
     for (const auto& column : columns) {
-        if (inputColumnsIds.contains(column.GetId())) {
-            Y_ABORT_UNLESS(column.HasTypeId());
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-            result.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
-        }
+        Y_ABORT_UNLESS(column.HasTypeId());
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+            column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+        result.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
     }
     return result;
 }
@@ -214,7 +193,7 @@ public:
         , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
         , BatchBuilder(arrow::Compression::UNCOMPRESSED, BuildNotNullColumns(inputColumns)) {
         TString err;
-        if (!BatchBuilder.Start(BuildBatchBuilderColumns(schemeEntry, inputColumns), 0, 0, err)) {
+        if (!BatchBuilder.Start(BuildBatchBuilderColumns(schemeEntry), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
         }
 

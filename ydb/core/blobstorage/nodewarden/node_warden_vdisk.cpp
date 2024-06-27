@@ -49,7 +49,8 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         vdisk.ShutdownPending = true;
-        VDiskStatusChanged = true;
+
+        SendDiskMetrics(false);
     }
 
     void TNodeWarden::StartLocalVDiskActor(TVDiskRecord& vdisk) {
@@ -221,7 +222,7 @@ namespace NKikimr::NStorage {
 
         // for dynamic groups -- start state aggregator
         if (TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
-            StartAggregator(vdiskServiceId, groupInfo->GroupID.GetRawId());
+            StartAggregator(vdiskServiceId, groupInfo->GroupID);
         }
 
         Y_ABORT_UNLESS(vdisk.ScrubState == TVDiskRecord::EScrubState::IDLE);
@@ -238,7 +239,6 @@ namespace NKikimr::NStorage {
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         vdisk.ReportedVDiskStatus.reset();
         vdisk.ScrubCookie = scrubCookie;
-        VDiskStatusChanged = true;
     }
 
     void TNodeWarden::HandleGone(STATEFN_SIG) {
@@ -259,6 +259,7 @@ namespace NKikimr::NStorage {
         for (const auto& vdisk : serviceSet.GetVDisks()) {
             ApplyLocalVDiskInfo(vdisk);
         }
+        SendDiskMetrics(false);
     }
 
     void TNodeWarden::ApplyLocalVDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk) {

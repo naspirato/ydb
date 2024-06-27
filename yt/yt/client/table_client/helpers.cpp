@@ -1593,11 +1593,6 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
     bool clipped = false;
 
     for (const auto& value : values) {
-        if (Any(value.Flags & EValueFlags::Hunk)) {
-            // NB: This may be the case for ordered tables with attached hunk storage.
-            continue;
-        }
-
         truncatedValues.push_back(value);
         auto& truncatedValue = truncatedValues.back();
 

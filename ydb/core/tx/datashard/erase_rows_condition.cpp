@@ -56,7 +56,7 @@ class TExpirationCondition: public IEraseRowsCondition {
         return WallClockDyNumber;
     }
 
-    bool CheckUi64(ui64 value) const {
+    bool Check(ui64 value) const {
         switch (Type) {
         // 'date-type column' mode
         case NScheme::NTypeIds::Date:
@@ -87,26 +87,7 @@ class TExpirationCondition: public IEraseRowsCondition {
         }
     }
 
-    bool CheckI64(i64 value) const {
-        
-        // Dates before 1970 are deleted by TTL
-        if (value < 0)
-            return true;
-
-        switch (Type) {
-        // 'big date-type column' mode
-        case NScheme::NTypeIds::Date32:
-            return TInstant::Days(value) <= WallClockInstant;
-        case NScheme::NTypeIds::Datetime64:
-            return TInstant::Seconds(value) <= WallClockInstant;
-        case NScheme::NTypeIds::Timestamp64:
-            return TInstant::MicroSeconds(value) <= WallClockInstant;
-        default:
-            Y_ABORT("Unreachable");
-        }
-    }    
-
-    bool CheckStr(TStringBuf value) const {
+    bool Check(TStringBuf value) const {
         switch (Type) {
         // 'value since epoch' mode
         case NScheme::NTypeIds::DyNumber:
@@ -166,20 +147,15 @@ public:
 
         switch (Type) {
         case NScheme::NTypeIds::Date:
-            return CheckUi64(cell.AsValue<ui16>());
+            return Check(cell.AsValue<ui16>());
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Uint32:
-            return CheckUi64(cell.AsValue<ui32>());
+            return Check(cell.AsValue<ui32>());
         case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Uint64:
-            return CheckUi64(cell.AsValue<ui64>());
-        case NScheme::NTypeIds::Date32:
-            return CheckI64(cell.AsValue<i32>());
-        case NScheme::NTypeIds::Datetime64:
-        case NScheme::NTypeIds::Timestamp64:
-            return CheckI64(cell.AsValue<i64>());
+            return Check(cell.AsValue<ui64>());
         case NScheme::NTypeIds::DyNumber:
-            return CheckStr(cell.AsBuf());
+            return Check(cell.AsBuf());
         default:
             return false;
         }

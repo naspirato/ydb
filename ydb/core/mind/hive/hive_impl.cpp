@@ -695,8 +695,8 @@ void THive::Handle(TEvLocal::TEvSyncTablets::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr& ev) {
     TAutoPtr<TEvPrivate::TEvProcessDisconnectNode> event = ev->Release();
-    TNodeInfo* node = FindNode(event->NodeId);
-    if (!node || node->IsDisconnecting()) {
+    TNodeInfo& node = GetNode(event->NodeId);
+    if (node.IsDisconnecting()) {
         auto itCategory = event->Tablets.begin();
         if (itCategory != event->Tablets.end()) {
             BLOG_D("THive::Handle::TEvProcessDisconnectNode: Node " << event->NodeId << " Category " << itCategory->first);
@@ -733,7 +733,6 @@ void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
     if (ConnectedNodes.insert(nodeId).second) {
         BLOG_W("Handle TEvInterconnect::TEvNodeConnected, NodeId " << nodeId << " Cookie " << ev->Cookie);
-        UpdateCounterNodesConnected(+1);
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
     } else {
         BLOG_TRACE("Handle TEvInterconnect::TEvNodeConnected (duplicate), NodeId " << nodeId << " Cookie " << ev->Cookie);
@@ -743,9 +742,7 @@ void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
     BLOG_W("Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << nodeId);
-    if (ConnectedNodes.erase(nodeId)) {
-       UpdateCounterNodesConnected(-1);
-    }
+    ConnectedNodes.erase(nodeId);
     Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
 }
 

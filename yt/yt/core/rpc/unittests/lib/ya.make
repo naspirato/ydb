@@ -13,8 +13,6 @@ SRCS(
 PEERDIR(
     yt/yt/core
     yt/yt/core/rpc/grpc
-    yt/yt/core/rpc/http
-    yt/yt/core/https
     library/cpp/testing/gtest
 )
 

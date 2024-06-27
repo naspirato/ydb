@@ -7,18 +7,11 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TVDiskID
     ////////////////////////////////////////////////////////////////////////////
-    const TVDiskID TVDiskID::InvalidId = TVDiskID(TGroupId::FromValue(-1), (ui32)-1, (ui8)-1, (ui8)-1, (ui8)-1);
+    const TVDiskID TVDiskID::InvalidId = TVDiskID((ui32)-1, (ui32)-1, (ui8)-1, (ui8)-1, (ui8)-1);
 
-    TVDiskID::TVDiskID(TGroupId groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort)
-        : GroupID(groupId)
-        , GroupGeneration(groupGen)
-        , FailRealm(vdiskIdShort.FailRealm)
-        , FailDomain(vdiskIdShort.FailDomain)
-        , VDisk(vdiskIdShort.VDisk)
-    {}
 
     TVDiskID::TVDiskID(ui32 groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort)
-        : GroupID(TGroupId::FromValue(groupId))
+        : GroupID(groupId)
         , GroupGeneration(groupGen)
         , FailRealm(vdiskIdShort.FailRealm)
         , FailDomain(vdiskIdShort.FailDomain)
@@ -31,7 +24,7 @@ namespace NKikimr {
     }
 
     bool TVDiskID::SameGroupAndGeneration(const NKikimrBlobStorage::TVDiskID &x) const {
-        return TGroupId::FromProto(&x, &NKikimrBlobStorage::TVDiskID::GetGroupID) == GroupID && x.GetGroupGeneration() == GroupGeneration;
+        return x.GetGroupID() == GroupID && x.GetGroupGeneration() == GroupGeneration;
     }
 
     bool TVDiskID::SameDisk(const NKikimrBlobStorage::TVDiskID &x) const {
@@ -41,12 +34,12 @@ namespace NKikimr {
 
     TString TVDiskID::ToString() const {
         return Sprintf("[%" PRIx32 ":%" PRIu32 ":%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]",
-                        GroupID.GetRawId(), GroupGeneration, FailRealm, FailDomain, VDisk).data();
+                        GroupID, GroupGeneration, FailRealm, FailDomain, VDisk).data();
     }
 
     TString TVDiskID::ToStringWOGeneration() const {
         return Sprintf("[%" PRIx32 ":_:%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]",
-                        GroupID.GetRawId(), FailRealm, FailDomain, VDisk).data();
+                        GroupID, FailRealm, FailDomain, VDisk).data();
     }
 
     void TVDiskID::Serialize(IOutputStream &s) const {

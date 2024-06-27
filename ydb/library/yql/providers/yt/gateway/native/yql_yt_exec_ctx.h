@@ -283,7 +283,6 @@ public:
             }
             return res.Apply([queue = self->Session_->Queue_, unlock = lock.DeferRelease()](const auto& f) {
                 if (f.HasException()) {
-                    unlock(f);
                     f.TryRethrow();
                 }
                 return queue->Async([unlock = std::move(unlock), f]() {

@@ -100,7 +100,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
             event->Record.SetSource(source);
         }
 
-        this->Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, true, ++SubscribeCookie));
+        this->Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, false));
         this->Become(&TThis::StateWaitingStatus);
     }
 
@@ -124,11 +124,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
                 << ": status# " << static_cast<ui32>(record.GetStatus())
                 << ", reason# " << static_cast<ui32>(record.GetReason())
                 << ", error# " << record.GetErrorDescription());
-            if (IsHardError(record.GetReason())) {
-                return Leave(true);
-            } else {
-                return DelayedLeave();
-            }
+            return Leave(IsHardError(record.GetReason()));
         }
     }
 
@@ -144,14 +140,9 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter<TCh
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        if (TabletId == ev->Get()->TabletId && ev->Cookie == SubscribeCookie) {
-            DelayedLeave();
+        if (TabletId == ev->Get()->TabletId) {
+            Leave();
         }
-    }
-
-    void DelayedLeave() {
-        static constexpr TDuration delay = TDuration::MilliSeconds(50);
-        this->Schedule(delay, new TEvents::TEvWakeup());
     }
 
     void Leave(bool hardError = false) {
@@ -192,7 +183,6 @@ public:
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            sFunc(TEvents::TEvWakeup, Leave);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -204,9 +194,7 @@ private:
     mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
-    ui64 SubscribeCookie = 0;
     TChangeRecordBuilderContextTrait<TChangeRecord> BuilderContext;
-
 }; // TTablePartitionWriter
 
 template <class TChangeRecord>
@@ -433,7 +421,7 @@ class TLocalTableWriter
         return new TTablePartitionWriter<TChangeRecord>(this->SelfId(), partitionId, TTableId(this->PathId, Schema->Version));
     }
 
-    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); }
+    const TVector<TKeyDesc::TPartitionInfo>& GetPartitions() const override { return KeyDesc->GetPartitions(); };
     const TVector<NScheme::TTypeInfo>& GetSchema() const override { return KeyDesc->KeyColumnTypes; }
     NKikimrSchemeOp::ECdcStreamFormat GetStreamFormat() const override { return TChangeRecord::StreamType; }
 

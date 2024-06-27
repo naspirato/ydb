@@ -13,7 +13,7 @@
 
 namespace NKikimr::NSchemeShard::NExternalDataSource {
 
-inline TPath::TChecker IsParentPathValid(const TPath& parentPath, const TTxTransaction& tx, const bool isCreate) {
+inline TPath::TChecker IsParentPathValid(const TPath& parentPath) {
     auto checks = parentPath.Check();
     checks.NotUnderDomainUpgrade()
         .IsAtLocalSchemeShard()
@@ -23,19 +23,12 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath, const TTxTrans
         .IsCommonSensePath()
         .IsLikeDirectory();
 
-    if (isCreate) {
-        checks.FailOnRestrictedCreateInTempZone();
-    }
-    Y_UNUSED(tx);
-
     return std::move(checks);
 }
 
 inline bool IsParentPathValid(const THolder<TProposeResponse>& result,
-                              const TPath& parentPath,
-                              const TTxTransaction& tx,
-                              const bool isCreate) {
-    const auto checks = IsParentPathValid(parentPath, tx, isCreate);
+                              const TPath& parentPath) {
+    const auto checks = IsParentPathValid(parentPath);
 
     if (!checks) {
         result->SetError(checks.GetStatus(), checks.GetError());

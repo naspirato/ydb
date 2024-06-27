@@ -45,15 +45,12 @@ TString StringFromSharedRef(const TSharedRef& sharedRef)
 template <class TImpl>
 using TRpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
-using TAttachmentsTest = TRpcTestBase<TImpl>;
-template <class TImpl>
 using TNotUdsTest = TRpcTestBase<TImpl>;
 template <class TImpl>
 using TNotGrpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
 using TGrpcTest = TRpcTestBase<TImpl>;
 TYPED_TEST_SUITE(TRpcTest, TAllTransports);
-TYPED_TEST_SUITE(TAttachmentsTest, TWithAttachments);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);
 TYPED_TEST_SUITE(TGrpcTest, TGrpcOnly);
@@ -491,7 +488,7 @@ TYPED_TEST(TRpcTest, ManyAsyncRequests)
     EXPECT_TRUE(AllSucceeded(asyncResults).Get().IsOK());
 }
 
-TYPED_TEST(TAttachmentsTest, RegularAttachments)
+TYPED_TEST(TRpcTest, RegularAttachments)
 {
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.RegularAttachments();
@@ -541,7 +538,7 @@ TYPED_TEST(TNotGrpcTest, TrackedRegularAttachments)
     EXPECT_EQ("TTestProxy_",  StringFromSharedRef(attachments[2]));
 }
 
-TYPED_TEST(TAttachmentsTest, NullAndEmptyAttachments)
+TYPED_TEST(TRpcTest, NullAndEmptyAttachments)
 {
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.NullAndEmptyAttachments();

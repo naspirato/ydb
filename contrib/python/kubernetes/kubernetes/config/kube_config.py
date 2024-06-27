@@ -80,7 +80,7 @@ def _create_temp_file_with_content(content, temp_file_path=None):
 
 def _is_expired(expiry):
     return ((parse_rfc3339(expiry) - EXPIRY_SKEW_PREVENTION_DELAY) <=
-            datetime.datetime.now(tz=UTC))
+            datetime.datetime.utcnow().replace(tzinfo=UTC))
 
 
 class FileOrData(object):
@@ -727,10 +727,6 @@ class KubeConfigMerger:
             self.config_merged = ConfigNode(path, config_merged, path)
         for item in ('clusters', 'contexts', 'users'):
             self._merge(item, config.get(item, []) or [], path)
-
-        if 'current-context' in config:
-            self.config_merged.value['current-context'] = config['current-context']
-
         self.config_files[path] = config
 
     def _merge(self, item, add_cfg, path):
@@ -866,36 +862,32 @@ def load_kube_config_from_dict(config_dict, context=None,
 def new_client_from_config(
         config_file=None,
         context=None,
-        persist_config=True,
-        client_configuration=None):
+        persist_config=True):
     """
     Loads configuration the same as load_kube_config but returns an ApiClient
     to be used with any API object. This will allow the caller to concurrently
     talk with multiple clusters.
     """
-    if client_configuration is None:
-        client_configuration = type.__call__(Configuration)
+    client_config = type.__call__(Configuration)
     load_kube_config(config_file=config_file, context=context,
-                     client_configuration=client_configuration,
+                     client_configuration=client_config,
                      persist_config=persist_config)
-    return ApiClient(configuration=client_configuration)
+    return ApiClient(configuration=client_config)
 
 
 def new_client_from_config_dict(
         config_dict=None,
         context=None,
         persist_config=True,
-        temp_file_path=None,
-        client_configuration=None):
+        temp_file_path=None):
     """
     Loads configuration the same as load_kube_config_from_dict but returns an ApiClient
     to be used with any API object. This will allow the caller to concurrently
     talk with multiple clusters.
     """
-    if client_configuration is None:
-        client_configuration = type.__call__(Configuration)
+    client_config = type.__call__(Configuration)
     load_kube_config_from_dict(config_dict=config_dict, context=context,
-                               client_configuration=client_configuration,
+                               client_configuration=client_config,
                                persist_config=persist_config,
                                temp_file_path=temp_file_path)
-    return ApiClient(configuration=client_configuration)
+    return ApiClient(configuration=client_config)

@@ -532,7 +532,6 @@ def _form_response(
     body: Union[BufferedReader, BytesIO],
     headers: Optional[Mapping[str, str]],
     status: int,
-    request_method: Optional[str],
 ) -> HTTPResponse:
     """
     Function to generate `urllib3.response.HTTPResponse` object.
@@ -567,7 +566,6 @@ def _form_response(
         headers=headers,
         original_response=orig_response,  # type: ignore[arg-type]  # See comment above
         preload_content=False,
-        request_method=request_method,
     )
 
 
@@ -634,7 +632,7 @@ class Response(BaseResponse):
             content_length = len(body.getvalue())
             headers["Content-Length"] = str(content_length)
 
-        return _form_response(body, headers, status, request.method)
+        return _form_response(body, headers, status)
 
     def __repr__(self) -> str:
         return (
@@ -697,7 +695,7 @@ class CallbackResponse(BaseResponse):
         body = _handle_body(body)
         headers.extend(r_headers)
 
-        return _form_response(body, headers, status, request.method)
+        return _form_response(body, headers, status)
 
 
 class PassthroughResponse(BaseResponse):
@@ -1106,7 +1104,7 @@ class RequestsMock:
             response = self._real_send(adapter, request, **kwargs)  # type: ignore
         else:
             try:
-                response = adapter.build_response(  # type: ignore[assignment]
+                response = adapter.build_response(  # type: ignore[no-untyped-call]
                     request, match.get_response(request)
                 )
             except BaseException as response:

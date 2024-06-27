@@ -441,7 +441,6 @@ TSerializedTableRange MakeKeyRange(const TVector<NScheme::TTypeInfo>& keyColumnT
 {
     YQL_ENSURE(range.HasFrom());
     YQL_ENSURE(range.HasTo());
-    auto guard = typeEnv.BindAllocator();
 
     auto fromValues = FillKeyValues(keyColumnTypes, range.GetFrom(), stageInfo, holderFactory, typeEnv);
     if (range.GetFrom().GetIsInclusive()) {

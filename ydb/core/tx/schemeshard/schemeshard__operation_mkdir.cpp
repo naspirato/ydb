@@ -115,19 +115,6 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (Transaction.HasTempDirOwnerActorId() && !context.SS->EnableTempTables) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                TStringBuilder() << "It is not allowed to create temporary objects: " << name);
-            return result;
-        }
-
-        if (Transaction.HasTempDirOwnerActorId() && Transaction.GetAllowCreateInTempDir()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                TStringBuilder() << "Can't create temporary directory while flag AllowCreateInTempDir is set."
-                    << " Temporary directory can't be created in another temporary directory.");
-            return result;
-        }
-
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
@@ -138,8 +125,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+                .IsLikeDirectory();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -230,10 +216,6 @@ public:
         newDir->UserAttrs->AlterData = userAttrs;
         newDir->DirAlterVersion = 1;
 
-        if (Transaction.HasTempDirOwnerActorId()) {
-            newDir->TempDirOwnerActorId = ActorIdFromProto(Transaction.GetTempDirOwnerActorId());
-        }
-
         if (!acl.empty()) {
             newDir->ApplyACL(acl);
         }
@@ -247,16 +229,6 @@ public:
         }
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
-
-        if (Transaction.HasTempDirOwnerActorId()) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Processing create temp directory with Name: " << name
-                    << ", WorkingDir: " << parentPathStr
-                    << ", TempDirOwnerActorId: " << newDir->TempDirOwnerActorId
-                    << ", PathId: " << newDir->PathId);
-            context.OnComplete.UpdateTempDirsToMakeState(
-                newDir->TempDirOwnerActorId, newDir->PathId);
-        }
 
         dstPath.DomainInfo()->IncPathsInside();
         parentPath.Base()->IncAliveChildren();

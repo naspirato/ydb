@@ -57,10 +57,6 @@ void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TTableDescription& prot
     if (ReplicationConfig) {
         ReplicationConfig->SerializeTo(*proto.MutableReplicationConfig());
     }
-
-    if (UniformPartitions) {
-        proto.SetUniformPartitionsCount(*UniformPartitions);
-    }
 }
 
 THolder<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc) {

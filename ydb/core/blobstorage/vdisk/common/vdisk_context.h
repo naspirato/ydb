@@ -9,7 +9,6 @@
 #include "vdisk_outofspace.h"
 #include "vdisk_histograms.h"
 #include "vdisk_mongroups.h"
-#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/ptr.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -44,7 +43,7 @@ namespace NKikimr {
         NVDiskMon::THistograms Histograms;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         // Self VDisk related info
-        const TGroupId GroupId;
+        const ui32 GroupId;
         const TVDiskIdShort ShortSelfVDisk;
         const TString VDiskLogPrefix;
         const ui32 NodeId;

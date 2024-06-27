@@ -99,7 +99,6 @@ constexpr size_t Base64EncodeBufSize(const size_t len) noexcept {
 
 char* Base64Encode(char* outstr, const unsigned char* instr, size_t len);
 char* Base64EncodeUrl(char* outstr, const unsigned char* instr, size_t len);
-char* Base64EncodeNoPadding(char* outstr, const unsigned char* instr, size_t len);
 
 /// Make base64 string which stay unchaged after applying 'urlencode' function
 /// as it doesn't contain character, which cannot be used in urls
@@ -115,10 +114,6 @@ inline TStringBuf Base64Encode(const TStringBuf src, void* output) {
     return TStringBuf(static_cast<const char*>(output), Base64Encode(static_cast<char*>(output), reinterpret_cast<const unsigned char*>(src.data()), src.size()));
 }
 
-inline TStringBuf Base64EncodeNoPadding(const TStringBuf src, void* output) {
-    return TStringBuf(static_cast<const char*>(output), Base64EncodeNoPadding(static_cast<char*>(output), reinterpret_cast<const unsigned char*>(src.data()), src.size()));
-}
-
 inline TStringBuf Base64EncodeUrl(const TStringBuf src, void* output) {
     return TStringBuf(static_cast<const char*>(output), Base64EncodeUrl(static_cast<char*>(output), reinterpret_cast<const unsigned char*>(src.data()), src.size()));
 }
@@ -130,11 +125,6 @@ inline TStringBuf Base64EncodeUrlNoPadding(const TStringBuf src, void* output) {
 inline void Base64Encode(const TStringBuf src, TString& dst) {
     dst.ReserveAndResize(Base64EncodeBufSize(src.size()));
     dst.resize(Base64Encode(src, dst.begin()).size());
-}
-
-inline void Base64EncodeNoPadding(const TStringBuf src, TString& dst) {
-    dst.ReserveAndResize(Base64EncodeBufSize(src.size()));
-    dst.resize(Base64EncodeNoPadding(src, dst.begin()).size());
 }
 
 inline void Base64EncodeUrl(const TStringBuf src, TString& dst) {
@@ -150,12 +140,6 @@ inline void Base64EncodeUrlNoPadding(const TStringBuf src, TString& dst) {
 inline TString Base64Encode(const TStringBuf s) {
     TString ret;
     Base64Encode(s, ret);
-    return ret;
-}
-
-inline TString Base64EncodeNoPadding(const TStringBuf s) {
-    TString ret;
-    Base64EncodeNoPadding(s, ret);
     return ret;
 }
 

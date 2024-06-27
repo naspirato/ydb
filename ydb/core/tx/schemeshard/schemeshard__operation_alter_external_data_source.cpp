@@ -214,8 +214,7 @@ public:
                                                    static_cast<ui64>(ssId));
 
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
-            result, parentPath, Transaction, /* isCreate */ false));
+        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(result, parentPath));
 
         const TString acl   = Transaction.GetModifyACL().GetDiffACL();
         const TPath dstPath = parentPath.Child(name);

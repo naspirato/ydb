@@ -266,20 +266,11 @@ TReplicaInfo* TReplicationCard::GetReplicaOrThrow(TReplicaId replicaId, TReplica
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsReplicaSync(ETableReplicaMode mode, const std::vector<TReplicaHistoryItem>& replicaHistory)
+bool IsReplicaSync(ETableReplicaMode mode, const TReplicaHistoryItem& lastReplicaHistoryItem)
 {
     // Check actual replica state to avoid merging transition states (e.g. AsyncToSync -> SyncToAsync)
-    if (mode == ETableReplicaMode::Sync) {
-        return true;
-    }
-
-    if (mode != ETableReplicaMode::SyncToAsync) {
-        return false;
-    }
-
-    // Replica in transient state MUST have previous non-transient state
-    YT_VERIFY(!replicaHistory.empty());
-    return replicaHistory.back().IsSync();
+    return mode == ETableReplicaMode::Sync ||
+        (mode == ETableReplicaMode::SyncToAsync && lastReplicaHistoryItem.IsSync());
 }
 
 bool IsReplicaAsync(ETableReplicaMode mode)
@@ -300,9 +291,9 @@ bool IsReplicaDisabled(ETableReplicaState state)
 bool IsReplicaReallySync(
     ETableReplicaMode mode,
     ETableReplicaState state,
-    const std::vector<TReplicaHistoryItem>& replicaHistory)
+    const TReplicaHistoryItem& lastReplicaHistoryItem)
 {
-    return IsReplicaSync(mode, replicaHistory) && IsReplicaEnabled(state);
+    return IsReplicaSync(mode, lastReplicaHistoryItem) && IsReplicaEnabled(state);
 }
 
 ETableReplicaMode GetTargetReplicaMode(ETableReplicaMode mode)
@@ -863,7 +854,7 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
 {
     TReplicationProgress syncProgress;
     for (const auto& [replicaId, replicaInfo] : replicas) {
-        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History.back())) {
             if (syncProgress.Segments.empty()) {
                 syncProgress = replicaInfo.ReplicationProgress;
             } else {
@@ -874,7 +865,7 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
 
     THashMap<TReplicaId, TDuration> result;
     for (const auto& [replicaId, replicaInfo] : replicas) {
-        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History.back())) {
             result.emplace(replicaId, TDuration::Zero());
         } else {
             result.emplace(

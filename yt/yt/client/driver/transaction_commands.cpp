@@ -17,7 +17,6 @@ using namespace NTransactionClient;
 using namespace NCypressClient;
 using namespace NObjectClient;
 using namespace NConcurrency;
-using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -174,26 +173,10 @@ void TPingTransactionCommand::DoExecute(ICommandContextPtr context)
 void TCommitTransactionCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = AttachTransaction(context, true);
-    auto transactionCommitResult = WaitFor(transaction->Commit(Options))
-        .ValueOrThrow();
+    WaitFor(transaction->Commit(Options))
+        .ThrowOnError();
 
-    if (context->GetConfig()->ApiVersion == ApiVersion3 || !context->GetConfig()->EnableInternalCommands) {
-        ProduceEmptyOutput(context);
-    } else {
-        ProduceOutput(
-            context,
-            [&] (IYsonConsumer* consumer) {
-                BuildYsonFluently(consumer)
-                    .BeginMap()
-                        .Item("primary_commit_timestamp").Value(transactionCommitResult.PrimaryCommitTimestamp)
-                        .Item("commit_timestamps").DoMapFor(
-                            transactionCommitResult.CommitTimestamps.Timestamps,
-                            [&](auto fluent, const auto& pair) {
-                                fluent.Item(ToString(pair.first)).Value(pair.second);
-                            })
-                    .EndMap();
-            });
-    }
+    ProduceEmptyOutput(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

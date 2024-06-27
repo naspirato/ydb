@@ -44,7 +44,6 @@ struct TTestTableDescription {
     TVector<TString> KeyColumns;
     TVector<TColumn> Columns;
     TMaybe<TReplicationConfig> ReplicationConfig = TReplicationConfig::Default();
-    TMaybe<ui32> UniformPartitions = Nothing();
 
     void SerializeTo(NKikimrSchemeOp::TTableDescription& proto) const;
 };

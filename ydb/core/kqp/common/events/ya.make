@@ -5,7 +5,6 @@ SRCS(
     events.cpp
     query.cpp
     script_executions.cpp
-    workload_service.cpp
 )
 
 PEERDIR(
@@ -15,7 +14,6 @@ PEERDIR(
     ydb/core/grpc_services/cancelation
     ydb/core/kqp/common/shutdown
     ydb/core/kqp/common/compilation
-    ydb/core/resource_pools
 
     ydb/library/yql/dq/actors
     ydb/public/api/protos

@@ -124,11 +124,9 @@ struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplic
 
 struct TEvStateStorage::TEvResolveBoard : public TEventLocal<TEvResolveBoard, EvResolveBoard> {
     const TString Path;
-    const bool Subscribe;
 
-    TEvResolveBoard(const TString &path, bool subscribe = false)
+    TEvResolveBoard(const TString &path)
         : Path(path)
-        , Subscribe(subscribe)
     {}
 };
 
@@ -142,18 +140,15 @@ struct TEvStateStorage::TEvResolveSchemeBoard : public TEventLocal<TEvResolveSch
     const TPathId PathId;
 
     const EKeyType KeyType;
-    const bool Subscribe;
 
-    TEvResolveSchemeBoard(const TString &path, bool subscribe = false)
+    TEvResolveSchemeBoard(const TString &path)
         : Path(path)
         , KeyType(KeyTypePath)
-        , Subscribe(subscribe)
     {}
 
-    TEvResolveSchemeBoard(const TPathId& pathId, bool subscribe = false)
+    TEvResolveSchemeBoard(const TPathId& pathId)
         : PathId(pathId)
         , KeyType(KeyTypePathId)
-        , Subscribe(subscribe)
     {}
 };
 

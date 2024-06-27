@@ -48,8 +48,7 @@ def format_ms(times):
     """
     ordered = sorted(times)
     n = len(ordered) - 1
-    if n < 0 or any(math.isnan(t) for t in ordered):
-        return "NaN ms"
+    assert n >= 0
     lower = int(ordered[int(math.floor(n * 0.05))] * 1000)
     upper = int(ordered[int(math.ceil(n * 0.95))] * 1000)
     if upper == 0:
