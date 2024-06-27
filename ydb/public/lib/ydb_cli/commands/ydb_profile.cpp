@@ -198,7 +198,7 @@ namespace {
     }
 
     TString TryBlurValue(const TString& authMethod, const TString& value) {
-        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oauth2-key-file") {
+        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file") {
             return value;
         }
         if (authMethod == "password") {
@@ -218,7 +218,7 @@ namespace {
             auto authValue = profile->GetValue(AuthNode);
             TString authMethod = authValue["method"].as<TString>();
             Cout << "  " << authMethod;
-            if (authMethod == "ydb-token" || authMethod == "oauth2-key-file" || authMethod == "iam-token"
+            if (authMethod == "ydb-token" ||authMethod == "iam-token"
                 || authMethod == "yc-token" || authMethod == "sa-key-file"
                 || authMethod == "token-file" || authMethod == "yc-token-file") {
                 Cout << ": " << TryBlurValue(authMethod, authValue["data"].as<TString>());
@@ -276,11 +276,6 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
     }
     if (config.SecurityToken) {
         Cout << "token: " << TryBlurValue("token", config.SecurityToken) << Endl;
-    }
-    if (config.UseOauth2TokenExchange) {
-        if (config.Oauth2KeyFile) {
-            Cout << "oauth2-key-file: " << config.Oauth2KeyFile << Endl;
-        }
     }
     if (config.UseIamAuth) {
         if (config.YCToken) {
@@ -375,7 +370,6 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
     THashMap<TString, TString&> options {
         {"database", Database},
         {"token-file", TokenFile},
-        {"oauth2-key-file", Oauth2KeyFile},
         {"yc-token-file", YcTokenFile},
         {"iam-token-file", IamTokenFile},
         {"sa-key-file", SaKeyFile},
@@ -532,17 +526,11 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
                 }
         );
         picker.AddOption(
-                "Use OAuth 2.0 RFC8693 token exchange credentials parameters json file.",
-                [&profile, &profileName]() {
-                    SetAuthMethod("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file", profile, profileName);
-                }
-        );
-        picker.AddOption(
                 "Use metadata service on a virtual machine (use-metadata-credentials)"
                 " cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm",
                 [&profile, &profileName]() {
                     Cout << "Setting metadata service usage for profile \"" << profileName << "\"" << Endl;
-                    PutAuthMethodWithoutPars(profile, "use-metadata-credentials");
+                    PutAuthMethodWithoutPars( profile, "use-metadata-credentials" );
                 }
         );
         picker.AddOption(
@@ -553,11 +541,11 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
                 }
         );
     }
-    if (config.UseAccessToken) {
+    if (config.UseOAuthToken) {
         picker.AddOption(
-                "Set new access token (ydb-token)",
+                "Set new OAuth token (ydb-token)",
                 [&profile, &profileName]() {
-                    SetAuthMethod("ydb-token", "YDB token", profile, profileName);
+                    SetAuthMethod("ydb-token", "OAuth YDB token", profile, profileName);
                 }
         );
     }
@@ -582,7 +570,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
             description << "Use current settings with method \"" << method << "\"";
             if (method == "iam-token" || method == "yc-token" || method == "ydb-token") {
                 description << " and value \"" << BlurSecret(authValue["data"].as<TString>()) << "\"";
-            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file") {
+            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file") {
                 description << " and value \"" << authValue["data"].as<TString>() << "\"";
             }
             picker.AddOption(
@@ -600,20 +588,18 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
         profile->SetValue("iam-endpoint", IamEndpoint);
     }
     if (TokenFile) {
-        PutAuthMethod(profile, "token-file", TokenFile);
-    } else if (Oauth2KeyFile) {
-        PutAuthMethod(profile, "oauth2-key-file", Oauth2KeyFile);
+        PutAuthMethod( profile, "token-file", TokenFile);
     } else if (IamTokenFile) {
         // no error here, we take the iam-token-file option as just a token-file authentication
-        PutAuthMethod(profile, "token-file", IamTokenFile);
-    } else if (YcTokenFile) {
-        PutAuthMethod(profile, "yc-token-file", YcTokenFile);
+        PutAuthMethod( profile, "token-file", IamTokenFile);
+    }else if (YcTokenFile) {
+        PutAuthMethod( profile, "yc-token-file", YcTokenFile);
     } else if (UseMetadataCredentials) {
-        PutAuthMethodWithoutPars(profile, "use-metadata-credentials");
+        PutAuthMethodWithoutPars( profile, "use-metadata-credentials");
     } else if (SaKeyFile) {
-        PutAuthMethod(profile, "sa-key-file", SaKeyFile);
+        PutAuthMethod( profile, "sa-key-file", SaKeyFile);
     } else if (User) {
-        PutAuthStatic(profile, User, PasswordFile, true);
+        PutAuthStatic( profile, User, PasswordFile, true );
     } else if (AnonymousAuth) {
         PutAuthMethodWithoutPars(profile, "anonymous-auth");
     } else {
@@ -624,8 +610,7 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
 
 void TCommandProfileCommon::ValidateAuth() {
     size_t authMethodCount =
-            (bool) (TokenFile) + (bool) (Oauth2KeyFile) +
-            (bool) (IamTokenFile) +
+            (bool) (TokenFile) + (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
             (bool) (SaKeyFile) + AnonymousAuth +
             (User || PasswordFile);
@@ -639,9 +624,6 @@ void TCommandProfileCommon::ValidateAuth() {
         str << authMethodCount << " authentication methods were provided via options:";
         if (TokenFile) {
             str << " TokenFile (" << TokenFile << ")";
-        }
-        if (Oauth2KeyFile) {
-            str << " OAuth2KeyFile (" << Oauth2KeyFile << ")";
         }
         if (IamTokenFile) {
             str << " IamTokenFile (" << IamTokenFile << ")";
@@ -670,7 +652,7 @@ void TCommandProfileCommon::ValidateAuth() {
 }
 
 bool TCommandProfileCommon::AnyProfileOptionInCommandLine() {
-    return Endpoint || Database || TokenFile || Oauth2KeyFile ||
+    return Endpoint || Database || TokenFile ||
            IamTokenFile || YcTokenFile ||
            SaKeyFile || UseMetadataCredentials || User ||
            PasswordFile || IamEndpoint || AnonymousAuth || CaCertsFile;
@@ -691,9 +673,6 @@ void TCommandProfileCommon::Config(TConfig& config) {
     opts.AddLongOption('d', "database", "Database to save in the profile").RequiredArgument("PATH").StoreResult(&Database);
 
     opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH").StoreResult(&TokenFile);
-    if (config.UseOauth2TokenExchange) {
-        opts.AddLongOption("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file").RequiredArgument("PATH").StoreResult(&Oauth2KeyFile);
-    }
     opts.AddLongOption("iam-token-file", "Access token file").RequiredArgument("PATH").Hidden().StoreResult(&IamTokenFile);
     opts.AddLongOption("anonymous-auth", "Anonymous authentication").Optional().StoreTrue(&AnonymousAuth);
     if (config.UseIamAuth) {
@@ -1070,8 +1049,7 @@ void TCommandUpdateProfile::Config(TConfig& config) {
 
 void TCommandUpdateProfile::ValidateNoOptions() {
     size_t authMethodCount =
-            (bool) (TokenFile) + (bool) (Oauth2KeyFile) +
-            (bool) (IamTokenFile) +
+            (bool) (TokenFile) + (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
             (bool) (SaKeyFile) + AnonymousAuth +
             (User || PasswordFile);

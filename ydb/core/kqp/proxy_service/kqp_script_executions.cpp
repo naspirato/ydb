@@ -1936,6 +1936,9 @@ std::optional<std::pair<TDuration, TDuration>> GetTtlFromSerializedMeta(const TS
 }
 
 class TGetScriptExecutionResultQueryActor : public TQueryBase {
+    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
+    static constexpr i64 MAX_BATCH_SIZE = 20_MB;
+
 public:
     TGetScriptExecutionResultQueryActor(const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant deadline)
         : TQueryBase(__func__, executionId)
@@ -1943,22 +1946,40 @@ public:
         , ExecutionId(executionId)
         , ResultSetIndex(resultSetIndex)
         , Offset(offset)
-        , RowsLimit(rowsLimit)
-        , SizeLimit(sizeLimit)
+        , RowsLimit(rowsLimit ? rowsLimit : std::numeric_limits<i64>::max())
+        , SizeLimit(sizeLimit ? sizeLimit : std::numeric_limits<i64>::max())
         , Deadline(rowsLimit ? TInstant::Max() : deadline)
     {}
 
     void OnRunQuery() override {
         TString sql = R"(
-            -- TGetScriptExecutionResultQueryActor::OnRunQuery
+            -- TGetScriptExecutionResultQuery::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
+            DECLARE $result_set_id AS Int32;
+            DECLARE $offset AS Int64;
 
             SELECT result_set_metas, operation_status, issues, end_ts, meta
             FROM `.metadata/script_executions`
             WHERE database = $database
               AND execution_id = $execution_id
               AND (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
+
+            $result_set_table = (
+            SELECT row_id, accumulated_size
+            FROM `.metadata/result_sets`
+            WHERE database = $database
+              AND execution_id = $execution_id
+              AND result_set_id = $result_set_id
+            );
+
+            SELECT MAX(row_id) AS max_row_id
+            FROM $result_set_table
+            WHERE row_id >= $offset;
+
+            SELECT MAX(accumulated_size) AS start_accumulated_size
+            FROM $result_set_table
+            WHERE row_id < $offset;
         )";
 
         NYdb::TParamsBuilder params;
@@ -1968,6 +1989,12 @@ public:
                 .Build()
             .AddParam("$execution_id")
                 .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$result_set_id")
+                .Int32(ResultSetIndex)
+                .Build()
+            .AddParam("$offset")
+                .Int64(Offset)
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -1975,81 +2002,121 @@ public:
     }
 
     void OnGetResultsInfo() {
-        if (ResultSets.size() != 1) {
+        if (ResultSets.size() != 3) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
         }
 
-        NYdb::TResultSetParser result(ResultSets[0]);
-        if (!result.TryNextRow()) {
-            Finish(Ydb::StatusIds::NOT_FOUND, "Script execution not found");
-            return;
-        }
+        { // columns meta
+            NYdb::TResultSetParser result(ResultSets[0]);
 
-        const TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
-        if (!operationStatus) {
-            Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
-            return;
-        }
-
-        const auto serializedMeta = result.ColumnParser("meta").GetOptionalJsonDocument();
-        if (!serializedMeta) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation metainformation");
-            return;
-        }
-
-        const auto endTs = result.ColumnParser("end_ts").GetOptionalTimestamp();
-        if (!endTs) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation end timestamp");
-            return;
-        }
-
-        const auto ttl = GetTtlFromSerializedMeta(*serializedMeta);
-        if (!ttl) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
-            return;
-        }
-        const auto [_, resultsTtl] = *ttl;
-        if (resultsTtl && (*endTs + resultsTtl) < TInstant::Now()){
-            Finish(Ydb::StatusIds::NOT_FOUND, "Results are expired");
-            return;
-        }
-
-        Ydb::StatusIds::StatusCode operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
-        if (operationStatusCode != Ydb::StatusIds::SUCCESS) {
-            const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
-            if (issuesSerialized) {
-                Finish(operationStatusCode, DeserializeIssues(*issuesSerialized));
-            } else {
-                Finish(operationStatusCode, "Invalid operation");
+            if (!result.TryNextRow()) {
+                Finish(Ydb::StatusIds::NOT_FOUND, "Script execution not found");
+                return;
             }
-            return;
+
+            const TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+            if (!operationStatus) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
+                return;
+            }
+
+            const auto serializedMeta = result.ColumnParser("meta").GetOptionalJsonDocument();
+            if (!serializedMeta) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation metainformation");
+                return;
+            }
+
+            const auto endTs = result.ColumnParser("end_ts").GetOptionalTimestamp();
+            if (!endTs) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation end timestamp");
+                return;
+            }
+
+            const auto ttl = GetTtlFromSerializedMeta(*serializedMeta);
+            if (!ttl) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
+                return;
+            }
+            const auto [_, resultsTtl] = *ttl;
+            if (resultsTtl && (*endTs + resultsTtl) < TInstant::Now()){
+                Finish(Ydb::StatusIds::NOT_FOUND, "Results are expired");
+                return;
+            }
+
+            Ydb::StatusIds::StatusCode operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
+            if (operationStatusCode != Ydb::StatusIds::SUCCESS) {
+                const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
+                if (issuesSerialized) {
+                    Finish(operationStatusCode, DeserializeIssues(*issuesSerialized));
+                } else {
+                    Finish(operationStatusCode, "Invalid operation");
+                }
+                return;
+            }
+
+            const TMaybe<TString> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
+            if (!serializedMetas) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is empty");
+                return;
+            }
+
+            NJson::TJsonValue value;
+            if (!NJson::ReadJsonTree(*serializedMetas, &value) || value.GetType() != NJson::JSON_ARRAY) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is corrupted");
+                return;
+            }
+
+            const NJson::TJsonValue* metaValue;
+            if (!value.GetValuePointer(ResultSetIndex, &metaValue)) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
+                return;
+            }
+
+            Ydb::Query::Internal::ResultSetMeta meta;
+            NProtobufJson::Json2Proto(*metaValue, meta);
+
+            *ResultSet.mutable_columns() = meta.columns();
+            ResultSet.set_truncated(meta.truncated());
+
+            if (SizeLimit) {
+                const i64 resultSetSize = ResultSet.ByteSizeLong();
+                if (resultSetSize > SizeLimit) {
+                    Finish(Ydb::StatusIds::BAD_REQUEST, "Result set meta is larger than fetch size limit");
+                    return;
+                }
+                SizeLimit -= resultSetSize;
+            }
         }
 
-        const TMaybe<TString> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
-        if (!serializedMetas) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is empty");
-            return;
+        { // max row id
+            NYdb::TResultSetParser result(ResultSets[1]);
+            if (result.RowsCount() != 1) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+                return;
+            }
+
+            result.TryNextRow();
+
+            const TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
+            if (!maxRowId) {
+                HasMoreResults = false;
+                Finish();
+                return;
+            }
+            MaxRowId = *maxRowId;
         }
 
-        NJson::TJsonValue value;
-        if (!NJson::ReadJsonTree(*serializedMetas, &value) || value.GetType() != NJson::JSON_ARRAY) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is corrupted");
-            return;
+        { // start accumulated size
+            NYdb::TResultSetParser result(ResultSets[2]);
+            if (result.RowsCount() != 1) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+                return;
+            }
+
+            result.TryNextRow();
+            StartAccumulatedSize = result.ColumnParser("start_accumulated_size").GetOptionalInt64().GetOrElse(0);
         }
-
-        const NJson::TJsonValue* metaValue;
-        if (!value.GetValuePointer(ResultSetIndex, &metaValue)) {
-            Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
-            return;
-        }
-
-        Ydb::Query::Internal::ResultSetMeta meta;
-        NProtobufJson::Json2Proto(*metaValue, meta);
-
-        *ResultSet.mutable_columns() = meta.columns();
-        ResultSet.set_truncated(meta.truncated());
-        ResultSetSize = ResultSet.ByteSizeLong();
 
         ClearTimeInfo();
         FetchScriptResults();
@@ -2063,6 +2130,7 @@ public:
             DECLARE $result_set_id AS Int32;
             DECLARE $offset AS Int64;
             DECLARE $limit AS Uint64;
+            DECLARE $max_accumulated_size AS int64;
 
             SELECT database, execution_id, result_set_id, row_id, result_set
             FROM `.metadata/result_sets`
@@ -2070,6 +2138,7 @@ public:
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
               AND row_id >= $offset
+              AND (accumulated_size IS NULL OR accumulated_size <= $max_accumulated_size)
             ORDER BY database, execution_id, result_set_id, row_id
             LIMIT $limit;
         )";
@@ -2089,17 +2158,44 @@ public:
                 .Int64(Offset)
                 .Build()
             .AddParam("$limit")
-                .Uint64(RowsLimit ? RowsLimit + 1 : std::numeric_limits<ui64>::max())
+                .Uint64(std::min(RowsLimit, MAX_NUMBER_ROWS_IN_BATCH))
+                .Build()
+            .AddParam("$max_accumulated_size")
+                .Int64(StartAccumulatedSize + std::min(SizeLimit, MAX_BATCH_SIZE))
                 .Build();
 
-        RunStreamQuery(sql, &params, SizeLimit ? SizeLimit : 60_MB);
-        SetQueryResultHandler(&TGetScriptExecutionResultQueryActor::OnQueryResult, TStringBuilder() << "Fetch results for offset " << Offset);
+        RunDataQuery(sql, &params);
+        SetQueryResultHandler(&TGetScriptExecutionResultQueryActor::OnResultsFetched, TStringBuilder() << "Fetch results for offset " << Offset);
     }
 
-    void OnStreamResult(NYdb::TResultSet&& resultSet) override {
-        NYdb::TResultSetParser result(resultSet);
+    void OnResultsFetched() {
+        if (ResultSets.size() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+
+        NYdb::TResultSetParser result(ResultSets[0]);
+
+        if (result.RowsCount() == 0) {
+            if (ResultSet.rows_size() > 0) {
+                Finish();
+            } else {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Failed to fetch script result due to size limit");
+            }
+            return;
+        }
+
+        i64 lastRowId = 0;
         while (result.TryNextRow()) {
+            const TMaybe<i64> rowId = result.ColumnParser("row_id").GetOptionalInt64();
+            if (!rowId) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row id is null");
+                return;
+            }
+            lastRowId = *rowId;
+
             const TMaybe<TString> serializedRow = result.ColumnParser("result_set").GetOptionalString();
+
             if (!serializedRow) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is null");
                 return;
@@ -2109,32 +2205,30 @@ public:
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is empty");
                 return;
             }
-  
-            i64 rowSize = serializedRow->size();
-            if (SizeLimit && ResultSet.rows_size() && ResultSetSize + rowSize > SizeLimit) {
-                CancelFetchQuery();
-                return;
-            }
 
-            if (RowsLimit && ResultSet.rows_size() >= RowsLimit) {
-                CancelFetchQuery();
-                return;
-            }
-
-            ResultSetSize += rowSize;
+            StartAccumulatedSize += serializedRow->size();
+            SizeLimit -= serializedRow->size();
             if (!ResultSet.add_rows()->ParseFromString(*serializedRow)) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is corrupted");
                 return;
             }
         }
 
-        if (TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {
-            CancelFetchQuery();
+        if (lastRowId >= MaxRowId) {
+            HasMoreResults = false;
+            Finish();
+            return;
         }
-    }
 
-    void OnQueryResult() override {
-        Finish();
+        Offset += result.RowsCount();
+        RowsLimit -= result.RowsCount();
+
+        if (RowsLimit <= 0 || SizeLimit <= 0 || TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {
+            Finish();
+            return;
+        }
+
+        FetchScriptResults();
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
@@ -2146,23 +2240,19 @@ public:
     }
 
 private:
-    void CancelFetchQuery() {
-        HasMoreResults = true;
-        CancelStreamQuery();
-    }
-
-private:
     const TString Database;
     const TString ExecutionId;
     const i32 ResultSetIndex;
-    const i64 Offset;
-    const i64 RowsLimit;
-    const i64 SizeLimit;
+    i64 Offset;
+    i64 RowsLimit;
+    i64 SizeLimit;
     const TInstant Deadline;
 
-    i64 ResultSetSize = 0;
+    i64 MaxRowId = 0;
+    i64 StartAccumulatedSize = 0;
+
     Ydb::ResultSet ResultSet;
-    bool HasMoreResults = false;
+    bool HasMoreResults = true;
 };
 
 class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecutionResultActor> {

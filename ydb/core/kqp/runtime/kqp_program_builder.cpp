@@ -160,7 +160,7 @@ EJoinKind GetIndexLookupJoinKind(const TString& joinKind) {
 }
 
 bool RightJoinSideAllowed(const TString& joinType) {
-    return joinType != "LeftOnly" && joinType != "LeftSemi";
+    return joinType != "LeftOnly";
 }
 
 bool RightJoinSideOptional(const TString& joinType) {

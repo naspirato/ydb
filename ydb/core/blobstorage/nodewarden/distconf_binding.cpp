@@ -198,7 +198,9 @@ namespace NKikimr::NStorage {
 
             IssueNextBindRequest();
 
-            FanOutReversePush(nullptr);
+            for (const auto& [nodeId, info] : DirectBoundNodes) {
+                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), nullptr));
+            }
 
             UnsubscribeInterconnect(binding.NodeId);
         }
@@ -235,7 +237,10 @@ namespace NKikimr::NStorage {
             } else if (prevRootNodeId != GetRootNodeId() || configUpdate) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId),
                     (ConfigUpdate, configUpdate));
-                FanOutReversePush(configUpdate ? &StorageConfig.value() : nullptr);
+                for (const auto& [nodeId, info] : DirectBoundNodes) {
+                    SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
+                        configUpdate ? &StorageConfig.value() : nullptr));
+                }
             }
         }
     }

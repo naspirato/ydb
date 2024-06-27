@@ -32,7 +32,6 @@ struct TEvPrivate {
         EvProcessStorageBalancer,
         EvStorageBalancerOut,
         EvDeleteNode,
-        EvCanMoveTablets,
         EvEnd
     };
 
@@ -118,8 +117,6 @@ struct TEvPrivate {
 
         TEvDeleteNode(TNodeId nodeId) : NodeId(nodeId) {}
     };
-
-    struct TEvCanMoveTablets : TEventLocal<TEvCanMoveTablets, EvCanMoveTablets> {};
 };
 
 } // NHive

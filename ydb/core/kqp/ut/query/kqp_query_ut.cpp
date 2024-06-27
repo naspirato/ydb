@@ -1607,8 +1607,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false)
-            .SetEnableTempTables(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -1660,8 +1659,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false)
-            .SetEnableTempTables(true);
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(

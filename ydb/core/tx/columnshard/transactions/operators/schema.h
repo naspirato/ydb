@@ -17,8 +17,9 @@ private:
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
     THashSet<ui64> WaitPathIdsToErase;
+    bool AfterStartFlag = false;
 
-    virtual bool DoOnStartAsync(TColumnShard& owner) override;
+    virtual void DoOnStart(TColumnShard& owner) override;
 
     template <class TInfoProto>
     THashSet<ui64> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
@@ -44,7 +45,7 @@ private:
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
     virtual bool DoIsAsync() const override {
-        return WaitPathIdsToErase.size();
+        return WaitPathIdsToErase.size() || AfterStartFlag;
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {

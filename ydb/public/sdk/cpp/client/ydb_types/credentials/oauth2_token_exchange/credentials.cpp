@@ -141,16 +141,13 @@ public:
 
 private:
     void ParseTokenEndpoint() {
-        if (TokenEndpoint_.empty()) {
-            throw std::invalid_argument(INV_ARG "token endpoint not set");
-        }
         NUri::TUri url;
         NUri::TUri::TState::EParsed parseStatus = url.Parse(TokenEndpoint_, NUri::TFeature::FeaturesAll);
         if (parseStatus != NUri::TUri::TState::EParsed::ParsedOK) {
             throw std::invalid_argument(INV_ARG "failed to parse url");
         }
         if (url.IsNull(NUri::TUri::FieldScheme)) {
-            throw std::invalid_argument(TStringBuilder() << INV_ARG "token url without scheme: " << TokenEndpoint_);
+            throw std::invalid_argument(INV_ARG "token url without scheme");
         }
         TokenHost_ = TStringBuilder() << url.GetField(NUri::TUri::FieldScheme) << "://" << url.GetHost();
 

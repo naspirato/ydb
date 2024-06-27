@@ -101,27 +101,9 @@ namespace NKikimr::NStorage {
             }
         };
         const bool nodeQuorum = HasNodeQuorum(*StorageConfig, generateSuccessful);
-
-        auto generateSuccessfulDisks = [&](auto&& callback) {
-            auto invoke = [&](const auto& disk) {
-                callback(TNodeIdentifier(disk.GetNodeId()), disk.GetPath(),
-                    disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
-            };
-            for (const auto& item : res->GetCommittedConfigs()) {
-                for (const auto& disk : item.GetDisks()) {
-                    invoke(disk);
-                }
-            }
-            for (const auto& disk : res->GetNoMetadata()) {
-                invoke(disk);
-            }
-        };
-        const bool configQuorum = HasConfigQuorum(*StorageConfig, generateSuccessfulDisks, *Cfg, false);
-
-        STLOG(PRI_DEBUG, BS_NODE, NWDC31, "ProcessCollectConfigs", (RootState, RootState), (NodeQuorum, nodeQuorum),
-            (ConfigQuorum, configQuorum), (Res, *res));
-        if (!nodeQuorum || !configQuorum) {
-            return SwitchToError("no quorum for CollectConfigs");
+        STLOG(PRI_DEBUG, BS_NODE, NWDC31, "ProcessCollectConfigs", (RootState, RootState), (NodeQuorum, nodeQuorum), (Res, *res));
+        if (!nodeQuorum) {
+            return SwitchToError("no node quorum for CollectConfigs");
         }
 
         // TODO: validate self-assembly UUID
@@ -195,7 +177,7 @@ namespace NKikimr::NStorage {
                     }
                 };
 
-                if (HasConfigQuorum(r.Config, generateSuccessful, *Cfg, false)) {
+                if (HasConfigQuorum(r.Config, generateSuccessful, *Cfg)) {
                     ++it;
                 } else {
                     set->erase(it++);
@@ -217,7 +199,9 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig *proposedConfig = proposedConfigs.empty() ? nullptr : &proposedConfigs.begin()->second.Config;
 
         if (committedConfig && ApplyStorageConfig(*committedConfig)) { // we have a committed config, apply and spread it
-            FanOutReversePush(&StorageConfig.value());
+            for (const auto& [nodeId, info] : DirectBoundNodes) {
+                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), &StorageConfig.value()));
+            }
         }
 
         NKikimrBlobStorage::TStorageConfig *configToPropose = nullptr;
@@ -298,7 +282,9 @@ namespace NKikimr::NStorage {
         } else if (HasConfigQuorum(*CurrentProposedStorageConfig, generateSuccessful, *Cfg)) {
             // apply configuration and spread it
             ApplyStorageConfig(*CurrentProposedStorageConfig);
-            FanOutReversePush(&StorageConfig.value());
+            for (const auto& [nodeId, info] : DirectBoundNodes) {
+                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), &StorageConfig.value()));
+            }
             CurrentProposedStorageConfig.reset();
         } else {
             STLOG(PRI_DEBUG, BS_NODE, NWDC47, "no quorum for ProposedStorageConfig", (Record, *res),
@@ -334,19 +320,16 @@ namespace NKikimr::NStorage {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::RACE);
-                } else if (const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
-                        proposed.GetGeneration() < StorageConfig->GetGeneration() || (
-                            proposed.GetGeneration() == StorageConfig->GetGeneration() &&
-                            proposed.GetFingerprint() != StorageConfig->GetFingerprint())) {
-                    auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
-                    SelfNode.Serialize(status->MutableNodeId());
-                    status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
-                    STLOG(PRI_ERROR, BS_NODE, NWDC49, "ProposedStorageConfig generation/fingerprint mismatch",
-                        (StorageConfig, StorageConfig), (Request, task.Request), (RootNodeId, GetRootNodeId()));
-                    Y_DEBUG_ABORT();
                 } else {
                     ProposedStorageConfigCookie = cookie;
-                    ProposedStorageConfig.emplace(proposed);
+                    ProposedStorageConfig.emplace(task.Request.GetProposeStorageConfig().GetConfig());
+
+                    // TODO(alexvru): check if this is valid
+                    Y_VERIFY_DEBUG_S(StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration() || (
+                        StorageConfig->GetGeneration() == ProposedStorageConfig->GetGeneration() &&
+                        StorageConfig->GetFingerprint() == ProposedStorageConfig->GetFingerprint()),
+                        "StorageConfig.Generation# " << StorageConfig->GetGeneration()
+                        << " ProposedStorageConfig.Generation# " << ProposedStorageConfig->GetGeneration());
 
                     // issue notification to node warden
                     if (StorageConfig && StorageConfig->GetGeneration() &&
@@ -424,7 +407,9 @@ namespace NKikimr::NStorage {
                 ptr = response->AddNodes();
                 ptr->MutableBaseConfig()->CopyFrom(config);
             }
-            ptr->MutableNodeIds()->MergeFrom(item.GetNodeIds());
+            for (const auto& node : item.GetNodeIds()) {
+                ptr->AddNodeIds()->CopyFrom(node);
+            }
         };
 
         auto addPerDiskConfig = [&](const TEvGather::TCollectConfigs::TPersistentConfig& item, auto addFunc, auto& set) {
@@ -434,7 +419,9 @@ namespace NKikimr::NStorage {
                 ptr = (response->*addFunc)();
                 ptr->MutableConfig()->CopyFrom(config);
             }
-            ptr->MutableDisks()->MergeFrom(item.GetDisks());
+            for (const auto& disk : item.GetDisks()) {
+                ptr->AddDisks()->CopyFrom(disk);
+            }
         };
 
         TEvGather::TCollectConfigs::TNode s;
@@ -445,13 +432,6 @@ namespace NKikimr::NStorage {
 
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> committedConfigs;
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposedConfigs;
-
-        for (auto& item : *response->MutableCommittedConfigs()) {
-            committedConfigs[item.GetConfig()] = &item;
-        }
-        for (auto& item : *response->MutableProposedConfigs()) {
-            proposedConfigs[item.GetConfig()] = &item;
-        }
 
         for (const auto& reply : task.CollectedResponses) {
             if (reply.HasCollectConfigs()) {
@@ -465,8 +445,6 @@ namespace NKikimr::NStorage {
                 for (const auto& item : cc.GetProposedConfigs()) {
                     addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddProposedConfigs, proposedConfigs);
                 }
-                response->MutableNoMetadata()->MergeFrom(cc.GetNoMetadata());
-                response->MutableErrors()->MergeFrom(cc.GetErrors());
             }
         }
     }
@@ -477,12 +455,6 @@ namespace NKikimr::NStorage {
             if (reply.HasProposeStorageConfig()) {
                 response->MutableStatus()->MergeFrom(reply.GetProposeStorageConfig().GetStatus());
             }
-        }
-    }
-
-    void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config) {
-        for (const auto& [nodeId, info] : DirectBoundNodes) {
-            SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), config));
         }
     }
 

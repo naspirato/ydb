@@ -20,11 +20,7 @@ bool TBlobManagerDb::LoadGCBarrierPreparation(TGenStep& genStep) {
 }
 
 void TBlobManagerDb::SaveGCBarrierPreparation(const TGenStep& genStep) {
-    SaveGCBarrierPreparation(Database, genStep);
-}
-
-void TBlobManagerDb::SaveGCBarrierPreparation(NTable::TDatabase& database, const TGenStep& genStep) {
-    NIceDb::TNiceDb db(database);
+    NIceDb::TNiceDb db(Database);
     Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationGen, genStep.Generation());
     Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationStep, genStep.Step());
 }

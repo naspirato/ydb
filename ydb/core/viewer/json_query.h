@@ -39,7 +39,6 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString Stats;
     TString Syntax;
     TString QueryId;
-    TString TransactionMode;
     bool Direct = false;
     bool IsBase64Encode = true;
 
@@ -83,7 +82,6 @@ public:
         Schema = StringToSchemaType(schemaStr);
         Syntax = params.Get("syntax");
         QueryId = params.Get("query_id");
-        TransactionMode = params.Get("transaction_mode");
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
     }
@@ -99,7 +97,6 @@ public:
             Action = Action.empty() ? requestData["action"].GetStringSafe({}) : Action;
             Syntax = Syntax.empty() ? requestData["syntax"].GetStringSafe({}) : Syntax;
             QueryId = QueryId.empty() ? requestData["query_id"].GetStringSafe({}) : QueryId;
-            TransactionMode = TransactionMode.empty() ? requestData["transaction_mode"].GetStringSafe({}) : TransactionMode;
         }
         return success;
     }
@@ -109,8 +106,7 @@ public:
     }
 
     TJsonQuery(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TBase(ev)
-        , Viewer(viewer)
+        : Viewer(viewer)
         , Event(ev)
     {
     }
@@ -197,28 +193,9 @@ public:
         auto event = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         if (Database) {
             event->Record.MutableRequest()->SetDatabase(Database);
-            if (Span) {
-                Span.Attribute("database", Database);
-            }
         }
         BLOG_TRACE("Creating session");
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
-    }
-
-    void SetTransactionMode(NKikimrKqp::TQueryRequest& request) {
-        if (TransactionMode == "serializable-read-write") {
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_txcontrol()->set_commit_tx(true);
-        } else if (TransactionMode == "online-read-only") {
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_online_read_only();
-            request.mutable_txcontrol()->set_commit_tx(true);
-        } else if (TransactionMode == "stale-read-only") {
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_stale_read_only();
-            request.mutable_txcontrol()->set_commit_tx(true);
-        } else if (TransactionMode == "snapshot-read-only") {
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_snapshot_read_only();
-            request.mutable_txcontrol()->set_commit_tx(true);
-        }
     }
 
     void HandleReply(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
@@ -255,7 +232,6 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.SetKeepSession(false);
-            SetTransactionMode(request);
         } else if (Action == "explain-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
@@ -267,8 +243,9 @@ public:
         } else if (Action == "execute-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+            request.mutable_txcontrol()->set_commit_tx(true);
             request.SetKeepSession(false);
-            SetTransactionMode(request);
         } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -331,14 +308,6 @@ private:
                 return valueParser.GetTimestamp().ToString();
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
-            case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetInt32();
-            case NYdb::EPrimitiveType::Datetime64:
-                return valueParser.GetDatetime64();
-            case NYdb::EPrimitiveType::Timestamp64:
-                return valueParser.GetTimestamp64();
-            case NYdb::EPrimitiveType::Interval64:
-                return valueParser.GetInterval64();
             case NYdb::EPrimitiveType::TzDate:
                 return valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:
@@ -471,9 +440,6 @@ private:
 
     void ReplyAndPassAway(TString data) {
         Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        if (Span) {
-            Span.End();
-        }
         PassAway();
     }
 
@@ -488,18 +454,13 @@ private:
         while (protoIssues->size() > 0 && (*protoIssues)[0].issuesSize() > 0) {
             protoIssues = (*protoIssues)[0].mutable_issues();
         }
-        TString message;
         if (protoIssues->size() > 0) {
             const Ydb::Issue::IssueMessage& issue = (*protoIssues)[0];
             NProtobufJson::Proto2Json(issue, jsonResponse["error"]);
-            message = issue.message();
         }
         for (const auto& queryIssue : *protoIssues) {
             NJson::TJsonValue& issue = jsonIssues.AppendValue({});
             NProtobufJson::Proto2Json(queryIssue, issue);
-        }
-        if (Span) {
-            Span.EndError(message);
         }
     }
 
@@ -630,9 +591,6 @@ private:
         if (response.HasQueryStats()) {
             NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
         }
-        if (Span) {
-            Span.EndOk();
-        }
     }
 };
 
@@ -661,11 +619,6 @@ YAML::Node TJsonRequestSwagger<TJsonQuery>::GetSwagger() {
                * `explain-scan` - explain scan query (ScanQuery)
                * `explain-script` - explain script query (ScriptingService)
                * `cancel-query` - cancel query (using query_id)
-          - name: database
-            in: query
-            description: database name
-            type: string
-            required: false
           - name: query
             in: query
             description: SQL query text
@@ -683,6 +636,11 @@ YAML::Node TJsonRequestSwagger<TJsonQuery>::GetSwagger() {
                * `pg` - PostgreSQL compatible
             type: string
             enum: [yql_v1, pg]
+            required: false
+          - name: database
+            in: query
+            description: database name
+            type: string
             required: false
           - name: schema
             in: query
@@ -703,17 +661,6 @@ YAML::Node TJsonRequestSwagger<TJsonQuery>::GetSwagger() {
                * `full`
             type: string
             enum: [profile, full]
-            required: false
-          - name: transaction_mode
-            in: query
-            description: >
-              transaction mode:
-               * `serializable-read-write`
-               * `online-read-only`
-               * `stale-read-only`
-               * `snapshot-read-only`
-            type: string
-            enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only]
             required: false
           - name: direct
             in: query

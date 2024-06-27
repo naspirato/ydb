@@ -156,15 +156,6 @@ public:
                     result = FillResultItems(std::move(leftRow), std::move(rightRow), EOutputMode::OnlyLeftRow);
                     break;
                 }
-                case EJoinKind::LeftSemi: {
-                    if (!rightRow.HasValue()) {
-                        ok = false;
-                        break;
-                    }
-
-                    result = FillResultItems(std::move(leftRow), std::move(rightRow), EOutputMode::OnlyLeftRow);
-                    break;
-                }
                 default:
                     MKQL_ENSURE(false, "Unsupported join kind");
             }

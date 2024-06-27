@@ -109,8 +109,6 @@ struct TDistributedTransaction {
     void BindMsgToPipe(ui64 tabletId, const IEventBase& event);
     void UnbindMsgsFromPipe(ui64 tabletId);
     const TVector<TSerializedMessage>& GetBindedMsgs(ui64 tabletId);
-
-    bool HasWriteOperations = false;
 };
 
 }

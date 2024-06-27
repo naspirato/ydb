@@ -69,4 +69,3 @@ When working with tables located in the external {{ ydb-short-name }} database, 
 |`Date`|
 |`Datetime`|
 |`Timestamp`|
-|`Json`|

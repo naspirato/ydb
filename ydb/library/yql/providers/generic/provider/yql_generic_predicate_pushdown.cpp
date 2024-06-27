@@ -67,7 +67,6 @@ namespace NYql {
             MATCH_ATOM(Double, DOUBLE, double, double);
             MATCH_ATOM(String, STRING, bytes, TString);
             MATCH_ATOM(Utf8, UTF8, text, TString);
-            MATCH_ATOM(Timestamp, TIMESTAMP, int64, i64);
             MATCH_ARITHMETICAL(Sub, SUB);
             MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);

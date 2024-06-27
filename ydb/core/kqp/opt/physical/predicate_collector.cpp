@@ -38,12 +38,6 @@ bool IsSupportedDataType(const TCoDataCtor& node) {
         }
     }
 
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-        if (node.Maybe<TCoDate32>() ||  node.Maybe<TCoDatetime64>() || node.Maybe<TCoTimestamp64>() || node.Maybe<TCoInterval64>()) {
-            return true;
-        }
-    }
-
     return false;
 }
 
@@ -89,16 +83,7 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
 }
 
 bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type) {
-    const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return NUdf::EDataTypeFeatures::NumericType & fatures
-        || (NKikimr::NSsa::RuntimeVersion >= 5U && (NUdf::EDataTypeFeatures::BigDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures));
-}
-
-bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type) {
-    const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return (NUdf::EDataTypeFeatures::CanCompare  & fatures)
-        && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fatures) ||
-            (NKikimr::NSsa::RuntimeVersion >= 5U && (NUdf::EDataTypeFeatures::BigDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures)));
+    return NUdf::EDataTypeFeatures::NumericType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
 }
 
 [[maybe_unused]]
@@ -205,10 +190,13 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
             }
             return true;
         }
-        case ETypeAnnotationKind::Data:
-            return IsGoodTypeForComparsionPushdown(typeOne) && IsGoodTypeForComparsionPushdown(typeTwo);
-        default:
-            break;
+        case ETypeAnnotationKind::Data: {
+            const auto fOne = NUdf::GetDataTypeInfo(rawOne.Cast<TDataExprType>()->GetSlot()).Features;
+            const auto fTwo = NUdf::GetDataTypeInfo(rawTwo.Cast<TDataExprType>()->GetSlot()).Features;
+            return ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fOne) && (NUdf::EDataTypeFeatures::CanCompare  & fOne)
+                && ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fTwo) && (NUdf::EDataTypeFeatures::CanCompare  & fTwo);
+        }
+        default: break;
     }
     return false;
 }

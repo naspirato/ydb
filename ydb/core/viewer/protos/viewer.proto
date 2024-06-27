@@ -634,17 +634,7 @@ message TQueryAutocomplete {
     repeated string Error = 3;
 }
 
-message TPDiskInfoWhiteboard {
-    NKikimrWhiteboard.TPDiskStateInfo PDisk = 1;
-    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 2;
-}
-
-message TPDiskInfoBSC {
-    NKikimrSysView.TPDiskInfo PDisk = 1;
-    repeated NKikimrSysView.TVSlotEntry VDisks = 2;
-}
-
 message TPDiskInfo {
-    TPDiskInfoWhiteboard Whiteboard = 1;
-    TPDiskInfoBSC BSC = 2;
+    NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 1;
+    NKikimrSysView.TPDiskInfo BSC = 2;
 }

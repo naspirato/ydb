@@ -78,8 +78,6 @@ namespace NKikimr::NStorage {
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
                 std::vector<std::tuple<TString, NKikimrBlobStorage::TPDiskMetadataRecord, std::optional<ui64>>> MetadataPerPath;
-                std::vector<std::tuple<TString, std::optional<ui64>>> NoMetadata;
-                std::vector<TString> Errors;
             };
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
@@ -297,7 +295,6 @@ namespace NKikimr::NStorage {
         void AbortBinding(const char *reason, bool sendUnbindMessage = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
@@ -653,9 +650,9 @@ namespace NKikimr::NStorage {
     // Ensure configuration has quorum in both disk and storage ways for current and previous configuration.
     template<typename T>
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
-            const TNodeWardenConfig& nwConfig, bool mindPrev = true) {
+            const TNodeWardenConfig& nwConfig) {
         return HasDiskQuorum(config, generateSuccessful) &&
-            HasStorageQuorum(config, generateSuccessful, nwConfig, true) && (!mindPrev || !config.HasPrevConfig() || (
+            HasStorageQuorum(config, generateSuccessful, nwConfig, true) && (!config.HasPrevConfig() || (
             HasDiskQuorum(config.GetPrevConfig(), generateSuccessful) &&
             HasStorageQuorum(config.GetPrevConfig(), generateSuccessful, nwConfig, false)));
     }

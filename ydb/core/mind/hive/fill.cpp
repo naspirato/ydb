@@ -55,18 +55,17 @@ protected:
             TTabletInfo* tablet = Hive->FindTablet(tabletId);
             if (tablet != nullptr && tablet->IsAlive() && tablet->NodeId != NodeId) {
                 THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
-                if (std::holds_alternative<TNodeInfo*>(result)) {
-                    TNodeInfo* node = std::get<TNodeInfo*>(result);
-                    if (node->Id == NodeId) {
+                if (result.BestNode != nullptr) {
+                    if (result.BestNode->Id == NodeId) {
                         tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                         ++KickInFlight;
                         ++Movements;
                         BLOG_D("Fill " << SelfId() << " moving tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
                                << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
-                               << " to node " << node->Id << " " << node->ResourceValues);
+                               << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
                         Hive->TabletCounters->Cumulative()[NHive::COUNTER_FILL_EXECUTED].Increment(1);
-                        Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
-                        Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id), ctx);
+                        Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, result.BestNode->Id));
+                        Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), result.BestNode->Id), ctx);
                     }
                 }
             }

@@ -2,7 +2,6 @@
 #include "columnshard.h"
 #include "columnshard_impl.h"
 #include "engines/reader/transaction/tx_scan.h"
-#include "engines/reader/transaction/tx_internal_scan.h"
 
 #include <ydb/core/protos/kqp.pb.h>
 
@@ -33,10 +32,6 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
     ScanTxInFlight.insert({txId, LastAccessTime});
     SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new NOlap::NReader::TTxScan(this, ev), ctx);
-}
-
-void TColumnShard::Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx) {
-    Execute(new NOlap::NReader::TTxInternalScan(this, ev), ctx);
 }
 
 }

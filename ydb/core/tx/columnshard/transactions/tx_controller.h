@@ -208,11 +208,9 @@ public:
         }
 
         virtual TString DoDebugString() const = 0;
-        virtual bool DoOnStartAsync(TColumnShard& /*owner*/) {
-            return false;
-        }
+        virtual void DoOnStart(TColumnShard& /*owner*/) {
 
-        std::optional<bool> StartedAsync;
+        }
 
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
@@ -222,10 +220,8 @@ public:
             return DoCheckTxInfoForReply(originalTxInfo);
         }
 
-        [[nodiscard]] bool OnStartAsync(TColumnShard& owner) {
-            AFL_VERIFY(!StartedAsync);
-            StartedAsync = DoOnStartAsync(owner);
-            return *StartedAsync;
+        void OnStart(TColumnShard& owner) {
+            return DoOnStart(owner);
         }
 
         TString DebugString() const {
@@ -322,13 +318,13 @@ public:
         void FinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnComplete, EStatus::ProposeFinishedOnExecute);
-            AFL_VERIFY(IsAsync() || StartedAsync);
+            AFL_VERIFY(IsAsync());
             return DoFinishProposeOnExecute(owner, txc);
         }
         void FinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
             if (IsFail()) {
                 AFL_VERIFY(Status == EStatus::Failed);
-            } else if (IsAsync() || StartedAsync) {
+            } else if (DoIsAsync()) {
                 SwitchStateVerified(EStatus::ProposeFinishedOnExecute, EStatus::ProposeFinishedOnComplete);
             } else {
                 SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeFinishedOnComplete);
@@ -369,7 +365,13 @@ public:
 
     ITransactionOperator::TPtr GetTxOperator(const ui64 txId) const;
     ITransactionOperator::TPtr GetVerifiedTxOperator(const ui64 txId) const;
-    void StartOperators();
+    void StartOperators() {
+        AFL_VERIFY(!StartedFlag);
+        StartedFlag = true;
+        for (auto&& i : Operators) {
+            i.second->OnStart(Owner);
+        }
+    }
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;

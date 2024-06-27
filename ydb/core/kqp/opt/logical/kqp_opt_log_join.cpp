@@ -337,6 +337,7 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     const TDqJoin& join,
     TExprBase leftInput,
     const TPrefixLookup& rightLookup,
+
     const TKqpMatchReadResult& rightReadMatch,
     TExprContext& ctx)
 {
@@ -531,6 +532,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     static THashSet<TStringBuf> supportedJoinKinds = {"Inner", "Left", "LeftOnly", "LeftSemi", "RightSemi"};
+    static THashSet<TStringBuf> supportedStreamJoinKinds = {"Inner", "Left", "LeftOnly"};
     if (!supportedJoinKinds.contains(join.JoinType().Value())) {
         return {};
     }
@@ -598,6 +600,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
     const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
         && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
+        && supportedStreamJoinKinds.contains(join.JoinType().Value())
         && !indexName;
 
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
@@ -784,8 +787,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         }
     };
 
-    // RightSemi strategy can be executed without join
-    if (useStreamIndexLookupJoin && join.JoinType().Value() != "RightSemi") {
+    if (useStreamIndexLookupJoin) {
         TMaybeNode<TExprBase> joinKeyPredicate;
 
         if (!equalLeftKeysConditions.empty()) {

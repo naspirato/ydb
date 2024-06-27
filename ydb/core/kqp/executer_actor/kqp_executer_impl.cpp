@@ -88,7 +88,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
-        AFL_ENSURE(request.LocksOp == ELocksOp::Commit || request.LocksOp == ELocksOp::Rollback)("real", (ui32)request.LocksOp);
+        YQL_ENSURE(request.LocksOp == ELocksOp::Commit || request.LocksOp == ELocksOp::Rollback);
         return CreateKqpDataExecuter(
             std::move(request), database, userToken, counters, false, 
             aggregation, executerRetriesConfig, std::move(asyncIoFactory), chanTransportVersion, creator, 

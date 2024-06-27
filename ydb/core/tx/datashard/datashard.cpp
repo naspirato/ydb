@@ -646,14 +646,12 @@ public:
     TSendVolatileResult(
             TDataShard* self, TOutputOpData::TResultPtr result,
             const TActorId& target,
-            ui64 step, ui64 txId,
-            NWilson::TSpan&& span)
+            ui64 step, ui64 txId)
         : Self(self)
         , Result(std::move(result))
         , Target(target)
         , Step(step)
         , TxId(txId)
-        , Span(std::move(span))
     { }
 
     void OnCommit(ui64) override {
@@ -673,8 +671,7 @@ public:
         ui64 resultSize = Result->GetTxResult().size();
         ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
         LWTRACK(ProposeTransactionSendResult, Result->Orbit);
-        Self->Send(Target, Result.Release(), flags, 0, Span.GetTraceId());
-        Span.End();
+        Self->Send(Target, Result.Release(), flags);
     }
 
     void OnAbort(ui64 txId) override {
@@ -690,22 +687,20 @@ private:
     TActorId Target;
     ui64 Step;
     ui64 TxId;
-    NWilson::TSpan Span;
 };
 
 class TDataShard::TSendVolatileWriteResult final: public IVolatileTxCallback {
 public:
     TSendVolatileWriteResult(
-            TDataShard* self, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> writeResult,
-            const TActorId& target,
-            ui64 step, ui64 txId,
-            NWilson::TSpan&& span)
+        TDataShard* self, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> writeResult,
+        const TActorId& target,
+        ui64 step, ui64 txId
+    )
         : Self(self)
         , WriteResult(std::move(writeResult))
         , Target(target)
         , Step(step)
         , TxId(txId)
-        , Span(std::move(span))
     {
     }
 
@@ -721,8 +716,7 @@ public:
         }
 
         LWTRACK(ProposeTransactionSendResult, WriteResult->GetOrbit());
-        Self->Send(Target, WriteResult.release(), 0, 0, Span.GetTraceId());
-        Span.End();
+        Self->Send(Target, WriteResult.release(), 0);
     }
 
     void OnAbort(ui64 txId) override {
@@ -736,25 +730,20 @@ private:
     TActorId Target;
     ui64 Step;
     ui64 TxId;
-    NWilson::TSpan Span;
 };
 
 void TDataShard::SendResult(const TActorContext &ctx,
                                    TOutputOpData::TResultPtr &res,
                                    const TActorId &target,
                                    ui64 step,
-                                   ui64 txId,
-                                   NWilson::TTraceId traceId)
+                                   ui64 txId)
 {
     Y_ABORT_UNLESS(txId == res->GetTxId(), "%" PRIu64 " vs %" PRIu64, txId, res->GetTxId());
-
-    NWilson::TSpan span(TWilsonTablet::TabletDetailed, std::move(traceId), "Datashard.SendResult", NWilson::EFlags::AUTO_END);
 
     if (VolatileTxManager.FindByTxId(txId)) {
         // This is a volatile transaction, and we need to wait until it is resolved
         bool ok = VolatileTxManager.AttachVolatileTxCallback(txId,
-            new TSendVolatileResult(this, std::move(res), target, step, txId,
-                std::move(span)));
+            new TSendVolatileResult(this, std::move(res), target, step, txId));
         Y_ABORT_UNLESS(ok);
         return;
     }
@@ -768,22 +757,15 @@ void TDataShard::SendResult(const TActorContext &ctx,
     ui64 resultSize = res->GetTxResult().size();
     ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
     LWTRACK(ProposeTransactionSendResult, res->Orbit);
-    ctx.Send(target, res.Release(), flags, 0, span.GetTraceId());
+    ctx.Send(target, res.Release(), flags);
 }
 
-void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result,
-        const TActorId& target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId)
-{
+void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId) {
     Y_ABORT_UNLESS(txId == result->Record.GetTxId(), "%" PRIu64 " vs %" PRIu64, txId, result->Record.GetTxId());
-
-    NWilson::TSpan span(TWilsonTablet::TabletDetailed, std::move(traceId), "Datashard.SendWriteResult", NWilson::EFlags::AUTO_END);
 
     if (VolatileTxManager.FindByTxId(txId)) {
         // This is a volatile transaction, and we need to wait until it is resolved
-        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId,
-            new TSendVolatileWriteResult(this, std::move(result), target, step, txId,
-                std::move(span)));
+        bool ok = VolatileTxManager.AttachVolatileTxCallback(txId, new TSendVolatileWriteResult(this, std::move(result), target, step, txId));
         Y_ABORT_UNLESS(ok);
         return;
     }
@@ -791,7 +773,7 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Complete write [" << step << " : " << txId << "] from " << TabletID() << " at tablet " << TabletID() << " send result to client " << target);
 
     LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
-    ctx.Send(target, result.release(), 0, 0, span.GetTraceId());
+    ctx.Send(target, result.release(), 0);
 }
 
 void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const {
@@ -1053,7 +1035,6 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     IncCounter(COUNTER_CHANGE_RECORDS_REMOVED);
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
-    SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
 
     CheckChangesQueueNoOverflow();
 }
@@ -1097,16 +1078,10 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
             }
         }
     }
- 
-    if (auto it = ChangeQueueReservations.find(cookie); it != ChangeQueueReservations.end()) {
-        ChangeQueueReservedCapacity -= it->second;
-        ChangeQueueReservedCapacity += records.size();
-    }
 
     UpdateChangeExchangeLag(now);
     IncCounter(COUNTER_CHANGE_RECORDS_ENQUEUED, forward.size());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
-    SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
 
     Y_ABORT_UNLESS(OutChangeSender);
     Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
@@ -1141,8 +1116,6 @@ ui64 TDataShard::ReserveChangeQueueCapacity(ui32 capacity) {
     const auto cookie = NextChangeQueueReservationCookie++;
     ChangeQueueReservations.emplace(cookie, capacity);
     ChangeQueueReservedCapacity += capacity;
-    SetCounter(COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY, ChangeQueueReservedCapacity);
-
     return cookie;
 }
 
@@ -2345,28 +2318,20 @@ ui64 TDataShard::GetMaxObservedStep() const {
 }
 
 void TDataShard::SendImmediateWriteResult(
-        const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie,
-        const TActorId& sessionId,
-        NWilson::TTraceId traceId)
+        const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie)
 {
-    NWilson::TSpan span(TWilsonTablet::TabletDetailed, std::move(traceId), "Datashard.SendImmediateWriteResult", NWilson::EFlags::AUTO_END);
-
     const ui64 step = version.Step;
     const ui64 observedStep = GetMaxObservedStep();
     if (step <= observedStep) {
         SnapshotManager.PromoteImmediateWriteEdgeReplied(version);
-        if (!sessionId) {
-            Send(target, event, 0, cookie, span.GetTraceId());
-        } else {
-            SendViaSession(sessionId, target, SelfId(), event, 0, cookie, span.GetTraceId());
-        }
+        Send(target, event, 0, cookie);
         return;
     }
 
     MediatorDelayedReplies.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(version),
-        std::forward_as_tuple(target, THolder<IEventBase>(event), cookie, sessionId, std::move(span)));
+        std::forward_as_tuple(target, THolder<IEventBase>(event), cookie));
 
     // Try to subscribe to the next step, when needed
     if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {
@@ -2401,31 +2366,25 @@ void TDataShard::SendWithConfirmedReadOnlyLease(
     const TActorId& target,
     IEventBase* event,
     ui64 cookie,
-    const TActorId& sessionId,
-    NWilson::TTraceId traceId)
+    const TActorId& sessionId)
 {
-    NWilson::TSpan span(TWilsonTablet::TabletDetailed, std::move(traceId), "Datashard.SendWithConfirmedReadOnlyLease", NWilson::EFlags::AUTO_END);
-
     if (IsFollower() || !ReadOnlyLeaseEnabled()) {
         // Send possibly stale result (legacy behavior)
         if (!sessionId) {
-            Send(target, event, 0, cookie, span.GetTraceId());
+            Send(target, event, 0, cookie);
         } else {
-            SendViaSession(sessionId, target, SelfId(), event, 0, cookie, span.GetTraceId());
+            SendViaSession(sessionId, target, SelfId(), event);
         }
         return;
     }
 
     struct TSendState : public TThrRefBase {
         THolder<IEventHandle> Ev;
-        NWilson::TSpan Span;
 
-        TSendState(const TActorId& sessionId, const TActorId& target, const TActorId& src, IEventBase* event, ui64 cookie,
-                NWilson::TSpan&& span)
-            : Span(std::move(span))
+        TSendState(const TActorId& sessionId, const TActorId& target, const TActorId& src, IEventBase* event, ui64 cookie)
         {
             const ui32 flags = 0;
-            Ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie, nullptr, Span.GetTraceId());
+            Ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie);
 
             if (sessionId) {
                 Ev->Rewrite(TEvInterconnect::EvForward, sessionId);
@@ -2438,9 +2397,8 @@ void TDataShard::SendWithConfirmedReadOnlyLease(
     }
 
     Executor()->ConfirmReadOnlyLease(ts,
-        [state = MakeIntrusive<TSendState>(sessionId, target, SelfId(), event, cookie, std::move(span))] {
+        [state = MakeIntrusive<TSendState>(sessionId, target, SelfId(), event, cookie)] {
             TActivationContext::Send(state->Ev.Release());
-            state->Span.End();
     });
 }
 
@@ -2448,10 +2406,9 @@ void TDataShard::SendWithConfirmedReadOnlyLease(
     const TActorId& target,
     IEventBase* event,
     ui64 cookie,
-    const TActorId& sessionId,
-    NWilson::TTraceId traceId)
+    const TActorId& sessionId)
 {
-    SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId, std::move(traceId));
+    SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId);
 }
 
 void TDataShard::Handle(TEvPrivate::TEvConfirmReadonlyLease::TPtr& ev, const TActorContext&) {
@@ -2463,20 +2420,18 @@ void TDataShard::SendImmediateReadResult(
     const TActorId& target,
     IEventBase* event,
     ui64 cookie,
-    const TActorId& sessionId,
-    NWilson::TTraceId traceId)
+    const TActorId& sessionId)
 {
-    SendWithConfirmedReadOnlyLease(readTime, target, event, cookie, sessionId, std::move(traceId));
+    SendWithConfirmedReadOnlyLease(readTime, target, event, cookie, sessionId);
 }
 
 void TDataShard::SendImmediateReadResult(
     const TActorId& target,
     IEventBase* event,
     ui64 cookie,
-    const TActorId& sessionId,
-    NWilson::TTraceId traceId)
+    const TActorId& sessionId)
 {
-    SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId, std::move(traceId));
+    SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId);
 }
 
 void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx) {
@@ -2497,13 +2452,8 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         }
 
         if (step <= mediatorStep) {
-            if (it->second.Span) {
-                it->second.Span.Attribute("ActivateStep", std::to_string(mediatorStep));
-            }
             SnapshotManager.PromoteImmediateWriteEdgeReplied(it->first);
-            SendViaSession(it->second.SessionId,
-                it->second.Target, SelfId(), it->second.Event.Release(),
-                0, it->second.Cookie, it->second.Span.GetTraceId());
+            Send(it->second.Target, it->second.Event.Release(), 0, it->second.Cookie);
             it = MediatorDelayedReplies.erase(it);
             continue;
         }
@@ -4511,10 +4461,9 @@ void SendViaSession(const TActorId& sessionId,
                     const TActorId& src,
                     IEventBase* event,
                     ui32 flags,
-                    ui64 cookie,
-                    NWilson::TTraceId traceId)
+                    ui64 cookie)
 {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie, nullptr, std::move(traceId));
+    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie);
 
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);

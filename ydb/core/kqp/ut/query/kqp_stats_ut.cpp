@@ -99,12 +99,11 @@ Y_UNIT_TEST(JoinNoStatsScan) {
 
 template <typename Iterator>
 TCollectedStreamResult JoinStatsBasic(
-        std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter, bool StreamLookupJoin = false) {
+        std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-    
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
@@ -121,18 +120,15 @@ TCollectedStreamResult JoinStatsBasic(
     return res;
 }
 
-Y_UNIT_TEST_TWIN(JoinStatsBasicYql, StreamLookupJoin) {
-    auto res = JoinStatsBasic<NYdb::NScripting::TYqlResultPartIterator>(GetYqlStreamIterator, StreamLookupJoin);
+Y_UNIT_TEST(JoinStatsBasicYql) {
+    auto res = JoinStatsBasic<NYdb::NScripting::TYqlResultPartIterator>(GetYqlStreamIterator);
 
-    if (StreamLookupJoin) {
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access().size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 3);
+    if (res.QueryStats->query_phases(0).table_access(0).name() == "/Root/KeyValue") {
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(2).table_access(0).name(), "/Root/EightShard");
     } else {
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/EightShard");
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access(0).name(), "/Root/KeyValue");
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(2).table_access(0).name(), "/Root/KeyValue");
     }
 }
 
@@ -405,9 +401,9 @@ Y_UNIT_TEST(StatsProfile) {
     //UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
 }
 
-Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
+Y_UNIT_TEST(StreamLookupStats) {
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
     TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -429,19 +425,11 @@ Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     UNIT_ASSERT(streamLookup.IsDefined());
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-    if (StreamLookupJoin) {
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
-    }
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
 
     AssertTableStats(result, "/Root/TwoShard", {
         .ExpectedReads = 2,

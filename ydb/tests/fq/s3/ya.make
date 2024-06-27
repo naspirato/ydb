@@ -48,9 +48,14 @@ DATA(
     arcadia/ydb/tests/fq/s3
 )
 
-TIMEOUT(3600)
-SIZE(LARGE)
-TAG(ya:fat)
+IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
+    TIMEOUT(3600)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
 
 REQUIREMENTS(ram:16)
 

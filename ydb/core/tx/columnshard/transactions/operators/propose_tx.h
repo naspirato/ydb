@@ -17,10 +17,13 @@ protected:
         if (!currentTxInfo.SeqNo || !GetTxInfo().SeqNo) {
             return true;
         }
-        if (currentTxInfo.SeqNo->Generation == GetTxInfo().SeqNo->Generation) {
-            return currentTxInfo.SeqNo->Round < GetTxInfo().SeqNo->Round;
+        if (currentTxInfo.SeqNo->Generation > GetTxInfo().SeqNo->Generation) {
+            return false;
         }
-        return currentTxInfo.SeqNo->Generation < GetTxInfo().SeqNo->Generation;
+        if (currentTxInfo.SeqNo->Generation < GetTxInfo().SeqNo->Generation) {
+            return true;
+        }
+        return currentTxInfo.SeqNo->Round < GetTxInfo().SeqNo->Round;
     }
 public:
     using TBase::TBase;

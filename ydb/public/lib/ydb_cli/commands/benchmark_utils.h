@@ -59,19 +59,13 @@ private:
     YDB_READONLY_DEF(TString, YSONResult);
     YDB_READONLY_DEF(TQueryResultInfo, QueryResult);
     YDB_READONLY_DEF(TDuration, ServerTiming);
-    YDB_READONLY_DEF(TString, QueryPlan);
-    YDB_READONLY_DEF(TString, PlanAst);
     TQueryBenchmarkResult() = default;
 public:
-    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult,
-        const TDuration& serverTiming, const TString& queryPlan, const TString& planAst)
-    {
+    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult, const TDuration& serverTiming) {
         TQueryBenchmarkResult result;
         result.YSONResult = yson;
         result.QueryResult = queryResult;
         result.ServerTiming = serverTiming;
-        result.QueryPlan = queryPlan;
-        result.PlanAst = planAst;
         return result;
     }
     static TQueryBenchmarkResult Error(const TString& error) {

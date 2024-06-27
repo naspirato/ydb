@@ -1908,8 +1908,7 @@ private:
                     YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
                 }
 
-                TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling);
+                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ false);
             }
 
             ResponseEv->InitTxResult(tx.Body);
@@ -1917,7 +1916,7 @@ private:
         }
 
         TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Data, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
+        if (!ValidateTasks(TasksGraph, EExecType::Data, /* enableSpilling */ false, validateIssue)) {
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
             return;
         }
@@ -2475,7 +2474,7 @@ private:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
+            .WithSpilling = false,
             .RlPath = Nothing(),
             .ExecuterSpan =  ExecuterSpan,
             .ResourcesSnapshot = std::move(ResourceSnapshot),

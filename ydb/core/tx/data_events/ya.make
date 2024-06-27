@@ -5,7 +5,6 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/core/base
-    ydb/core/tx/data_events/common
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/scheme_cache

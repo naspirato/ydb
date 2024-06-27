@@ -11,7 +11,6 @@ PEERDIR(
     ydb/core/tx/data_events
     ydb/services/metadata
     ydb/core/tx/columnshard/data_sharing/destination/events
-    ydb/core/tx/columnshard/data_reader
 )
 
 END()

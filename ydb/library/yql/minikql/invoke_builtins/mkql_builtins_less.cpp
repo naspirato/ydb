@@ -288,7 +288,6 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareDatetime<TDiffDateLess, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareTzDatetime<TAggrTzDateLess, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareBigDatetime<TDiffDateLess, TCompareArgsOpt>(registry, aggrName);
-    RegisterAggrCompareBigTzDatetime<TAggrTzDateLess, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomLess, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrLess, TCompareArgsOpt>(registry, aggrName);

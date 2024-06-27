@@ -54,7 +54,6 @@ class TStoragesManager;
 
 namespace NReader {
 class TTxScan;
-class TTxInternalScan;
 namespace NPlain {
 class TIndexScannerConstructor;
 }
@@ -177,7 +176,6 @@ class TColumnShard
     friend class NOlap::TStoragesManager;
 
     friend class NOlap::NReader::TTxScan;
-    friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
 
     class TStoragesManager;
@@ -208,7 +206,6 @@ class TColumnShard
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
@@ -362,7 +359,6 @@ protected:
             HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
             HFunc(TEvColumnShard::TEvScan, Handle);
-            HFunc(TEvColumnShard::TEvInternalScan, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvColumnShard::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
@@ -588,10 +584,6 @@ private:
 
 public:
     ui64 TabletTxCounter = 0;
-
-    NOlap::TSnapshot GetLastTxSnapshot() const {
-        return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
-    }
 
     const std::shared_ptr<NOlap::NDataSharing::TSessionsManager>& GetSharingSessionsManager() const {
         return SharingSessionsManager;

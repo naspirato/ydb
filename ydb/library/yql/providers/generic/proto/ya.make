@@ -17,3 +17,4 @@ IF (NOT PY_PROTOS_FOR)
 ENDIF()
 
 END()
+

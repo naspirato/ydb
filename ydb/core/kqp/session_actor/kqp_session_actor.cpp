@@ -1086,6 +1086,7 @@ public:
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
+
                     if (QueryState->HasTxControl() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Scheme operations cannot be executed inside transaction");
@@ -1196,7 +1197,7 @@ public:
             }
 
             request.TopicOperations = std::move(txCtx.TopicOperations);
-        } else if (QueryState->ShouldAcquireLocks(tx)) {
+        } else if (QueryState->ShouldAcquireLocks()) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
             if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
@@ -1231,7 +1232,7 @@ public:
 
         auto userToken = QueryState->UserToken;
         const TString requestType = QueryState->GetRequestType();
-        const bool temporary = GetTemporaryTableInfo(tx).has_value();
+        bool temporary = GetTemporaryTableInfo(tx).has_value();
 
         auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
             temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
@@ -1372,9 +1373,6 @@ public:
         }
         auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx - 1);
         if (!tx) {
-            return;
-        }
-        if (QueryState->IsCreateTableAs()) {
             return;
         }
 
@@ -1699,9 +1697,8 @@ public:
 
         if (replyQueryParameters) {
             YQL_ENSURE(QueryState->PreparedQuery);
-            for (auto& param : QueryState->GetResultParams()) {
-                *response->AddQueryParameters() = param;
-            }
+            response->MutableQueryParameters()->CopyFrom(
+                    QueryState->PreparedQuery->GetParameters());
         }
 
         if (replyQueryId) {
@@ -1905,9 +1902,7 @@ public:
             response.SetPreparedQuery(compileResult->Uid);
 
             auto& preparedQuery = compileResult->PreparedQuery;
-            for (auto& param : QueryState->GetResultParams()) {
-                *response.AddQueryParameters() = param;
-            }
+            response.MutableQueryParameters()->CopyFrom(preparedQuery->GetParameters());
 
             response.SetQueryPlan(preparedQuery->GetPhysicalQuery().GetQueryPlan());
             response.SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());

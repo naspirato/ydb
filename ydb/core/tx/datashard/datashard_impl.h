@@ -1494,10 +1494,8 @@ public:
             const TActorId& target, std::unique_ptr<IEventBase> event,
             ui64 cookie = 0);
 
-    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId);
-    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId);
+    void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId);
+    void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId);
 
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
@@ -1986,9 +1984,7 @@ public:
             const TRowVersion& version, EPromotePostExecuteEdges mode, TTransactionContext& txc);
     ui64 GetMaxObservedStep() const;
     void SendImmediateWriteResult(
-            const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0,
-            const TActorId& sessionId = {},
-            NWilson::TTraceId traceId = {});
+            const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0);
     TMonotonic ConfirmReadOnlyLease();
     void ConfirmReadOnlyLease(TMonotonic ts);
     void SendWithConfirmedReadOnlyLease(
@@ -1996,27 +1992,23 @@ public:
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {},
-        NWilson::TTraceId traceId = {});
+        const TActorId& sessionId = {});
     void SendWithConfirmedReadOnlyLease(
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {},
-        NWilson::TTraceId traceId = {});
+        const TActorId& sessionId = {});
     void SendImmediateReadResult(
         TMonotonic readTime,
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {},
-        NWilson::TTraceId traceId = {});
+        const TActorId& sessionId = {});
     void SendImmediateReadResult(
         const TActorId& target,
         IEventBase* event,
         ui64 cookie = 0,
-        const TActorId& sessionId = {},
-        NWilson::TTraceId traceId = {});
+        const TActorId& sessionId = {});
     void SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx);
 
     void CheckMediatorStateRestored();
@@ -2660,16 +2652,11 @@ private:
         TActorId Target;
         THolder<IEventBase> Event;
         ui64 Cookie;
-        TActorId SessionId;
-        NWilson::TSpan Span;
 
-        TMediatorDelayedReply(const TActorId& target, THolder<IEventBase> event, ui64 cookie,
-                const TActorId& sessionId, NWilson::TSpan&& span)
+        TMediatorDelayedReply(const TActorId& target, THolder<IEventBase> event, ui64 cookie)
             : Target(target)
             , Event(std::move(event))
             , Cookie(cookie)
-            , SessionId(sessionId)
-            , Span(std::move(span))
         { }
     };
 
@@ -3308,7 +3295,6 @@ void SendViaSession(const TActorId& sessionId,
                     const TActorId& src,
                     IEventBase* event,
                     ui32 flags = 0,
-                    ui64 cookie = 0,
-                    NWilson::TTraceId traceId = {});
+                    ui64 cookie = 0);
 
 }}

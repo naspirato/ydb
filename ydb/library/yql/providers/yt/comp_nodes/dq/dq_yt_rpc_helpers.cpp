@@ -43,7 +43,6 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
 
         auto request = apiServiceProxy.ReadTable();
         client->InitStreamingRequest(*request);
-        request->ServerAttachmentsStreamingParameters().WriteTimeout = TDuration::MilliSeconds(timeout);
         request->ClientAttachmentsStreamingParameters().ReadTimeout = TDuration::MilliSeconds(timeout);
 
         TString ppath;

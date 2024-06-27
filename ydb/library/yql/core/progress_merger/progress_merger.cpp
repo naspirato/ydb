@@ -64,12 +64,6 @@ bool TNodeProgressBase::MergeWith(const TOperationProgress& p) {
         Stages_.push_back(p.Stage);
         dirty = true;
     }
-
-    // (6) remote data
-    if (!p.RemoteData.empty() && p.RemoteData != Progress_.RemoteData) {
-        Progress_.RemoteData = p.RemoteData;
-        dirty = true;
-    }
     return Dirty_ = dirty;
 }
 

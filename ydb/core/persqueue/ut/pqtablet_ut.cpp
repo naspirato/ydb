@@ -29,11 +29,10 @@ namespace NHelpers {
 
 struct TTxOperation {
     ui32 Partition;
-    TMaybe<TString> Consumer;
-    TMaybe<ui64> Begin;
-    TMaybe<ui64> End;
+    TString Consumer;
+    ui64 Begin = 0;
+    ui64 End = 0;
     TString Path;
-    TMaybe<ui32> SupportivePartition;
 };
 
 struct TConfigParams {
@@ -308,15 +307,10 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
         for (auto& txOp : params.TxOps) {
             auto* operation = body->MutableOperations()->Add();
             operation->SetPartitionId(txOp.Partition);
-            if (txOp.Begin.Defined()) {
-                operation->SetBegin(*txOp.Begin);
-                operation->SetEnd(*txOp.End);
-                operation->SetConsumer(*txOp.Consumer);
-            }
+            operation->SetBegin(txOp.Begin);
+            operation->SetEnd(txOp.End);
+            operation->SetConsumer(txOp.Consumer);
             operation->SetPath(txOp.Path);
-            if (txOp.SupportivePartition.Defined()) {
-                operation->SetSupportivePartition(*txOp.SupportivePartition);
-            }
 
             partitions.insert(txOp.Partition);
         }
@@ -348,9 +342,7 @@ void TPQTabletFixture::WaitProposeTransactionResponse(const TProposeTransactionR
 
     if (matcher.Status) {
         UNIT_ASSERT(event->Record.HasStatus());
-        UNIT_ASSERT_EQUAL_C(*matcher.Status, event->Record.GetStatus(),
-                            "expected: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(*matcher.Status) <<
-                            ", received " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus()));
+        UNIT_ASSERT_EQUAL(*matcher.Status, event->Record.GetStatus());
     }
 }
 
@@ -1300,7 +1292,7 @@ Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
                      .Status=NMsgBusProxy::MSTATUS_OK});
 
     SendProposeTransactionRequest({.TxId=txId,
-                                  .TxOps={{.Partition=partitionId, .Path="/topic", .SupportivePartition=100'000}},
+                                  .TxOps={{.Partition=partitionId, .Path="/topic"}},
                                   .WriteId=writeId});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
