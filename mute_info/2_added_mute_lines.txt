@@ -1,0 +1,2 @@
+ydb/tests/functional/serializable *
+ydb/core/kqp/ut/olap KqpDecimalColumnShard.*
