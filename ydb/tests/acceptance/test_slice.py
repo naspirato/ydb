@@ -1,5 +1,6 @@
 import os
 import sys
+import allure
 
 import ydb
 from ydb.tests.library.common import yatest_common
@@ -21,7 +22,8 @@ class TestWithSlice(object):
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
-
+        
+    @allure.feature('test_slice_sample')
     def test_slice_sample(self):
         """
         Just a sample test to ensure that slice works correctly
@@ -40,7 +42,7 @@ class TestWithSlice(object):
                             "sample_table"
                         )
                     )
-
+    @allure.feature('test_serializable')
     def test_serializable(self):
         yatest_common.execute(
             [
