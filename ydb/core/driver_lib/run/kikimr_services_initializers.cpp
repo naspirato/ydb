@@ -252,6 +252,7 @@ namespace {
 #ifndef KIKIMR_DISABLE_S3_OPS
 struct TAwsApiGuard {
     TAwsApiGuard() {
+        Options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
         Aws::InitAPI(Options);
     }
 
