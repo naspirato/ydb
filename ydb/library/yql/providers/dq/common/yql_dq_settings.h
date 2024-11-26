@@ -61,7 +61,11 @@ struct TDqSettings {
         static constexpr bool ExportStats = false;
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
+<<<<<<< HEAD
         static constexpr ui32 CostBasedOptimizationLevel = 3;
+=======
+        static constexpr ui32 CostBasedOptimizationLevel = 4;
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
         static constexpr ui32 MaxDPccpDPTableSize = 40000U;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;
@@ -143,6 +147,7 @@ struct TDqSettings {
 
     NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, false> DisableCheckpoints;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

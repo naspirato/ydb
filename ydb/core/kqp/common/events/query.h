@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -69,7 +70,9 @@ public:
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
         const TString& poolId = "");
 
-    TEvQueryRequest() = default;
+    TEvQueryRequest() {
+        Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+    }
 
     bool IsSerializable() const override {
         return true;
@@ -225,6 +228,14 @@ public:
         return Token_;
     }
 
+    TString GetClientAddress() const {
+        if (RequestCtx) {
+            return RequestCtx->GetPeerName();
+        }
+
+        return Record.GetRequest().GetClientAddress();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         if (YdbParameters) {
             return *YdbParameters;
@@ -342,6 +353,22 @@ public:
         return Record.GetRequest().GetPoolId();
     }
 
+    void SetPoolConfig(const NResourcePool::TPoolSettings& config) {
+        PoolConfig = config;
+    }
+
+    std::optional<NResourcePool::TPoolSettings> GetPoolConfig() const {
+        return PoolConfig;
+    }
+
+    const TString& GetDatabaseId() const {
+        return DatabaseId ? DatabaseId : Record.GetRequest().GetDatabaseId();
+    }
+
+    void SetDatabaseId(const TString& databaseId) {
+        DatabaseId = databaseId;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -354,6 +381,7 @@ private:
     mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
     TActorId RequestActorId;
     TString Database;
+    TString DatabaseId;
     TString SessionId;
     TString YqlText;
     TString QueryId;
@@ -370,6 +398,7 @@ private:
     TDuration CancelAfter;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
+    std::optional<NResourcePool::TPoolSettings> PoolConfig;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

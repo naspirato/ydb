@@ -25,7 +25,11 @@
                         "Plans": [
                             {
                                 "Node Type": "Merge",
+<<<<<<< HEAD
                                 "PlanNodeId": 6,
+=======
+                                "PlanNodeId": 8,
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -42,7 +46,7 @@
                                                 "TopSortBy": "argument.xx.pkxx"
                                             },
                                             {
-                                                "Condition": "pkxx = _equijoin_column_0",
+                                                "Condition": "xx.pkxx = Q._equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 4
@@ -65,8 +69,14 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "Node Type": "TableFullScan",
                                                         "Operators": [
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 3,
+                                                        "Plans": [
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",

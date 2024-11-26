@@ -346,9 +346,14 @@ public:
                 Self->ChangeExchangeSplitter.DoSplit(ctx);
             }
 
+<<<<<<< HEAD
             for (const auto dstTabletId : ActivationList) {
                 Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
             }
+=======
+        for (const auto dstTabletId : ActivationList) {
+            Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
         }
 
         Self->CheckStateChange(ctx);

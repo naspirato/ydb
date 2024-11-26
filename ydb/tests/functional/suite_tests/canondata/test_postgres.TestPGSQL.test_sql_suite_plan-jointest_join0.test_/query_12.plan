@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "Limit-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -41,16 +41,25 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "_equijoin_column_0 = unique2",
+                                                "Condition": "b._equijoin_column_0 = c.unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 10
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 4
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.unique2)"
                                             }
                                         ],
                                         "PlanNodeId": 11,
@@ -61,7 +70,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Stage",
                                                         "PlanNodeId": 3,
                                                         "Plans": [
                                                             {
@@ -106,19 +115,32 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (MapJoin)",
+                                                        "Node Type": "LeftJoin (MapJoin)-Filter",
                                                         "Operators": [
                                                             {
-                                                                "Condition": "unique1 = thousand",
+                                                                "Condition": "a.unique1 = b.thousand",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 8
                                                                     },
                                                                     {
+<<<<<<< HEAD
                                                                         "ExternalPlanNodeId": 6
+=======
+                                                                        "InternalOperatorId": 1
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                                     }
                                                                 ],
                                                                 "Name": "LeftJoin (MapJoin)"
+                                                            },
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 8
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.thousand)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 9,
@@ -176,8 +198,14 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
+<<<<<<< HEAD
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
+=======
+                                                                        "Node Type": "Stage",
+                                                                        "PlanNodeId": 7,
+                                                                        "Plans": [
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                                             {
                                                                                 "Inputs": [],
                                                                                 "Name": "TableFullScan",

@@ -139,11 +139,24 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableSyncLogChunkCompressionSSD;
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
+        TControlWrapper DefaultHugeGarbagePerMille;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
+        TControlWrapper SlowDiskThreshold;
+        TControlWrapper SlowDiskThresholdHDD;
+        TControlWrapper SlowDiskThresholdSSD;
+
+        TControlWrapper PredictedDelayMultiplier;
+        TControlWrapper PredictedDelayMultiplierHDD;
+        TControlWrapper PredictedDelayMultiplierSSD;
+    
+        TControlWrapper MaxNumOfSlowDisks;
+        TControlWrapper MaxNumOfSlowDisksHDD;
+        TControlWrapper MaxNumOfSlowDisksSSD;
 
     public:
         struct TGroupRecord;
@@ -162,11 +175,21 @@ namespace NKikimr::NStorage {
             , EnableSyncLogChunkCompressionSSD(0, 0, 1)
             , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
             , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
+            , DefaultHugeGarbagePerMille(300, 1, 1000)
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},
                 TCostMetricsParameters{32},
             })
+            , SlowDiskThreshold(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+            , SlowDiskThresholdHDD(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+            , SlowDiskThresholdSSD(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000)
+            , PredictedDelayMultiplier(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+            , PredictedDelayMultiplierHDD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+            , PredictedDelayMultiplierSSD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
+            , MaxNumOfSlowDisks(DefaultMaxNumOfSlowDisks, 1, 2)
+            , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisksHDD, 1, 2)
+            , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;

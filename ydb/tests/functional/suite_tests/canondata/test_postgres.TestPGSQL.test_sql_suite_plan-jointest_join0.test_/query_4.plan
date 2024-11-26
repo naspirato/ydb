@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)",
+                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -62,16 +62,29 @@
                                                 "Predicate": "Not Exist(item.b.unique2) And item.a.ten == 2 Or item.b.hundred == 3"
                                             },
                                             {
-                                                "Condition": "unique2 = tenthous",
+                                                "Condition": "a.unique2 = b.tenthous",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 4
                                                     },
                                                     {
+<<<<<<< HEAD
                                                         "ExternalPlanNodeId": 2
+=======
+                                                        "InternalOperatorId": 3
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.tenthous)"
                                             }
                                         ],
                                         "PlanNodeId": 5,
@@ -85,8 +98,14 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "Node Type": "TableFullScan",
                                                         "Operators": [
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 3,
+                                                        "Plans": [
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",

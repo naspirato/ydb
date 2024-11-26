@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -42,16 +42,33 @@
                                                 "TopSortBy": ""
                                             },
                                             {
+<<<<<<< HEAD
                                                 "Condition": "q2 = q2",
+=======
+                                                "Condition": "i1.q2 = i2_1.q2",
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 4
                                                     },
                                                     {
+<<<<<<< HEAD
                                                         "ExternalPlanNodeId": 2
+=======
+                                                        "InternalOperatorId": 2
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.i2_1.q2)"
                                             }
                                         ],
                                         "PlanNodeId": 5,
@@ -65,17 +82,65 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "CTE Name": "precompute_1_0",
                                                         "Node Type": "InnerJoin (MapJoin)-ConstantExpr-Filter-TableRangeScan-ConstantExpr",
                                                         "Operators": [
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 3,
+                                                        "Plans": [
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                             {
                                                                 "Condition": "q1 = x",
                                                                 "Inputs": [
                                                                     {
+<<<<<<< HEAD
                                                                         "InternalOperatorId": 2
                                                                     },
                                                                     {
                                                                         "InternalOperatorId": 1
+=======
+                                                                        "Node Type": "InnerJoin (MapJoin)-Filter-TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Condition": "i2_1.q1 = ss.x",
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "InnerJoin (MapJoin)"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 2
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.q1)"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [],
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "q1",
+                                                                                    "q2"
+                                                                                ],
+                                                                                "ReadRanges": [
+                                                                                    "q1 (-\u221e, +\u221e)",
+                                                                                    "q2 (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Scan": "Parallel",
+                                                                                "Table": "postgres_jointest/join0.test_plan/int8_tbl"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 1,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/join0.test_plan/int8_tbl"
+                                                                        ]
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                                     }
                                                                 ],
                                                                 "Name": "InnerJoin (MapJoin)"

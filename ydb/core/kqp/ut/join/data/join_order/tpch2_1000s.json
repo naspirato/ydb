@@ -1,1 +1,101 @@
+<<<<<<< HEAD
 {"op_name":"InnerJoin (Grace)","args":[{"op_name":"InnerJoin (MapJoin)","args":[{"op_name":"TableFullScan","table":"partsupp"},{"op_name":"InnerJoin (MapJoin)","args":[{"op_name":"TableFullScan","table":"supplier"},{"op_name":"TableFullScan","table":"nation"}]}]},{"op_name":"InnerJoin (MapJoin)","args":[{"op_name":"InnerJoin (MapJoin)","args":[{"op_name":"TableFullScan","table":"partsupp"},{"op_name":"InnerJoin (MapJoin)","args":[{"op_name":"TableFullScan","table":"supplier"},{"op_name":"TableFullScan","table":"nation"}]}]},{"op_name":"TableFullScan","table":"part"}]}]}
+=======
+{
+  "op_name":"InnerJoin (Grace)",
+  "args":
+    [
+      {
+        "op_name":"InnerJoin (Grace)",
+        "args":
+          [
+            {
+              "op_name":"InnerJoin (Grace)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"partsupp"
+                  },
+                  {
+                    "op_name":"InnerJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"supplier"
+                        },
+                        {
+                          "op_name":"InnerJoin (MapJoin)",
+                          "args":
+                            [
+                              {
+                                "op_name":"TablePointLookup",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"nation"
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"nation"
+                              }
+                            ]
+                        }
+                      ]
+                  }
+                ]
+            },
+            {
+              "op_name":"InnerJoin (Grace)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"partsupp"
+                  },
+                  {
+                    "op_name":"InnerJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"supplier"
+                        },
+                        {
+                          "op_name":"InnerJoin (MapJoin)",
+                          "args":
+                            [
+                              {
+                                "op_name":"TablePointLookup",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"nation"
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"nation"
+                              }
+                            ]
+                        }
+                      ]
+                  }
+                ]
+            }
+          ]
+      },
+      {
+        "op_name":"TableFullScan",
+        "table":"part"
+      }
+    ]
+}
+
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e

@@ -37,7 +37,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-LeftJoin (MapJoin)",
+                                        "Node Type": "Aggregate-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -48,16 +48,33 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
+<<<<<<< HEAD
                                                 "Condition": "hundred,ten = hundred,ten",
+=======
+                                                "Condition": "t1.hundred,t1.ten = t2.hundred,t3.ten",
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 10
                                                     },
                                                     {
+<<<<<<< HEAD
                                                         "ExternalPlanNodeId": 8
+=======
+                                                        "InternalOperatorId": 2
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 10
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.t2.hundred) And Exist(item.t3.ten)"
                                             }
                                         ],
                                         "PlanNodeId": 11,
@@ -72,6 +89,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "Node Type": "InnerJoin (MapJoin)-Filter",
                                                         "Operators": [
                                                             {
@@ -97,6 +115,10 @@
                                                             }
                                                         ],
                                                         "PlanNodeId": 7,
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 9,
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "Map",
@@ -104,6 +126,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
+<<<<<<< HEAD
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
                                                                             {
@@ -114,13 +137,40 @@
                                                                                     "ten",
                                                                                     "thousand",
                                                                                     "unique2"
+=======
+                                                                        "Node Type": "InnerJoin (MapJoin)-Filter-Filter",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Condition": "t2.thousand = t3.unique2",
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "InternalOperatorId": 2
+                                                                                    }
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                                                 ],
                                                                                 "ReadRanges": [
                                                                                     "unique1 (-\u221e, +\u221e)",
                                                                                     "unique2 (-\u221e, +\u221e)"
                                                                                 ],
+<<<<<<< HEAD
                                                                                 "Scan": "Parallel",
                                                                                 "Table": "postgres_jointest/join0.test_plan/tenk1"
+=======
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.thousand)"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 4
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.unique2)"
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 5,
@@ -140,8 +190,58 @@
                                                                         "PlanNodeId": 3,
                                                                         "Plans": [
                                                                             {
+<<<<<<< HEAD
                                                                                 "Node Type": "UnionAll",
                                                                                 "PlanNodeId": 2,
+=======
+                                                                                "Node Type": "Broadcast",
+                                                                                "PlanNodeId": 4,
+                                                                                "PlanNodeType": "Connection",
+                                                                                "Plans": [
+                                                                                    {
+                                                                                        "Node Type": "Stage",
+                                                                                        "PlanNodeId": 3,
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "Node Type": "UnionAll",
+                                                                                                "PlanNodeId": 2,
+                                                                                                "PlanNodeType": "Connection",
+                                                                                                "Plans": [
+                                                                                                    {
+                                                                                                        "Node Type": "TableFullScan",
+                                                                                                        "Operators": [
+                                                                                                            {
+                                                                                                                "Inputs": [],
+                                                                                                                "Name": "TableFullScan",
+                                                                                                                "ReadColumns": [
+                                                                                                                    "hundred",
+                                                                                                                    "ten",
+                                                                                                                    "thousand",
+                                                                                                                    "unique2"
+                                                                                                                ],
+                                                                                                                "ReadRanges": [
+                                                                                                                    "unique1 (-\u221e, +\u221e)",
+                                                                                                                    "unique2 (-\u221e, +\u221e)"
+                                                                                                                ],
+                                                                                                                "Scan": "Parallel",
+                                                                                                                "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "PlanNodeId": 1,
+                                                                                                        "Tables": [
+                                                                                                            "postgres_jointest/join0.test_plan/tenk1"
+                                                                                                        ]
+                                                                                                    }
+                                                                                                ]
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            {
+                                                                                "Node Type": "Map",
+                                                                                "PlanNodeId": 6,
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {

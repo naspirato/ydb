@@ -142,7 +142,8 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
     , HolderFactory(holderFactory)
     , InputDesc(inputDesc)
     , TablePath(settings.GetTable().GetPath())
-    , TableId(MakeTableId(settings.GetTable())) {
+    , TableId(MakeTableId(settings.GetTable()))
+    , Strategy(settings.GetLookupStrategy()) {
 
     KeyColumns.reserve(settings.GetKeyColumns().size());
     i32 keyOrder = 0;
@@ -242,7 +243,7 @@ public:
         }
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery, 
+    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
         auto it = PendingKeysByReadId.find(prevReadId);
@@ -291,7 +292,7 @@ public:
             requests.emplace_back(std::move(request));
             PendingKeysByReadId.insert({newReadId, std::move(unprocessedRanges)});
         }
-        
+
         return requests;
     }
 
@@ -506,7 +507,7 @@ public:
         UnprocessedRows.emplace_back(std::make_pair(TOwnedCellVec(joinKeyCells), std::move(inputRow.GetElement(1))));
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery, 
+    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
         auto readIt = PendingKeysByReadId.find(prevReadId);
@@ -748,6 +749,11 @@ public:
                 auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
                 YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
+                if (Strategy == NKqpProto::EStreamLookupStrategy::SEMI_JOIN && leftRowIt->second.RightRowExist) {
+                    // Semi join should return one result row per key
+                    continue;
+                }
+
                 TReadResultStats rowStats;
                 i64 availableSpace = freeSpace - (i64)resultStats.ResultBytesCount;
                 auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, availableSpace, result.ShardId);
@@ -940,6 +946,7 @@ private:
         if (rowStats.ResultBytesCount > (ui64)freeSpace) {
             resultRow.DeleteUnreferenced();
             rowStats.Clear();
+            return NUdf::TUnboxedValuePod();
         }
 
         return resultRow;
@@ -962,6 +969,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
             return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         case NKqpProto::EStreamLookupStrategy::JOIN:
+        case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
             return std::make_unique<TKqpJoinRows>(std::move(settings), typeEnv, holderFactory, inputDesc);
         default:
             return {};

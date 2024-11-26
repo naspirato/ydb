@@ -110,11 +110,20 @@ TDqConfiguration::TDqConfiguration() {
                 if (s.empty()) {
                     throw yexception() << "Empty value item";
                 }
+<<<<<<< HEAD
                 auto value = FromString<EEnabledSpillingNodes>(s);
+=======
+
+                auto value = FromString<NDq::EEnabledSpillingNodes>(s);
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                 res |= ui64(value);
             }
             return res;
         });
+<<<<<<< HEAD
+=======
+    REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
 }
 
 } // namespace NYql

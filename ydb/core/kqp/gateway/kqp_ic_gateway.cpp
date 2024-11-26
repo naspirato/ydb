@@ -1,5 +1,6 @@
 #include "kqp_gateway.h"
 #include "actors/kqp_ic_gateway_actors.h"
+#include "actors/analyze_actor.h"
 #include "actors/scheme.h"
 #include "kqp_metadata_loader.h"
 #include "local_rpc/helper.h"
@@ -226,7 +227,7 @@ public:
     void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
         auto& response = *ev->Get()->Record.GetRef().MutableResponse();
 
-        NKikimr::ConvertYdbResultToKqpResult(ResultSet,*response.AddResults());
+        response.AddYdbResults()->CopyFrom(ResultSet);
         for (auto& execStats : Executions) {
             response.MutableQueryStats()->AddExecutions()->Swap(&execStats);
         }
@@ -285,20 +286,18 @@ public:
     virtual void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
         auto& record = ev->Get()->Record.GetRef();
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            if (record.MutableResponse()->GetResults().size()) {
+            if (record.MutableResponse()->GetYdbResults().size()) {
                 // Send result sets to RPC actor TStreamExecuteYqlScriptRPC
                 auto evStreamPart = MakeHolder<NKqp::TEvKqp::TEvDataQueryStreamPart>();
                 ActorIdToProto(this->SelfId(), evStreamPart->Record.MutableGatewayActorId());
 
-                for (int i = 0; i < record.MutableResponse()->MutableResults()->size(); ++i) {
+                for (int i = 0; i < record.MutableResponse()->MutableYdbResults()->size(); ++i) {
                     // Workaround to avoid errors on Pull execution stage which would expect some results
-                    Ydb::ResultSet resultSet;
-                    NKikimr::ConvertYdbResultToKqpResult(resultSet, *evStreamPart->Record.AddResults());
+                    evStreamPart->Record.AddResults();
                 }
 
-                evStreamPart->Record.MutableResults()->Swap(record.MutableResponse()->MutableResults());
+                evStreamPart->Record.MutableResults()->Swap(record.MutableResponse()->MutableYdbResults());
                 this->Send(TargetActorId, evStreamPart.Release());
-
                 // Save response without data to send it later
                 ResponseHandle = ev.Release();
             } else {
@@ -404,7 +403,7 @@ public:
         auto& response = *ev->Get()->Record.GetRef().MutableResponse();
 
         Ydb::ResultSet resultSet;
-        NKikimr::ConvertYdbResultToKqpResult(resultSet, *response.AddResults());
+        response.AddYdbResults()->CopyFrom(resultSet);
         for (auto& execStats : Executions) {
             response.MutableQueryStats()->AddExecutions()->Swap(&execStats);
         }
@@ -510,7 +509,7 @@ public:
         auto& response = *ev->Get()->Record.GetRef().MutableResponse();
 
         for (auto& resultSet : ResultSets) {
-            ConvertYdbResultToKqpResult(std::move(resultSet.ResultSet), *response.AddResults());
+            response.AddYdbResults()->Swap(&resultSet.ResultSet);
         }
 
         TBase::HandleResponse(ev, ctx);
@@ -537,18 +536,21 @@ public:
     using TResult = IKqpGateway::TGenericResult;
 
     TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TMaybe<TString>& requestType, const TString& database,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken, TPromise<TResult> promise)
+        const TString& databaseId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, TString clientAddress, TPromise<TResult> promise)
         : PhyTx(std::move(phyTx))
         , QueryType(queryType)
         , Database(database)
+        , DatabaseId(databaseId)
         , UserToken(std::move(userToken))
+        , ClientAddress(std::move(clientAddress))
         , Promise(promise)
         , RequestType(requestType)
     {}
 
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
+        ctx->DatabaseId = DatabaseId;
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, TString() /* sessionId */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -579,7 +581,9 @@ private:
     TKqpPhyTxHolder::TConstPtr PhyTx;
     const NKikimrKqp::EQueryType QueryType;
     const TString Database;
+    const TString DatabaseId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    const TString ClientAddress;
     TPromise<TResult> Promise;
     const TMaybe<TString> RequestType;
 };
@@ -671,8 +675,8 @@ void KqpResponseToQueryResult(const NKikimrKqp::TEvQueryResponse& response, IKqp
         queryResult.AddIssue(NYql::IssueFromMessage(issue));
     }
 
-    for (auto& result : queryResponse.GetResults()) {
-        auto arenaResult = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(
+    for (auto& result : queryResponse.GetYdbResults()) {
+        auto arenaResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(
             queryResult.ProtobufArenaPtr.get());
 
         arenaResult->CopyFrom(result);
@@ -701,11 +705,12 @@ private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 public:
-    TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
+    TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
         TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
         : Cluster(cluster)
         , QueryType(queryType)
         , Database(database)
+        , DatabaseId(databaseId)
         , ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Counters(counters)
@@ -728,6 +733,10 @@ public:
         return Database;
     }
 
+    TString GetDatabaseId() override {
+        return DatabaseId;
+    }
+
     TMaybe<TString> GetSetting(const TString& cluster, const TString& name) override {
         Y_UNUSED(cluster);
         Y_UNUSED(name);
@@ -737,6 +746,10 @@ public:
     void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
         YQL_ENSURE(cluster == Cluster);
         UserToken = token;
+    }
+
+    void SetClientAddress(const TString& clientAddress) override {
+        ClientAddress = clientAddress;
     }
 
     bool GetDomainLoginOnly() override {
@@ -976,7 +989,11 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
-    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {
+    TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) override {
+        if (existingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF NOT EXISTS statement is not supported for CREATE TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -988,9 +1005,27 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+        Y_UNUSED(existingOk);
     }
 
-    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) override {
+    TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NKikimr::NGRpcProxy::V1::TAlterTopicResponse>();
+        auto schemaTxFuture = schemaTxPromise.GetFuture();
+
+        NKikimr::NGRpcProxy::V1::TAlterTopicRequest request{
+                std::move(settings.Request), settings.WorkDir, settings.Name, Database, GetTokenCompat(),
+                settings.MissingOk
+        };
+        IActor* requestHandler = new NKikimr::NGRpcProxy::V1::TAlterTopicActorInternal(std::move(request), std::move(schemaTxPromise), settings.MissingOk);
+        RegisterActor(requestHandler);
+        return schemaTxFuture;
+    }
+
+    TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) override {
+        if (missingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF EXISTS statement is not supported for ALTER TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -1004,7 +1039,11 @@ public:
         }
     }
 
-    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) override {
+    TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic, bool missingOk) override {
+        if (missingOk) {
+            return MakeFuture(ResultFromError<TGenericResult>("IF EXISTS statement is not supported for DROP TOPIC in yql script"));
+        }
+
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -1019,6 +1058,7 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+
     }
 
     TFuture<TGenericResult> CreateReplication(const TString&, const NYql::TCreateReplicationSettings&) override {
@@ -1386,6 +1426,22 @@ public:
         }
     }
 
+    TFuture<TGenericResult> Analyze(const TString& cluster, const NYql::TAnalyzeSettings& settings) override {
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+            
+            auto analyzePromise = NewPromise<TGenericResult>();
+            IActor* analyzeActor = new TAnalyzeActor(settings.TablePath, settings.Columns, analyzePromise);
+            RegisterActor(analyzeActor);
+            
+            return analyzePromise.GetFuture();
+        } catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     template <class TSettings>
     class IObjectModifier {
     public:
@@ -1429,6 +1485,7 @@ public:
                     context.SetUserToken(*GetUserToken());
                 }
                 context.SetDatabase(Owner.Database);
+                context.SetDatabaseId(Owner.DatabaseId);
                 context.SetActorSystem(Owner.ActorSystem);
                 return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<TYqlConclusionStatus>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Ok()) {
@@ -2180,7 +2237,7 @@ private:
 
     TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType, const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx) override {
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, UserToken, promise);
+        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, DatabaseId, UserToken, ClientAddress, promise);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }
@@ -2260,22 +2317,24 @@ private:
     TString Cluster;
     const NKikimrKqp::EQueryType QueryType;
     TString Database;
+    TString DatabaseId;
     TActorSystem* ActorSystem;
     ui32 NodeId;
     TKqpRequestCounters::TPtr Counters;
     TAlignedPagePoolCounters AllocCounters;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString ClientAddress;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 };
 
 } // namespace
 
-TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,
+TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId,
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader>&& metadataLoader, TActorSystem* actorSystem,
     ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
 {
-    return MakeIntrusive<TKikimrIcGateway>(cluster, queryType, database, std::move(metadataLoader), actorSystem, nodeId,
+    return MakeIntrusive<TKikimrIcGateway>(cluster, queryType, database, databaseId, std::move(metadataLoader), actorSystem, nodeId,
         counters, queryServiceConfig);
 }
 

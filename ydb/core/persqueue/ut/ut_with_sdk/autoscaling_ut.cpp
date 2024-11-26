@@ -400,9 +400,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
 
 
-        writeSession1->Close(TDuration::Seconds(1));
-        writeSession2->Close(TDuration::Seconds(1));
-        writeSession3->Close(TDuration::Seconds(1));
+        writeSession1->Close(TDuration::Seconds(2));
+        writeSession2->Close(TDuration::Seconds(2));
+        writeSession3->Close(TDuration::Seconds(2));
         readSession.Close();
     }
 
@@ -723,16 +723,74 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             f.Wait();
 
             auto v = f.GetValueSync();
-            UNIT_ASSERT_C(!v.IsSuccess(), "Must receve error becuse max-partition is not 0");
+            UNIT_ASSERT_C(!v.IsSuccess(), "Must receve error becuse disabling is not supported");
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_BackCompatibility) {
+        auto topicName = "back-compatibility-test";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(3)
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 3);
         }
 
         {
             TAlterTopicSettings alterSettings;
             alterSettings
                 .BeginAlterPartitioningSettings()
-                    .MaxActivePartitions(0)
+                    .MinActivePartitions(5)
+                .EndAlterTopicPartitioningSettings();
+            client.AlterTopic(topicName, alterSettings).Wait();
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 5);
+        }
+    }
+
+    Y_UNIT_TEST(ControlPlane_PauseAutoPartitioning) {
+        auto topicName = "autoscalit-topic";
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        {
+            TCreateTopicSettings createSettings;
+            createSettings
+                .BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(1)
+                    .MaxActivePartitions(100)
+                    .BeginConfigureAutoPartitioningSettings()
+                        .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                    .EndConfigureAutoPartitioningSettings()
+                .EndConfigurePartitioningSettings();
+            client.CreateTopic(topicName, createSettings).Wait();
+        }
+
+        {
+            TAlterTopicSettings alterSettings;
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(3)
+                    .MaxActivePartitions(107)
                     .BeginAlterAutoPartitioningSettings()
-                        .Strategy(EAutoPartitioningStrategy::Disabled)
+                        .Strategy(EAutoPartitioningStrategy::Paused)
                     .EndAlterAutoPartitioningSettings()
                 .EndAlterTopicPartitioningSettings();
             auto f = client.AlterTopic(topicName, alterSettings);
@@ -740,6 +798,14 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
             auto v = f.GetValueSync();
             UNIT_ASSERT_C(v.IsSuccess(),  "Error: " << v);
+        }
+
+        {
+            auto describeAfterAlter = client.DescribeTopic(topicName).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions(), 107);
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterAlter.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::Paused);
         }
     }
 
@@ -785,7 +851,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 .BeginConfigureAutoPartitioningSettings()
                 .UpUtilizationPercent(2)
                 .DownUtilizationPercent(1)
-                .StabilizationWindow(TDuration::Seconds(1))
+                .StabilizationWindow(TDuration::Seconds(2))
                 .Strategy(EAutoPartitioningStrategy::ScaleUp)
                 .EndConfigureAutoPartitioningSettings()
             .EndConfigurePartitioningSettings();
@@ -793,19 +859,129 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
-        UNIT_ASSERT(writeSession->Write(Msg(msg, 1)));
-        UNIT_ASSERT(writeSession->Write(Msg(msg, 2)));
-        Sleep(TDuration::Seconds(5));
-        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
 
-        auto writeSession2 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
-        UNIT_ASSERT(writeSession2->Write(Msg(msg, 3)));
-        UNIT_ASSERT(writeSession2->Write(Msg(msg, 4)));
-        Sleep(TDuration::Seconds(5));
-        auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-        UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 4)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
+
+        {
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 8)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
+    }
+
+    void ExecuteQuery(NYdb::NTable::TSession& session, const TString& query ) {
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(WithDir_PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto client = setup.MakeClient();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        setup.GetServer().AnnoyingClient->MkDir("/Root", "dir");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/dir/origin`
+                WITH (
+                    AUTO_PARTITIONING_STRATEGY = 'SCALE_UP',
+                    MAX_ACTIVE_PARTITIONS = 50
+                );
+        )");
+
+        {
+            auto describe = client.DescribeTopic("/Root/dir/origin").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        ui64 balancerTabletId;
+        {
+            auto pathDescr = setup.GetServer().AnnoyingClient->Ls("/Root/dir/origin")->Record.GetPathDescription().GetSelf();
+            balancerTabletId = pathDescr.GetBalancerTabletID();
+            Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
+            UNIT_ASSERT(balancerTabletId);
+        }
+
+        {
+            const auto edge = setup.GetRuntime().AllocateEdgeActor();
+            setup.GetRuntime().SendToPipe(balancerTabletId, edge, new TEvPQ::TEvPartitionScaleStatusChanged(0, NKikimrPQ::EScaleStatus::NEED_SPLIT));
+        }
+
+        {
+            size_t partitionCount = 0;
+            for (size_t i = 0; i < 10; ++i) {
+                Sleep(TDuration::Seconds(1));
+                auto describe = client.DescribeTopic("/Root/dir/origin").GetValueSync();
+                partitionCount = describe.GetTopicDescription().GetPartitions().size();
+                if (partitionCount == 3) {
+                    break;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(partitionCount, 3);
+        }
+    }
+
+    Y_UNIT_TEST(DisableCDC) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto client = setup.MakeClient();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/tbl` (
+                `Id` UInt64,
+                `Value` Utf8,
+                PRIMARY KEY (`Id`)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/tbl`
+              ADD CHANGEFEED `Feed`
+                WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+        )");
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .BeginAlterPartitioningSettings()
+                .BeginAlterAutoPartitioningSettings()
+                    .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndAlterAutoPartitioningSettings()
+            .EndAlterTopicPartitioningSettings();
+
+        auto result = client.AlterTopic("/Root/tbl/Feed", alterSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(MidOfRange) {

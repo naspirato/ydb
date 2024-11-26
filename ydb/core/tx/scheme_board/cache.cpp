@@ -13,9 +13,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/schema.h>
@@ -26,6 +26,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 #include <library/cpp/json/writer/json.h>
 
 #include <util/generic/algorithm.h>
@@ -898,8 +900,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 default:
                     return false;
                 }
-            case NKikimrSchemeOp::EPathTypeTableIndex:
-                return true;
             default:
                 return false;
             }
@@ -976,6 +976,62 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             } while (++low != Partitioning->end());
 
             return partitions;
+        }
+
+        static void FillTopicPartitioning(
+                const NKikimrSchemeOp::TPersQueueGroupDescription& pqDesc,
+                TVector<NScheme::TTypeInfo>& schema,
+                TVector<NKikimr::TKeyDesc::TPartitionInfo>& partitioning)
+        {
+            const auto& pqConfig = pqDesc.GetPQTabletConfig();
+            if (pqConfig.GetPartitionKeySchema().empty()) {
+                return;
+            }
+
+            schema.reserve(pqConfig.PartitionKeySchemaSize());
+            for (const auto& keySchema : pqConfig.GetPartitionKeySchema()) {
+                // TODO: support pg types
+                schema.push_back(NScheme::TTypeInfo(keySchema.GetTypeId()));
+            }
+
+            partitioning.reserve(pqDesc.PartitionsSize());
+            for (const auto& partition : pqDesc.GetPartitions()) {
+                auto keyRange = NPQ::TPartitionKeyRange::Parse(partition.GetKeyRange());
+                Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == schema.size());
+                Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == schema.size());
+
+                auto& info = partitioning.emplace_back(partition.GetPartitionId());
+                if (keyRange.ToBound) {
+                    info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{
+                        .EndKeyPrefix = *keyRange.ToBound,
+                    };
+                } else {
+                    info.Range = NKikimr::TKeyDesc::TPartitionRangeInfo{};
+                }
+            }
+
+            Sort(partitioning.begin(), partitioning.end(), [&schema](const auto& lhs, const auto& rhs) {
+                Y_ABORT_UNLESS(lhs.Range && rhs.Range);
+                Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix || rhs.Range->EndKeyPrefix);
+
+                if (!lhs.Range->EndKeyPrefix) {
+                    return false;
+                }
+
+                if (!rhs.Range->EndKeyPrefix) {
+                    return true;
+                }
+
+                Y_ABORT_UNLESS(lhs.Range->EndKeyPrefix && rhs.Range->EndKeyPrefix);
+
+                const int compares = CompareTypedCellVectors(
+                    lhs.Range->EndKeyPrefix.GetCells().data(),
+                    rhs.Range->EndKeyPrefix.GetCells().data(),
+                    schema.data(), schema.size()
+                );
+
+                return (compares < 0);
+            });
         }
 
         bool IsSysTable() const {
@@ -1486,6 +1542,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (Created) {
                     NPQ::Migrate(*pathDesc.MutablePersQueueGroup()->MutablePQTabletConfig());
                     FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup()));
+                    FillTopicPartitioning(PQGroupInfo->Description, PQGroupInfo->Schema, PQGroupInfo->Partitioning);
                 }
                 break;
             case NKikimrSchemeOp::EPathTypeCdcStream:
@@ -2570,14 +2627,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
                 auto pathExtractor = [this](TNavigate::TEntry& entry) {
+                    NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
                     if (AppData()->FeatureFlags.GetEnableSystemViews()
-                        && (entry.Operation == TNavigate::OpPath || entry.Operation == TNavigate::OpTable))
+                        && SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath))
                     {
-                        NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-                        if (SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
-                            entry.TableId.SysViewInfo = sysViewPath.ViewName;
-                            return CanonizePath(sysViewPath.Parent);
-                        }
+                        entry.TableId.SysViewInfo = sysViewPath.ViewName;
+                        return CanonizePath(sysViewPath.Parent);
                     }
 
                     TString path = CanonizePath(entry.Path);

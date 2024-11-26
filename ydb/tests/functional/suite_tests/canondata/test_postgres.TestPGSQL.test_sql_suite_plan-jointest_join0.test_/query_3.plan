@@ -37,7 +37,11 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
+<<<<<<< HEAD
                                         "Node Type": "Aggregate-InnerJoin (MapJoin)",
+=======
+                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter-Filter",
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -48,16 +52,41 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
-                                                "Condition": "hundred = thousand",
+                                                "Condition": "a.hundred = b.thousand",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 4
                                                     },
                                                     {
+<<<<<<< HEAD
                                                         "ExternalPlanNodeId": 2
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
+=======
+                                                        "InternalOperatorId": 3
+                                                    }
+                                                ],
+                                                "Name": "InnerJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 6
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.hundred)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.thousand)"
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                             }
                                         ],
                                         "PlanNodeId": 5,
@@ -71,7 +100,64 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "Node Type": "Filter-TableFullScan",
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 3,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "UnionAll",
+                                                                "PlanNodeId": 2,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "Filter-TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "Filter",
+                                                                                "Predicate": "Exist(item.thousand) And item.fivethous % 10 < 10"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [],
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "fivethous",
+                                                                                    "hundred",
+                                                                                    "thousand"
+                                                                                ],
+                                                                                "ReadRanges": [
+                                                                                    "unique1 (-\u221e, +\u221e)",
+                                                                                    "unique2 (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Scan": "Parallel",
+                                                                                "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 1,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/join0.test_plan/tenk1"
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 6,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "Node Type": "TableFullScan",
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [

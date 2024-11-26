@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)",
+                                        "Node Type": "Limit-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -41,16 +41,33 @@
                                                 "Name": "Limit"
                                             },
                                             {
+<<<<<<< HEAD
                                                 "Condition": "id = id",
+=======
+                                                "Condition": "xx.id = yy_1.id",
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 8
                                                     },
                                                     {
+<<<<<<< HEAD
                                                         "ExternalPlanNodeId": 6
+=======
+                                                        "InternalOperatorId": 2
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 8
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.yy_1.id)"
                                             }
                                         ],
                                         "PlanNodeId": 9,
@@ -64,6 +81,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "Node Type": "FullJoin (JoinDict)",
                                                         "Operators": [
                                                             {
@@ -79,6 +97,10 @@
                                                             }
                                                         ],
                                                         "PlanNodeId": 5,
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 7,
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                         "Plans": [
                                                             {
                                                                 "KeyColumns": [
@@ -98,8 +120,14 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
+<<<<<<< HEAD
                                                                                         "Node Type": "TableFullScan",
                                                                                         "Operators": [
+=======
+                                                                                        "Node Type": "Stage",
+                                                                                        "PlanNodeId": 3,
+                                                                                        "Plans": [
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                                                             {
                                                                                                 "Inputs": [],
                                                                                                 "Name": "TableFullScan",
@@ -153,6 +181,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
@@ -162,6 +191,10 @@
                                                             }
                                                         ],
                                                         "PlanNodeId": 7
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 9
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                     }
                                                 ]
                                             }

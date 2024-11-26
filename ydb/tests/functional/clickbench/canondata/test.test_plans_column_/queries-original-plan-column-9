@@ -51,7 +51,10 @@
                                                 "PlanNodeId": 9,
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Map",
+                                                        "KeyColumns": [
+                                                            "RegionID"
+                                                        ],
+                                                        "Node Type": "HashShuffle",
                                                         "PlanNodeId": 8,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
@@ -73,10 +76,7 @@
                                                                 "PlanNodeId": 7,
                                                                 "Plans": [
                                                                     {
-                                                                        "KeyColumns": [
-                                                                            "RegionID"
-                                                                        ],
-                                                                        "Node Type": "HashShuffle",
+                                                                        "Node Type": "UnionAll",
                                                                         "PlanNodeId": 6,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -131,7 +131,7 @@
                                                                                                     }
                                                                                                 }
                                                                                             ],
-                                                                                            "Version": 5
+                                                                                            "Version": 4
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }
@@ -144,10 +144,7 @@
                                                                         ]
                                                                     },
                                                                     {
-                                                                        "KeyColumns": [
-                                                                            "RegionID"
-                                                                        ],
-                                                                        "Node Type": "HashShuffle",
+                                                                        "Node Type": "UnionAll",
                                                                         "PlanNodeId": 4,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -227,7 +224,7 @@
                                                                                                                     }
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Version": 5
+                                                                                                            "Version": 4
                                                                                                         },
                                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                                     }

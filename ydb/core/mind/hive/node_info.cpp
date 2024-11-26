@@ -356,7 +356,7 @@ void TNodeInfo::DeregisterInDomains() {
 void TNodeInfo::Ping() {
     Y_ABORT_UNLESS((bool)Local);
     BLOG_D("Node(" << Id << ") Ping(" << Local << ")");
-    Hive.SendPing(Local, Id);
+    Hive.QueuePing(Local);
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {
@@ -467,7 +467,7 @@ TResourceRawValues TNodeInfo::GetStDevResourceValues() {
     return GetStDev(values);
 }
 
-bool TNodeInfo::CanBeDeleted() const {
+bool TNodeInfo::CanBeDeleted(TInstant now) const {
     TInstant lastAlive(TInstant::MilliSeconds(Statistics.GetLastAliveTimestamp()));
     if (lastAlive) {
         return (IsDisconnected() || IsUnknown())
@@ -475,7 +475,7 @@ bool TNodeInfo::CanBeDeleted() const {
                 && GetTabletsTotal() == 0
                 && LockedTablets.empty()
                 && !Freeze
-                && (lastAlive + Hive.GetNodeDeletePeriod() < TInstant::Now());
+                && (lastAlive + Hive.GetNodeDeletePeriod() < now);
     } else {
         return (IsDisconnected() || IsUnknown()) && !Local && GetTabletsTotal() == 0 && LockedTablets.empty() && !Freeze;
     }

@@ -178,7 +178,7 @@ public:
 
         if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
             // log info about input connection (remote address, basically)
-            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
         }
 
         // Simple rps limitation
@@ -312,6 +312,7 @@ private:
                     SetTokenAndDie();
                     break;
                 case Ydb::StatusIds::TIMEOUT:
+                case Ydb::StatusIds::CANCELLED:
                     Counters_->IncDatabaseRateLimitedCounter();
                     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Throughput limit exceeded");
                     ReplyOverloadedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED, "Throughput limit exceeded"));
@@ -331,7 +332,8 @@ private:
             }
         };
 
-        req.mutable_operation_params()->mutable_operation_timeout()->set_nanos(200000000); // same as cloud-go serverless proxy
+        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(10);
+        req.mutable_operation_params()->mutable_cancel_after()->set_nanos(200000000); // same as cloud-go serverless proxy
 
         NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox(
             std::move(req),
@@ -414,11 +416,11 @@ private:
         return DmlAuditEnabled_ && !DmlAuditExpectedSubjects_.contains(userSID);
     };
 
-    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID) const {
+    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID, const TString& sanitizedToken) const {
         const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
 
         if (dmlAuditEnabled) {
-            AuditContextStart(requestBaseCtx, databaseName, userSID, Attributes_);
+            AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
             requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
                 AuditContextEnd(requestBaseCtx);
                 AuditLog(status, parts);
@@ -472,7 +474,7 @@ private:
     void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
         // Request audit happen after successful authentication
         // and authorization check against the database
-        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
 
         GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);

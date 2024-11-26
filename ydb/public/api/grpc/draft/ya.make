@@ -16,7 +16,12 @@ SRCS(
     ydb_persqueue_v1.proto
     ydb_object_storage_v1.proto
     ydb_replication_v1.proto
+<<<<<<< HEAD
     ydb_tablet_v1.proto
+=======
+    ydb_view_v1.proto
+    ydb_ymq_v1.proto
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
 )
 
 PEERDIR(

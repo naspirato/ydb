@@ -365,6 +365,26 @@ static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> GetCodecsMapping() 
     return codecsMapping;
 }
 
+static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> GetAutoPartitioningStrategiesMapping() {
+    static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> strategiesMapping;
+    if (!strategiesMapping) {
+        strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
+            Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
+
+        const TString prefix = "scale_";
+        for (const auto& [key, value] : *strategiesMapping) {
+            if (key.StartsWith(prefix)) {
+                TString newKey = key;
+                newKey.erase(0, prefix.length());
+
+                Y_ABORT_UNLESS(strategiesMapping->find(newKey) == strategiesMapping->end());
+                (*strategiesMapping)[newKey] = value;
+            }
+        }
+    }
+    return strategiesMapping;
+}
+
 static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> GetMeteringModesMapping() {
     static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> metModesMapping;
     if (metModesMapping == nullptr) {
@@ -379,6 +399,18 @@ bool GetTopicMeteringModeFromString(const TString& meteringMode, Ydb::Topic::Met
     auto mapping = GetMeteringModesMapping();
     auto normMode = to_lower(meteringMode);
     auto iter = mapping->find(normMode);
+    if (iter.IsEnd()) {
+        return false;
+    } else {
+        result = iter->second;
+        return true;
+    }
+}
+
+bool GetTopicAutoPartitioningStrategyFromString(const TString& strategy, Ydb::Topic::AutoPartitioningStrategy& result) {
+    auto mapping = GetAutoPartitioningStrategiesMapping();
+    auto normStrategy = to_lower(strategy);
+    auto iter = mapping->find(normStrategy);
     if (iter.IsEnd()) {
         return false;
     } else {

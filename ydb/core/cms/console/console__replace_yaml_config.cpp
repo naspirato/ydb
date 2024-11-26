@@ -1,5 +1,6 @@
 #include "console_configs_manager.h"
 #include "console_configs_provider.h"
+#include "console_audit.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/aclib/aclib.h>
@@ -16,8 +17,9 @@ class TConfigsManager::TTxReplaceYamlConfig : public TTransactionBase<TConfigsMa
                          bool force)
         : TBase(self)
         , Config(ev->Get()->Record.GetRequest().config())
+        , Peer(ev->Get()->Record.GetPeerName())
         , Sender(ev->Sender)
-        , UserSID(NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID())
+        , UserToken(ev->Get()->Record.GetUserToken())
         , Force(force)
         , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
         , DryRun(ev->Get()->Record.GetRequest().dry_run())
@@ -54,7 +56,7 @@ public:
             oldVolatileConfig.SetConfig(config);
         }
 
-        Self->Logger.DbLogData(UserSID, logData, txc, ctx);
+        Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
@@ -146,6 +148,7 @@ public:
             auto *issue = ev->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
             issue->set_message(ex.what());
+            ErrorReason = ex.what();
             Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
         }
 
@@ -159,6 +162,15 @@ public:
         ctx.Send(Response.Release());
 
         if (!Error && Modify && !DryRun) {
+            AuditLogReplaceConfigTransaction(
+                /* peer = */ Peer,
+                /* userSID = */ UserToken.GetUserSID(),
+                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                /* oldConfig = */ Self->YamlConfig,
+                /* newConfig = */ Config,
+                /* reason = */ {},
+                /* success = */ true);
+
             Self->YamlVersion = Version + 1;
             Self->YamlConfig = UpdatedConfig;
             Self->YamlDropped = false;
@@ -167,6 +179,15 @@ public:
 
             auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->YamlConfig);
             ctx.Send(Self->ConfigsProvider, resp.Release());
+        } else if (Error && !DryRun) {
+            AuditLogReplaceConfigTransaction(
+                /* peer = */ Peer,
+                /* userSID = */ UserToken.GetUserSID(),
+                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                /* oldConfig = */ Self->YamlConfig,
+                /* newConfig = */ Config,
+                /* reason = */ ErrorReason,
+                /* success = */ false);
         }
 
         Self->TxProcessor->TxCompleted(this, ctx);
@@ -174,13 +195,15 @@ public:
 
 private:
     const TString Config;
+    const TString Peer;
     const TActorId Sender;
-    const TString UserSID;
+    const NACLib::TUserToken UserToken;
     const bool Force = false;
     const bool AllowUnknownFields = false;
     const bool DryRun = false;
     THolder<NActors::IEventHandle> Response;
     bool Error = false;
+    TString ErrorReason;
     bool Modify = false;
     TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
     ui32 Version;

@@ -373,7 +373,7 @@ struct Schema : NIceDb::Schema {
         struct FullCompactionTs : Column<31, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct MemDataSize : Column<32, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
-        // PartCount, PartOwners & ShardState are volatile data
+        // PartCount, PartOwners, ShardState, HasSchemaChanges are volatile data
 
         // Represented by NKikimrTableStats::TStoragePoolsStats.
         struct StoragePoolsStats : Column<33, NScheme::NTypeIds::String> { using Type = TString; };
@@ -761,6 +761,7 @@ struct Schema : NIceDb::Schema {
         struct ImportsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
         struct AuditSettings : Column<30, NScheme::NTypeIds::String> {};
         struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
+        struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -794,7 +795,8 @@ struct Schema : NIceDb::Schema {
             ExportsLimit,
             ImportsLimit,
             AuditSettings,
-            ServerlessComputeResourcesMode
+            ServerlessComputeResourcesMode,
+            ColumnTableColumnsLimit
         >;
     };
 
@@ -1160,6 +1162,7 @@ struct Schema : NIceDb::Schema {
 
         struct StartTime : Column<14, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<15, NScheme::NTypeIds::Uint64> {};
+        struct PeerName : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1177,7 +1180,8 @@ struct Schema : NIceDb::Schema {
             Kind,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            PeerName
         >;
     };
 
@@ -1314,6 +1318,9 @@ struct Schema : NIceDb::Schema {
         struct AlterMainTableTxStatus : Column<32, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
         struct AlterMainTableTxDone : Column<33, NScheme::NTypeIds::Bool> {};
 
+        // Serialized as string NKikimrSchemeOp::TIndexCreationConfig protobuf.
+        struct CreationConfig : Column<34, NScheme::NTypeIds::String> { using Type = TString; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1348,7 +1355,8 @@ struct Schema : NIceDb::Schema {
             BuildKind,
             AlterMainTableTxId,
             AlterMainTableTxStatus,
-            AlterMainTableTxDone
+            AlterMainTableTxDone,
+            CreationConfig
         >;
     };
 
@@ -1482,6 +1490,7 @@ struct Schema : NIceDb::Schema {
 
         struct StartTime : Column<11, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct PeerName : Column<13, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1496,7 +1505,8 @@ struct Schema : NIceDb::Schema {
             Issue,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            PeerName
         >;
     };
 
@@ -1779,9 +1789,11 @@ struct Schema : NIceDb::Schema {
         struct PathId: Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion: Column<2, NScheme::NTypeIds::Uint64> {};
         struct QueryText: Column<3, NScheme::NTypeIds::String> {};
+        // CapturedContext is a serialized NYql::NProto::TTranslationSettings.
+        struct CapturedContext: Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, QueryText>;
+        using TColumns = TableColumns<PathId, AlterVersion, QueryText, CapturedContext>;
     };
 
     struct BackgroundSessions: Table<109> {

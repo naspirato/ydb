@@ -26,6 +26,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->NextSeqno = 1;
         Self->NextChangeRecordOrder = 1;
         Self->LastChangeRecordGroup = 1;
+        Self->Pipeline.Reset();
         Self->TransQueue.Reset();
         Self->SnapshotManager.Reset();
         Self->SchemaSnapshotManager.Reset();
@@ -425,6 +426,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             return false;
     }
 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::SchemaSnapshots::TableId)) {
+        if (!Self->SchemaSnapshotManager.Load(db)) {
+            return false;
+        }
+    }
+
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecords::TableId)) {
         if (!Self->LoadChangeRecords(db, ChangeRecords)) {
             return false;
@@ -512,12 +519,6 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::SchemaSnapshots::TableId)) {
-        if (!Self->SchemaSnapshotManager.Load(db)) {
-            return false;
-        }
-    }
-
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Locks::TableId)) {
         TDataShardLocksDb locksDb(*Self, txc);
         if (!Self->SysLocks.Load(locksDb)) {
@@ -547,6 +548,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     Self->SubscribeNewLocks();
 
     Self->ScheduleRemoveAbandonedLockChanges();
+    Self->ScheduleRemoveAbandonedSchemaSnapshots();
 
     return true;
 }

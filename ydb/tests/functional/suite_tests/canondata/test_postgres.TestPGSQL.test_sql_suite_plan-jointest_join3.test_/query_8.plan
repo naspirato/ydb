@@ -42,7 +42,7 @@
                                                 "TopSortBy": ""
                                             },
                                             {
-                                                "Condition": "x = _equijoin_column_0",
+                                                "Condition": "ss1.x = ss2._equijoin_column_0",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 4
@@ -65,16 +65,55 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "Node Type": "LeftJoin (MapJoin)-TableFullScan",
                                                         "Operators": [
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 3,
+                                                        "Plans": [
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                             {
                                                                 "Condition": "q2 = id",
                                                                 "Inputs": [
                                                                     {
+<<<<<<< HEAD
                                                                         "InternalOperatorId": 1
                                                                     },
                                                                     {
                                                                         "Other": "ConstantExpression"
+=======
+                                                                        "Node Type": "LeftJoin (MapJoin)-TableFullScan",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Condition": "int8_tbl.q2 = innertab.id",
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "LeftJoin (MapJoin)"
+                                                                            },
+                                                                            {
+                                                                                "Inputs": [],
+                                                                                "Name": "TableFullScan",
+                                                                                "ReadColumns": [
+                                                                                    "q1",
+                                                                                    "q2"
+                                                                                ],
+                                                                                "ReadRanges": [
+                                                                                    "q1 (-\u221e, +\u221e)",
+                                                                                    "q2 (-\u221e, +\u221e)"
+                                                                                ],
+                                                                                "Scan": "Parallel",
+                                                                                "Table": "postgres_jointest/join3.test_plan/int8_tbl"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 1,
+                                                                        "Tables": [
+                                                                            "postgres_jointest/join3.test_plan/int8_tbl"
+                                                                        ]
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                                     }
                                                                 ],
                                                                 "Name": "LeftJoin (MapJoin)"
@@ -110,6 +149,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
+<<<<<<< HEAD
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
@@ -119,6 +159,10 @@
                                                             }
                                                         ],
                                                         "PlanNodeId": 3
+=======
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 5
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
                                                     }
                                                 ]
                                             }

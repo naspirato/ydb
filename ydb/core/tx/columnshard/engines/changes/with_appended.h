@@ -17,8 +17,11 @@ protected:
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
+<<<<<<< HEAD
     std::vector<TWritePortionInfoWithBlobsConstructor> MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule,
         const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context, const std::optional<NArrow::NSerialization::TSerializerContainer>& overrideSaver) const;
+=======
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
 
     virtual void DoDebugString(TStringOutput& out) const override {
         out << "remove=" << PortionsToRemove.size() << ";append=" << AppendedPortions.size() << ";";

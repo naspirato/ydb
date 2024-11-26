@@ -60,18 +60,8 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "TableFullScan",
                                                                 "Operators": [
-                                                                    {
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                        "GroupBy": "",
-                                                                        "Inputs": [
-                                                                            {
-                                                                                "InternalOperatorId": 1
-                                                                            }
-                                                                        ],
-                                                                        "Name": "Aggregate"
-                                                                    },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
@@ -90,8 +80,18 @@
                                                                         "SsaProgram": {
                                                                             "Command": [
                                                                                 {
-                                                                                    "Projection": {
-                                                                                        "Columns": [
+                                                                                    "GroupBy": {
+                                                                                        "Aggregates": [
+                                                                                            {
+                                                                                                "Column": {
+                                                                                                    "Id": 106
+                                                                                                },
+                                                                                                "Function": {
+                                                                                                    "Id": 2
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "KeyColumns": [
                                                                                             {
                                                                                                 "Id": 14
                                                                                             },
@@ -100,9 +100,24 @@
                                                                                             }
                                                                                         ]
                                                                                     }
+                                                                                },
+                                                                                {
+                                                                                    "Projection": {
+                                                                                        "Columns": [
+                                                                                            {
+                                                                                                "Id": 14
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 10
+                                                                                            },
+                                                                                            {
+                                                                                                "Id": 106
+                                                                                            }
+                                                                                        ]
+                                                                                    }
                                                                                 }
                                                                             ],
-                                                                            "Version": 5
+                                                                            "Version": 4
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }

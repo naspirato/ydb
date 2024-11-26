@@ -17,6 +17,7 @@
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
 #include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/ymq/actor/auth_multi_factory.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/tests/counters.h>
@@ -32,6 +33,9 @@
 #include <nlohmann/json.hpp>
 
 #include <ydb/core/http_proxy/auth_factory.h>
+
+#include <ydb/library/folder_service/folder_service.h>
+#include <ydb/core/ymq/actor/serviceid.h>
 
 
 using TJMap = NJson::TJsonValue::TMapType;
@@ -63,8 +67,8 @@ T GetByPath(const NJson::TJsonValue& msg, TStringBuf path) {
     }
 }
 
-
 class THttpProxyTestMock : public NUnitTest::TBaseFixture {
+    friend class THttpProxyTestMockForSQS;
 public:
     THttpProxyTestMock() = default;
     ~THttpProxyTestMock() = default;
@@ -77,12 +81,12 @@ public:
         InitAll();
     }
 
-    void InitAll() {
+    void InitAll(bool yandexCloudMode = true) {
         AccessServicePort = PortManager.GetPort(8443);
         AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-        InitKikimr();
+        InitKikimr(yandexCloudMode);
         InitAccessServiceService();
-        InitHttpServer();
+        InitHttpServer(yandexCloudMode);
     }
 
     static TString FormAuthorizationStr(const TString& region) {
@@ -177,6 +181,18 @@ public:
         return record;
     }
 
+
+    static NJson::TJsonValue CreateSqsGetQueueUrlRequest() {
+        NJson::TJsonValue record;
+        record["QueueName"] = "ExampleQueueName";
+        return record;
+    }
+
+    static NJson::TJsonValue CreateSqsCreateQueueRequest() {
+        NJson::TJsonValue record;
+        record["QueueName"] = "ExampleQueueName";
+        return record;
+    }
 
     THttpResult SendHttpRequestRaw(const TString& handler, const TString& target,
                                    const IOutputStream::TPart& body, const TString& authorizationStr,
@@ -321,7 +337,35 @@ public:
     }
 
 private:
-    void InitKikimr() {
+    TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
+        TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        NYdb::TDriver driver(driverConfig);
+        auto tableClient = NYdb::NTable::TTableClient(driver);
+
+        TMaybe<NYdb::TResultSet> resultSet;
+
+        auto operationResult = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
+            NYdb::TParamsBuilder paramsBuilder;
+            auto queryResult = session.ExecuteDataQuery(
+                    query,
+                    NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+                    paramsBuilder.Build()
+                ).GetValueSync();
+
+            if (queryResult.IsSuccess() && queryResult.GetResultSets().size() > 0) {
+                resultSet = queryResult.GetResultSet(0);
+            }
+            return queryResult;
+        });
+
+        Y_ABORT_UNLESS(operationResult.IsSuccess());
+        return resultSet;
+    }
+
+    void InitKikimr(bool yandexCloudMode) {
         AuthFactory = std::make_shared<TIamAuthFactory>();
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -330,6 +374,10 @@ private:
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
+
+        appConfig.MutableSqsConfig()->SetEnableSqs(true);
+        appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
+        appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
 
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
         limit->SetMinPeriodSeconds(0);
@@ -356,6 +404,7 @@ private:
 
         server->ServerSettings->SetUseRealThreads(false);
         KikimrServer = THolder<NYdb::TKikimrWithGrpcAndRootSchema>(server);
+        KikimrGrpcPort = KikimrServer->ServerSettings->GrpcPort;
 
         ActorRuntime = KikimrServer->GetRuntime();
 
@@ -375,13 +424,210 @@ private:
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "proxy_sa@as");
 
         client.ModifyACL("/", "Root", acl.SerializeAsString());
+
+        client.MkDir("/Root", "SQS");
+
+        client.CreateTable("/Root/SQS",
+           "Name: \".Queues\""
+           "Columns { Name: \"Account\"            Type: \"Utf8\"}"
+           "Columns { Name: \"QueueName\"          Type: \"Utf8\"}"
+           "Columns { Name: \"QueueId\"            Type: \"String\"}"
+           "Columns { Name: \"QueueState\"         Type: \"Uint64\"}"
+           "Columns { Name: \"FifoQueue\"          Type: \"Bool\"}"
+           "Columns { Name: \"DeadLetterQueue\"    Type: \"Bool\"}"
+           "Columns { Name: \"CreatedTimestamp\"   Type: \"Uint64\"}"
+           "Columns { Name: \"Shards\"             Type: \"Uint64\"}"
+           "Columns { Name: \"Partitions\"         Type: \"Uint64\"}"
+           "Columns { Name: \"MasterTabletId\"     Type: \"Uint64\"}"
+           "Columns { Name: \"CustomQueueName\"    Type: \"Utf8\"}"
+           "Columns { Name: \"FolderId\"           Type: \"Utf8\"}"
+           "Columns { Name: \"Version\"            Type: \"Uint64\"}"
+           "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
+           "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
+           "KeyColumnNames: [\"Account\", \"QueueName\"]"
+        );
+
+        client.CreateTable("/Root/SQS",
+           "Name: \".RemovedQueues\""
+           "Columns { Name: \"RemoveTimestamp\"       Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"Account\"               Type: \"Utf8\"}"
+           "Columns { Name: \"QueueName\"             Type: \"Utf8\"}"
+           "Columns { Name: \"FifoQueue\"             Type: \"Bool\"}"
+           "Columns { Name: \"Shards\"                Type: \"Uint32\"}"
+           "Columns { Name: \"CustomQueueName\"       Type: \"Utf8\"}"
+           "Columns { Name: \"FolderId\"              Type: \"Utf8\"}"
+           "Columns { Name: \"TablesFormat\"          Type: \"Uint32\"}"
+           "Columns { Name: \"StartProcessTimestamp\" Type: \"Uint64\"}"
+           "Columns { Name: \"NodeProcess\"           Type: \"Uint32\"}"
+           "KeyColumnNames: [\"RemoveTimestamp\", \"QueueIdNumber\"]"
+        );
+
+        client.MkDir("/Root/SQS", ".STD");
+        client.CreateTable("/Root/SQS/.STD",
+           "Name: \"Messages\""
+           "Columns { Name: \"QueueIdNumberAndShardHash\" Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"             Type: \"Uint64\"}"
+           "Columns { Name: \"Shard\"                     Type: \"Uint32\"}"
+           "Columns { Name: \"Offset\"                    Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"                  Type: \"Uint64\"}"
+           "Columns { Name: \"SentTimestamp\"             Type: \"Uint64\"}"
+           "Columns { Name: \"DelayDeadline\"             Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
+        );
+
+        client.MkDir("/Root/SQS", ".FIFO");
+        client.CreateTable("/Root/SQS/.FIFO", 
+           "Name: \"Messages\""
+           "Columns { Name: \"QueueIdNumberHash\"     Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"              Type: \"Uint64\"}"
+           "Columns { Name: \"GroupId\"               Type: \"String\"}"
+           "Columns { Name: \"NextOffset\"            Type: \"Uint64\"}"
+           "Columns { Name: \"NextRandomId\"          Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveCount\"          Type: \"Uint32\"}"
+           "Columns { Name: \"FirstReceiveTimestamp\" Type: \"Uint64\"}"
+           "Columns { Name: \"SentTimestamp\"         Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Offset\"]"
+        );
+
+        client.CreateTable("/Root/SQS",
+           "Name: \".Settings\""
+           "Columns { Name: \"Account\"               Type: \"Utf8\"}"
+           "Columns { Name: \"Name\"                  Type: \"Utf8\"}"
+           "Columns { Name: \"Value\"                 Type: \"Utf8\"}"
+           "KeyColumnNames: [\"Account\", \"Name\"]"
+        );
+
+        client.CreateTable("/Root/SQS",
+           "Name: \".AtomicCounter\""
+           "Columns { Name: \"counter_key\"  Type: \"Uint64\"}"
+           "Columns { Name: \"value\"        Type: \"Uint64\"}"
+           "KeyColumnNames: [\"counter_key\"]"
+        );
+        RunYqlDataQuery("INSERT INTO `/Root/SQS/.AtomicCounter` (counter_key, value) VALUES (0, 0)");
+
+        auto attributesTable= "Name: \"Attributes\""
+           "Columns { Name: \"QueueIdNumberHash\"             Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"                 Type: \"Uint64\"}"
+           "Columns { Name: \"ContentBasedDeduplication\"     Type: \"Bool\"}"
+           "Columns { Name: \"DelaySeconds\"                  Type: \"Uint64\"}"
+           "Columns { Name: \"FifoQueue\"                     Type: \"Bool\"}"
+           "Columns { Name: \"MaximumMessageSize\"            Type: \"Uint64\"}"
+           "Columns { Name: \"MessageRetentionPeriod\"        Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveMessageWaitTime\"        Type: \"Uint64\"}"
+           "Columns { Name: \"VisibilityTimeout\"             Type: \"Uint64\"}"
+           "Columns { Name: \"DlqName\"                       Type: \"Utf8\"}"
+           "Columns { Name: \"DlqArn\"                        Type: \"Utf8\"}"
+           "Columns { Name: \"MaxReceiveCount\"               Type: \"Uint64\"}"
+           "Columns { Name: \"ShowDetailedCountersDeadline\"  Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]";
+        client.CreateTable("/Root/SQS/.STD", attributesTable);
+        client.CreateTable("/Root/SQS/.FIFO", attributesTable);
+
+        client.CreateTable("/Root/SQS",
+           "Name: \".Events\""
+           "Columns { Name: \"Account\"          Type: \"Utf8\"}"
+           "Columns { Name: \"QueueName\"        Type: \"Utf8\"}"
+           "Columns { Name: \"EventType\"        Type: \"Uint64\"}"
+           "Columns { Name: \"CustomQueueName\"  Type: \"Utf8\"}"
+           "Columns { Name: \"EventTimestamp\"   Type: \"Uint64\"}"
+           "Columns { Name: \"FolderId\"         Type: \"Utf8\"}"
+           "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
+        );
+
+        auto stateTableCommon = 
+           "Name: \"State\""
+           "Columns { Name: \"QueueIdNumberHash\"      Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"          Type: \"Uint64\"}"
+           "Columns { Name: \"CleanupTimestamp\"       Type: \"Uint64\"}"
+           "Columns { Name: \"CreatedTimestamp\"       Type: \"Uint64\"}"
+           "Columns { Name: \"LastModifiedTimestamp\"  Type: \"Uint64\"}"
+           "Columns { Name: \"RetentionBoundary\"      Type: \"Uint64\"}"
+           "Columns { Name: \"InflyCount\"             Type: \"Int64\"}"
+           "Columns { Name: \"MessageCount\"           Type: \"Int64\"}"
+           "Columns { Name: \"ReadOffset\"             Type: \"Uint64\"}"
+           "Columns { Name: \"WriteOffset\"            Type: \"Uint64\"}"
+           "Columns { Name: \"CleanupVersion\"         Type: \"Uint64\"}"
+           "Columns { Name: \"InflyVersion\"           Type: \"Uint64\"}";
+        client.CreateTable("/Root/SQS/.STD",
+            TStringBuilder()
+                << stateTableCommon
+                << "Columns { Name: \"Shard\"  Type: \"Uint32\"}"
+                << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Shard\"]"
+        );
+        client.CreateTable("/Root/SQS/.FIFO",
+            TStringBuilder()
+                << stateTableCommon
+                << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]"
+        );
+
+
+        client.CreateTable("/Root/SQS/.STD",
+           "Name: \"Infly\""
+           "Columns { Name: \"QueueIdNumberAndShardHash\"  Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Shard\"                      Type: \"Uint32\"}"
+           "Columns { Name: \"Offset\"                     Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"                   Type: \"Uint64\"}"
+           "Columns { Name: \"LoadId\"                     Type: \"Uint64\"}"
+           "Columns { Name: \"FirstReceiveTimestamp\"      Type: \"Uint64\"}"
+           "Columns { Name: \"LockTimestamp\"              Type: \"Uint64\"}"
+           "Columns { Name: \"ReceiveCount\"               Type: \"Uint32\"}"
+           "Columns { Name: \"SentTimestamp\"              Type: \"Uint64\"}"
+           "Columns { Name: \"VisibilityDeadline\"         Type: \"Uint64\"}"
+           "Columns { Name: \"DelayDeadline\"              Type: \"Uint64\"}"
+           "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
+        );
+
+        auto sentTimestampIdxCommonColumns= 
+           "Columns { Name: \"QueueIdNumberAndShardHash\"  Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Shard\"                      Type: \"Uint32\"}"
+           "Columns { Name: \"SentTimestamp\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                     Type: \"Uint64\"}"
+           "Columns { Name: \"RandomId\"                   Type: \"Uint64\"}"
+           "Columns { Name: \"DelayDeadline\"              Type: \"Uint64\"}";
+        auto sendTimestampIdsKeys = "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"SentTimestamp\", \"Offset\"]";
+        client.CreateTable("/Root/SQS/.STD",
+           TStringBuilder()
+           << "Name: \"SentTimestampIdx\""
+           << sentTimestampIdxCommonColumns
+           << sendTimestampIdsKeys
+        );
+        client.CreateTable("/Root/SQS/.FIFO",
+           TStringBuilder()
+           << "Name: \"SentTimestampIdx\""
+           << "Columns { Name: \"GroupId\"  Type: \"String\"}"
+           << sentTimestampIdxCommonColumns
+           << sendTimestampIdsKeys
+        );
+
+        client.CreateTable("/Root/SQS/.STD",
+           "Name: \"MessageData\""
+           "Columns { Name: \"QueueIdNumberAndShardHash\"  Type: \"Uint64\"}"
+           "Columns { Name: \"QueueIdNumber\"              Type: \"Uint64\"}"
+           "Columns { Name: \"Shard\"                      Type: \"Uint32\"}"
+           "Columns { Name: \"RandomId\"                   Type: \"Uint64\"}"
+           "Columns { Name: \"Offset\"                     Type: \"Uint64\"}"
+           "Columns { Name: \"Attributes\"                 Type: \"String\"}"
+           "Columns { Name: \"Data\"                       Type: \"String\"}"
+           "Columns { Name: \"MessageId\"                  Type: \"String\"}"
+           "Columns { Name: \"SenderId\"                   Type: \"String\"}"
+           "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"RandomId\", \"Offset\"]"
+        );
     }
 
     void InitAccessServiceService() {
         // Service Account Service Mock
         grpc::ServerBuilder builder;
         AccessServiceMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        AccessServiceMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
 //        AccessServiceMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+
+        AccessServiceMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        AccessServiceMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
 
         AccessServiceMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         AccessServiceMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
@@ -393,7 +639,7 @@ private:
         AccessServiceServer = builder.BuildAndStart();
     }
 
-    void InitHttpServer() {
+    void InitHttpServer(bool yandexCloudMode) {
         NKikimrConfig::TServerlessProxyConfig config;
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central-1");
@@ -403,6 +649,8 @@ private:
         config.MutableHttpConfig()->SetAccessServiceEndpoint(TStringBuilder() << "127.0.0.1:" << AccessServicePort);
         config.SetTestMode(true);
         config.MutableHttpConfig()->SetPort(HttpServicePort);
+        config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
+        config.MutableHttpConfig()->SetYmqEnabled(true);
 
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
 
@@ -436,6 +684,9 @@ private:
         TActorId actorId = as->Register(CreateAccessServiceActor(config));
         as->RegisterLocalService(MakeAccessServiceID(), actorId);
 
+        actorId = as->Register(CreateAccessServiceActor(config));
+        as->RegisterLocalService(NSQS::MakeSqsAccessServiceID(), actorId);
+
         actorId = as->Register(CreateIamTokenServiceActor(config));
         as->RegisterLocalService(MakeIamTokenServiceID(), actorId);
 
@@ -445,6 +696,29 @@ private:
         actorId = as->Register(CreateMetricsActor(TMetricsSettings{Counters}));
         as->RegisterLocalService(MakeMetricsServiceID(), actorId);
 
+        NKikimrProto::NFolderService::TFolderServiceConfig folderServiceConfig;
+        folderServiceConfig.SetEnable(false);
+        actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
+        as->RegisterLocalService(NFolderService::FolderServiceActorId(), actorId);
+        
+        actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
+        as->RegisterLocalService(NSQS::MakeSqsFolderServiceID(), actorId);
+
+        NActors::TActorSystemSetup::TLocalServices services {};
+        MultiAuthFactory = std::make_unique<NKikimr::NSQS::TMultiAuthFactory>();
+        MultiAuthFactory->Initialize(services, *AppData(as), AppData(as)->SqsConfig);
+        AppData(as)->SqsAuthFactory = MultiAuthFactory.get();
+
+        for (ui32 i = 0; i < ActorRuntime->GetNodeCount(); i++) {
+            auto nodeId = ActorRuntime->GetNodeId(i);
+
+            actorId = as->Register(NSQS::CreateSqsService());
+            as->RegisterLocalService(NSQS::MakeSqsServiceID(nodeId), actorId);
+
+            actorId = as->Register(NSQS::CreateSqsProxyService());
+            as->RegisterLocalService(NSQS::MakeSqsProxyServiceID(nodeId), actorId);
+        }
+
         actorId = as->Register(NHttp::CreateHttpProxy());
         as->RegisterLocalService(MakeHttpServerServiceID(), actorId);
 
@@ -452,6 +726,7 @@ private:
         httpProxyConfig.Config = config;
         httpProxyConfig.CredentialsProvider = credentialsProvider;
         httpProxyConfig.UseSDK = GetEnv("INSIDE_YDB").empty();
+
         actorId = as->Register(NKikimr::NHttpProxy::CreateHttpProxy(httpProxyConfig));
         as->RegisterLocalService(MakeHttpProxyID(), actorId);
 
@@ -473,6 +748,7 @@ public:
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
     std::unique_ptr<grpc::Server> DatabaseServiceServer;
+    std::unique_ptr<NKikimr::NSQS::TMultiAuthFactory> MultiAuthFactory;
     TAutoPtr<TMon> Monitoring;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters = {};
     THolder<NYdbGrpc::TGRpcServer> GRpcServer;
@@ -482,4 +758,11 @@ public:
     ui16 IamTokenServicePort = 0;
     ui16 DatabaseServicePort = 0;
     ui16 MonPort = 0;
+    ui16 KikimrGrpcPort = 0;
+};
+
+class THttpProxyTestMockForSQS : public THttpProxyTestMock {
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(false);
+    }
 };

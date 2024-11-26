@@ -318,6 +318,11 @@ public:
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
                 node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
+                if (node.BecomeUpOnRestart) {
+                    // If a node must become up on restart, it must have been down
+                    // That was not persisted to avoid issues with downgrades
+                    node.Down = true;
+                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -333,9 +338,9 @@ public:
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();
                 }
-                if (node.CanBeDeleted()) {
+                if (Self->TryToDeleteNode(&node)) {
+                    // node is deleted from hashmap
                     db.Table<Schema::Node>().Key(nodeId).Delete();
-                    Self->Nodes.erase(nodeId);
                 } else if (node.IsUnknown() && node.LocationAcquired) {
                     Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
                 }
@@ -683,8 +688,9 @@ public:
 
         size_t numDeletedNodes = 0;
         size_t numDeletedRestrictions = 0;
+        TInstant now = TActivationContext::Now();
         for (auto itNode = Self->Nodes.begin(); itNode != Self->Nodes.end();) {
-            if (itNode->second.CanBeDeleted()) {
+            if (itNode->second.CanBeDeleted(now)) {
                 ++numDeletedNodes;
                 auto restrictionsRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Range(itNode->first).Select();
                 while (!restrictionsRowset.EndOfSet()) {

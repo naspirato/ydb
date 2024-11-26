@@ -494,7 +494,11 @@ public:
             }
         }
 
+<<<<<<< HEAD
         if (ActivateTabletId && !Self->ChangesQueue) { // double check queue
+=======
+        if (ActivateTabletId) {
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
             Self->ChangeSenderActivator.DoSend(ActivateTabletId, ctx);
         }
     }

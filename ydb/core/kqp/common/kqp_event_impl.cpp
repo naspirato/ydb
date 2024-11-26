@@ -49,6 +49,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         if (RequestCtx->GetSerializedToken()) {
             Record.SetUserToken(RequestCtx->GetSerializedToken());
         }
+        Record.MutableRequest()->SetClientAddress(RequestCtx->GetPeerName());
 
         Record.MutableRequest()->SetDatabase(Database);
         ActorIdToProto(RequestActorId, Record.MutableCancelationActor());
@@ -88,6 +89,10 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
 
         if (!PoolId.empty()) {
             Record.MutableRequest()->SetPoolId(PoolId);
+        }
+
+        if (!DatabaseId.empty()) {
+            Record.MutableRequest()->SetDatabaseId(DatabaseId);
         }
 
         Record.MutableRequest()->SetSessionId(SessionId);

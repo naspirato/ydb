@@ -30,10 +30,21 @@ TKikimrRunner GetKikimrRunnerWithStats() {
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
+<<<<<<< HEAD
     setting.SetName("OverrideStatistics");
     setting.SetValue(STATS);
     settings.push_back(setting);
 
+=======
+    setting.SetName("OptOverrideStatistics");
+    setting.SetValue(STATS);
+    settings.push_back(setting);
+
+    setting.SetName("CostBasedOptimizationLevel");
+    setting.SetValue("4");
+    settings.push_back(setting);
+
+>>>>>>> ed811cc157dc8464da65356f6d68ee5bfc65f40e
     TKikimrSettings serverSettings;
     serverSettings.SetKqpSettings(settings);
 
@@ -203,7 +214,7 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto result = ExecQueryAndTestResult(session, query, NoParams, R"([[[1];["Value11"]];[[2];["Value12"]]])");
         
-        AssertTableReads(result, "/Root/FJ_Table_1", 2);
+        AssertTableReads(result, "/Root/FJ_Table_1", 3);
         AssertTableReads(result, "/Root/FJ_Table_2", 2);
         AssertTableReads(result, "/Root/FJ_Table_3", 4);
     }
