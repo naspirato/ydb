@@ -24,6 +24,16 @@ from ydb.tests.tools.nemesis.library import monitor
 from ydb.tests.tools.nemesis.library import catalog
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 
+# Инициализируем систему отслеживания нарушений
+try:
+    from ydb.tests.tools.nemesis.library.active_faults_tracker import get_tracker
+    from ydb.tests.tools.nemesis.library.nemesis_tracker_wrapper import track_nemesis_list
+    TRACKING_ENABLED = True
+    logging.info("Active faults tracking system initialized")
+except ImportError as e:
+    TRACKING_ENABLED = False
+    logging.warning(f"Active faults tracking system not available: {e}")
+
 
 def setup_logging_config(filename=None):
     handler = {'class': 'logging.StreamHandler', 'level': 'DEBUG', 'formatter': 'base'}
@@ -202,6 +212,7 @@ def nemesis_logic(arguments):
             cluster,
             ssh_username=ssh_username,
             enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,
+            enable_fault_tracking=arguments.enable_fault_tracking,
         )
         logger.info("Nemesis factory created successfully")
 
@@ -250,6 +261,8 @@ def main():
     parser.add_argument('--mon-port', default=8666, type=lambda x: int(x))
     parser.add_argument('--mon-host', default='::', type=lambda x: str(x))
     parser.add_argument('--enable-nemesis-list-filter-by-hostname', action='store_true')
+    parser.add_argument('--enable-fault-tracking', action='store_true', default=True, help='Enable active fault tracking (default: True)')
+    parser.add_argument('--disable-fault-tracking', dest='enable_fault_tracking', action='store_false', help='Disable active fault tracking')
     arguments = parser.parse_args()
 
     logger.info("Parsed arguments: %s", arguments)

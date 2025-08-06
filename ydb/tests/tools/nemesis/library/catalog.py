@@ -197,6 +197,52 @@ def nemesis_factory(kikimr_cluster, ssh_username, num_of_pq_nemesis=10, **kwargs
     nemesis_list = basic_kikimr_nemesis_list(kikimr_cluster, ssh_username, num_of_pq_nemesis, **kwargs)
     logger.info("Created nemesis list with %d items", len(nemesis_list))
 
+    # Добавляем отслеживание нарушений, если система доступна и включена
+    enable_tracking = kwargs.get('enable_fault_tracking', True)
+    if enable_tracking:
+        try:
+            from ydb.tests.tools.nemesis.library.nemesis_tracker_wrapper import track_nemesis_list
+            from ydb.tests.tools.nemesis.library.nemesis_tracker_wrapper import (
+                bridge_pile_target_extractor,
+                bridge_pile_description_extractor,
+                datacenter_target_extractor,
+                datacenter_description_extractor,
+                node_target_extractor,
+                node_description_extractor
+            )
+            
+            # Определяем экстракторы в зависимости от типа кластера
+            target_extractor = None
+            description_extractor = None
+            
+            # Проверяем, является ли это bridge кластером
+            if is_bridge_cluster(kikimr_cluster):
+                target_extractor = bridge_pile_target_extractor
+                description_extractor = bridge_pile_description_extractor
+                logger.info("Using bridge pile extractors for tracking")
+            else:
+                # Для обычных кластеров используем универсальные экстракторы
+                target_extractor = node_target_extractor
+                description_extractor = node_description_extractor
+                logger.info("Using node extractors for tracking")
+            
+            # Добавляем отслеживание
+            tracked_nemesis_list = track_nemesis_list(
+                nemesis_list,
+                target_extractor=target_extractor,
+                description_extractor=description_extractor
+            )
+            
+            logger.info("Added tracking to %d nemesis", len(tracked_nemesis_list))
+            nemesis_list = tracked_nemesis_list
+            
+        except ImportError as e:
+            logger.warning(f"Tracking system not available: {e}")
+        except Exception as e:
+            logger.error(f"Failed to add tracking: {e}")
+    else:
+        logger.info("Fault tracking disabled")
+
     nemesis_process = NemesisProcess(nemesis_list)
     logger.info("Created NemesisProcess")
     return nemesis_process
