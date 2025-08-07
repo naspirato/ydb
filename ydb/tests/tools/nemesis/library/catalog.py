@@ -194,11 +194,20 @@ def nemesis_factory(kikimr_cluster, ssh_username, num_of_pq_nemesis=10, **kwargs
     logger.info("Num of PQ nemesis: %d", num_of_pq_nemesis)
     logger.info("Additional kwargs: %s", kwargs)
 
-    nemesis_list = basic_kikimr_nemesis_list(kikimr_cluster, ssh_username, num_of_pq_nemesis, **kwargs)
+    # Извлекаем enable_fault_tracking из kwargs, чтобы не передавать его в basic_kikimr_nemesis_list
+    enable_tracking = kwargs.pop('enable_fault_tracking', True)
+    
+    # Фильтруем kwargs, оставляя только параметры, которые принимает basic_kikimr_nemesis_list
+    filtered_kwargs = {}
+    valid_params = {'network_nemesis', 'enable_nemesis_list_filter_by_hostname'}
+    for key, value in kwargs.items():
+        if key in valid_params:
+            filtered_kwargs[key] = value
+    
+    nemesis_list = basic_kikimr_nemesis_list(kikimr_cluster, ssh_username, num_of_pq_nemesis, **filtered_kwargs)
     logger.info("Created nemesis list with %d items", len(nemesis_list))
 
     # Добавляем отслеживание нарушений, если система доступна и включена
-    enable_tracking = kwargs.get('enable_fault_tracking', True)
     if enable_tracking:
         try:
             from ydb.tests.tools.nemesis.library.nemesis_tracker_wrapper import track_nemesis_list
