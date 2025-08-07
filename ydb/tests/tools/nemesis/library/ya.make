@@ -14,6 +14,7 @@ PY_SRCS(
     monitor.py
     tracked_nemesis.py
     active_faults_tracker.py
+    nemesis_tracker_wrapper.py
 )
 
 PEERDIR(
