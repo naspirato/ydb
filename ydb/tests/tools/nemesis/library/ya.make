@@ -12,6 +12,8 @@ PY_SRCS(
     node.py
     tablet.py
     monitor.py
+    tracked_nemesis.py
+    active_faults_tracker.py
 )
 
 PEERDIR(
