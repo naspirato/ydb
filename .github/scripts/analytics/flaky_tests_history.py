@@ -80,13 +80,45 @@ def main():
     parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument('--build_type', default='relwithdebinfo', type=str, help='build types')
     parser.add_argument('--branch', default='main', type=str, help='branch')
+    parser.add_argument('--debug-test', type=str, help='specific test name to debug (e.g., "ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS1.test_tpcds[1]")')
+    parser.add_argument('--start-date', type=str, help='start date for processing (format: YYYY-MM-DD, e.g., 2024-09-01)')
+    parser.add_argument('--end-date', type=str, help='end date for processing (format: YYYY-MM-DD, e.g., 2024-09-04)')
+    parser.add_argument('--debug-only', action='store_true', help='debug mode: show data but do not insert into database')
 
     args, unknown = parser.parse_known_args()
     history_for_n_day = args.days_window
     build_type = args.build_type
     branch = args.branch
+    debug_test = args.debug_test
+    start_date_str = args.start_date
+    end_date_str = args.end_date
+    debug_only = args.debug_only
 
     print(f'Getting history in window {history_for_n_day} days')
+    if debug_test:
+        print(f'🔍 Debug mode enabled for test: {debug_test}')
+    else:
+        print('ℹ️  No specific test selected for debugging')
+    
+    if debug_only:
+        print('🚫 DEBUG-ONLY MODE: Data will be shown but NOT inserted into database')
+    else:
+        print('💾 NORMAL MODE: Data will be inserted into database')
+    
+    # Process custom date range if provided
+    if start_date_str and end_date_str:
+        try:
+            start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            print(f'📅 Custom date range: {start_date} to {end_date}')
+        except ValueError as e:
+            print(f'❌ Error parsing dates: {e}')
+            print('Please use format YYYY-MM-DD (e.g., 2024-09-01)')
+            return 1
+    else:
+        start_date = None
+        end_date = None
+        print('📅 Using default date range logic')
 
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
@@ -196,9 +228,20 @@ def main():
         print(f'Default start date: {default_start_date}')
         
         # Getting history for dates >= last_date
-        today = datetime.date.today()
-        date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
-        print(f'Will process {len(date_list)} dates: from {min(date_list)} to {max(date_list)}')
+        if start_date and end_date:
+            # Use custom date range
+            print(f'Using custom date range: {start_date} to {end_date}')
+            date_list = []
+            current_date = start_date
+            while current_date <= end_date:
+                date_list.append(current_date)
+                current_date += datetime.timedelta(days=1)
+            print(f'Will process {len(date_list)} dates: from {min(date_list)} to {max(date_list)}')
+        else:
+            # Use default logic
+            today = datetime.date.today()
+            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
+            print(f'Will process {len(date_list)} dates: from {min(date_list)} to {max(date_list)}')
         
         for date in sorted(date_list):
             print(f'\n--- Processing date: {date} ---')
@@ -300,6 +343,30 @@ def main():
             for row in results:
                 row['count'] = dict(zip(list(row['history_list']), [list(
                     row['history_list']).count(i) for i in list(row['history_list'])]))   
+                
+                # Debug logging for specific test
+                target_test = debug_test or 'ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS1.test_tpcds[1]'
+                if debug_test and row['full_name'] == debug_test:
+                    print(f"\n🔍 DEBUG INFO for test: {target_test}")
+                    print(f"  Date: {date}")
+                    print(f"  Suite folder: {row['suite_folder']}")
+                    print(f"  Test name: {row['test_name']}")
+                    print(f"  Full name: {row['full_name']}")
+                    print(f"  Build type: {row['build_type']}")
+                    print(f"  Branch: {row['branch']}")
+                    print(f"  Owners: {row.get('owners', 'N/A')}")
+                    print(f"  First run: {row['first_run']}")
+                    print(f"  Last run: {row['last_run']}")
+                    print(f"  History list: {row['history_list']}")
+                    print(f"  Dist hist: {row['dist_hist']}")
+                    print(f"  Count dict: {row['count']}")
+                    print(f"  Pass count: {row['count'].get('passed', 0)}")
+                    print(f"  Mute count: {row['count'].get('mute', 0)}")
+                    print(f"  Fail count: {row['count'].get('failure', 0)}")
+                    print(f"  Skip count: {row['count'].get('skipped', 0)}")
+                    print(f"  History string: {','.join(row['history_list'])}")
+                    print("=" * 60)
+                
                 prepared_for_update_rows.append({
                     'suite_folder': row['suite_folder'],
                     'test_name': row['test_name'],
@@ -317,22 +384,60 @@ def main():
                     'fail_count': row['count'].get('failure', 0),
                     'skip_count': row['count'].get('skipped', 0),
                 })
-            print(f'Upserting history for date {date}...')
-            with ydb.SessionPool(driver) as pool:
-
-                create_tables(pool, table_path)
-                full_path = posixpath.join(DATABASE_PATH, table_path)
-                print(f'Upserting {len(prepared_for_update_rows)} rows to {full_path}')
-                bulk_upsert(driver.table_client, full_path,
-                            prepared_for_update_rows)
-                print(f'✓ Successfully upserted data for date {date}')
+            # Debug: Show final values for target test before ups            target_test = debug_test or 'ydb/tests/functional/tpc/large/test_tpcds.py.TestTpcdsS1.test_tpcds[1]'
+            for row in prepared_for_update_rows:
+                if debug_test and row['full_name'] == debug_test:
+                    print(f"\n🔍 FINAL VALUES before upsert for test: {target_test}")
+                    print(f"  Date window: {row['date_window']}")
+                    print(f"  Days ago window: {row['days_ago_window']}")
+                    print(f"  Suite folder: {row['suite_folder']}")
+                    print(f"  Test name: {row['test_name']}")
+                    print(f"  Full name: {row['full_name']}")
+                    print(f"  Build type: {row['build_type']}")
+                    print(f"  Branch: {row['branch']}")
+                    print(f"  First run: {row['first_run']}")
+                    print(f"  Last run: {row['last_run']}")
+                    print(f"  History (bytes): {row['history']}")
+                    print(f"  History (decoded): {row['history'].decode('utf8')}")
+                    print(f"  History class: {row['history_class']}")
+                    print(f"  Pass count: {row['pass_count']}")
+                    print(f"  Mute count: {row['mute_count']}")
+                    print(f"  Fail count: {row['fail_count']}")
+                    print(f"  Skip count: {row['skip_count']}")
+                    print("=" * 60)
+            
+            if debug_only:
+                print(f'🚫 DEBUG-ONLY: Skipping database upsert for date {date}')
+                print(f'   Would have upserted {len(prepared_for_update_rows)} rows')
+                if debug_test:
+                    # Show summary for debug test
+                    debug_rows = [row for row in prepared_for_update_rows if row['full_name'] == debug_test]
+                    if debug_rows:
+                        print(f'   Found {len(debug_rows)} rows for debug test: {debug_test}')
+                    else:
+                        print(f'   No rows found for debug test: {debug_test}')
+            else:
+                print(f'Upserting history for date {date}...')
+                with ydb.SessionPool(driver) as pool:
+                    create_tables(pool, table_path)
+                    full_path = posixpath.join(DATABASE_PATH, table_path)
+                    print(f'Upserting {len(prepared_for_update_rows)} rows to {full_path}')
+                    bulk_upsert(driver.table_client, full_path,
+                                prepared_for_update_rows)
+                    print(f'✓ Successfully upserted data for date {date}')
 
         print('\n' + '='*50)
-        print('✓ Flaky tests history collection completed successfully!')
+        if debug_only:
+            print('🔍 DEBUG-ONLY MODE: Data analysis completed successfully!')
+            print('   (No data was inserted into database)')
+        else:
+            print('✓ Flaky tests history collection completed successfully!')
         print(f'  Branch: {branch}')
         print(f'  Build type: {build_type}')
         print(f'  Date range: {min(date_list)} to {max(date_list)}')
         print(f'  Total dates processed: {len(date_list)}')
+        if debug_test:
+            print(f'  Debug test: {debug_test}')
         print('='*50)
 
 
