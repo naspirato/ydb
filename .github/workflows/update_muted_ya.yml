@@ -19,47 +19,25 @@ env:
   BUILD_TYPE: relwithdebinfo # Используем только один тип сборки
 
 jobs:
-  setup:
+  prepare-analytics:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
-      matrix_branches: ${{ steps.set-matrix.outputs.branches }}
+      matrix_branches: ${{ steps.prepare-analytics.outputs.matrix_branches }}
     steps:
-      - id: set-matrix
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "branches=$(echo '${{ github.event.inputs.branches }}' | jq -R -s -c 'split(",")')" >> $GITHUB_OUTPUT
-          else
-            echo "branches=$(echo '["main","stable-25-2","stable-25-2-1","stable-25-3","stable-25-3-1","stream-nb-25-1"]' | jq -c .)" >> $GITHUB_OUTPUT
-          fi
-
-  collect-testowners:
-    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Prepare test analytics
+        id: prepare-analytics
+        uses: ./.github/actions/analytics/prepare_test_analytics
         with:
-          ref: main
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ydb[yc] codeowners pandas
-
-      - name: Setup ydb access
-        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-        with:
-          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-    
-      - name: Collect testowners
-        run: python3 .github/scripts/analytics/upload_testowners.py
+          branches: ${{ github.event.inputs.branches || 'main,stable-25-2,stable-25-2-1,stable-25-3,stable-25-3-1,stream-nb-25-1' }}
+          build_type: ${{ env.BUILD_TYPE }}
 
   update-muted-tests:
-    needs: [setup, collect-testowners]
+    needs: [prepare-analytics]
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     strategy:
       fail-fast: false
       matrix:
-        BASE_BRANCH: ${{ fromJson(needs.setup.outputs.matrix_branches) }}
+        BASE_BRANCH: ${{ fromJson(needs.prepare-analytics.outputs.matrix_branches) }}
     steps:
       - name: Set environment variables
         run: |
@@ -74,20 +52,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install ydb[yc] PyGithub codeowners pandas
-
-      - name: Setup ydb access
-        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-        with:
-          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-    
-      - name: Collect test history data
-        run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
-      
-      - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} 
-      
-      - name: Update test monitor
-        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
       - name: Update branch for PR
         run: |

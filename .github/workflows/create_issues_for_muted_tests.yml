@@ -18,8 +18,21 @@ env:
   MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
 
 jobs:
+  prepare-analytics:
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    outputs:
+      matrix_branches: ${{ steps.prepare-analytics.outputs.matrix_branches }}
+    steps:
+      - name: Prepare test analytics
+        id: prepare-analytics
+        uses: ./.github/actions/analytics/prepare_test_analytics
+        with:
+          branches: 'main'
+          build_type: 'relwithdebinfo'
+
   create-issues-for-muted-tests:
-    runs-on: ubuntu-latest
+    needs: [prepare-analytics]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
         (github.event_name == 'pull_request_review' && 
         github.event.review.state == 'approved' && 
@@ -41,11 +54,6 @@ jobs:
         run: |
             python -m pip install --upgrade pip
             pip install ydb[yc] PyGithub requests matplotlib numpy
-
-      - name: Setup ydb access
-        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-        with:
-            ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Create issues for muted tests
         id: create_issues
