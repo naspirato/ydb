@@ -69,39 +69,70 @@ class DataAccess:
         
         # Convert timestamp field to datetime if it's not already
         timestamp_field = self.config['timestamp_field']
-        if timestamp_field in df.columns:
-            # YDB returns timestamps in microseconds (as int)
-            # Check if the column contains integers (microseconds) or already datetime objects
-            if len(df) > 0:
-                first_value = df[timestamp_field].iloc[0]
-                # Check if it's already a datetime-like type
-                if pd.api.types.is_datetime64_any_dtype(df[timestamp_field]):
-                    # Already datetime, no conversion needed
-                    pass
-                elif isinstance(first_value, (int, float)) and not isinstance(first_value, bool):
-                    # If it's a number, assume it's microseconds from YDB
-                    # YDB Timestamp type is microseconds since epoch
-                    # Check if values are in reasonable range for microseconds (after 2000-01-01)
+        if timestamp_field in df.columns and len(df) > 0:
+            # Check if it's already a datetime-like type
+            if pd.api.types.is_datetime64_any_dtype(df[timestamp_field]):
+                # Already datetime, but check if it's incorrectly converted (1970 year)
+                sample_ts = df[timestamp_field].iloc[0]
+                if isinstance(sample_ts, pd.Timestamp) and sample_ts.year < 2000:
+                    # Timestamps were incorrectly converted to 1970
+                    # This happens when YDB returns microseconds but pandas/YDB driver interprets as nanoseconds
+                    # To fix: use the nanoseconds value as microseconds (they are the same number)
+                    ns_values = df[timestamp_field].astype('int64')
+                    df[timestamp_field] = pd.to_datetime(ns_values, unit='us')
+            elif pd.api.types.is_integer_dtype(df[timestamp_field]) or pd.api.types.is_float_dtype(df[timestamp_field]):
+                # If it's a number, try to determine the unit
+                # YDB Timestamp type is microseconds since epoch
+                sample_values = df[timestamp_field].dropna().head(10)
+                if len(sample_values) > 0:
+                    # Check value ranges to determine unit
+                    min_val = sample_values.min()
+                    max_val = sample_values.max()
+                    
                     # Microseconds for 2000-01-01 = 946684800000000
+                    # Microseconds for 2100-01-01 = 4102444800000000
                     min_reasonable_us = 946684800000000  # 2000-01-01 in microseconds
                     max_reasonable_us = 4102444800000000  # 2100-01-01 in microseconds
-                    sample_values = df[timestamp_field].dropna().head(10)
-                    if len(sample_values) > 0:
-                        avg_value = sample_values.mean()
-                        if min_reasonable_us <= avg_value <= max_reasonable_us:
-                            # Looks like microseconds
-                            df[timestamp_field] = pd.to_datetime(df[timestamp_field], unit='us')
-                        else:
-                            # Might be nanoseconds or something else, try default
-                            df[timestamp_field] = pd.to_datetime(df[timestamp_field])
-                    else:
+                    
+                    # Check if values are in microseconds range
+                    if min_val >= min_reasonable_us and max_val <= max_reasonable_us:
+                        # Definitely microseconds
                         df[timestamp_field] = pd.to_datetime(df[timestamp_field], unit='us')
+                        # Verify conversion was correct
+                        if df[timestamp_field].iloc[0].year < 2000:
+                            # Fix: use nanoseconds value as microseconds
+                            ns_values = df[timestamp_field].astype('int64')
+                            df[timestamp_field] = pd.to_datetime(ns_values, unit='us')
+                    # Check if values are in milliseconds range
+                    elif min_val >= 946684800000 and max_val <= 4102444800000:
+                        df[timestamp_field] = pd.to_datetime(df[timestamp_field], unit='ms')
+                        if df[timestamp_field].iloc[0].year < 2000:
+                            ns_values = df[timestamp_field].astype('int64')
+                            df[timestamp_field] = pd.to_datetime(ns_values, unit='us')
+                    # Check if values are in seconds range
+                    elif min_val >= 946684800 and max_val <= 4102444800:
+                        df[timestamp_field] = pd.to_datetime(df[timestamp_field], unit='s')
+                        if df[timestamp_field].iloc[0].year < 2000:
+                            ns_values = df[timestamp_field].astype('int64')
+                            df[timestamp_field] = pd.to_datetime(ns_values, unit='us')
+                    else:
+                        # Try microseconds first (most common for YDB)
+                        try:
+                            df[timestamp_field] = pd.to_datetime(df[timestamp_field], unit='us')
+                            if df[timestamp_field].iloc[0].year < 2000:
+                                ns_values = df[timestamp_field].astype('int64')
+                                df[timestamp_field] = pd.to_datetime(ns_values, unit='us')
+                        except:
+                            df[timestamp_field] = pd.to_datetime(df[timestamp_field])
                 else:
-                    # String or other type, use default conversion
-                    df[timestamp_field] = pd.to_datetime(df[timestamp_field])
+                    # No data, try microseconds (YDB default)
+                    df[timestamp_field] = pd.to_datetime(df[timestamp_field], unit='us')
             else:
-                # Empty dataframe, just ensure column type
+                # String or other type, use default conversion
                 df[timestamp_field] = pd.to_datetime(df[timestamp_field])
+        elif timestamp_field in df.columns:
+            # Empty dataframe, just ensure column type
+            df[timestamp_field] = pd.to_datetime(df[timestamp_field])
         
         # Sort by timestamp
         df = df.sort_values(by=timestamp_field).reset_index(drop=True)

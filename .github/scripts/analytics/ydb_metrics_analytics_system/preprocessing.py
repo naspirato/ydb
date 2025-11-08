@@ -177,6 +177,15 @@ class Preprocessing:
         # Ensure timestamp is datetime
         if not pd.api.types.is_datetime64_any_dtype(df[self.timestamp_field]):
             df[self.timestamp_field] = pd.to_datetime(df[self.timestamp_field])
+        else:
+            # Check if timestamps are incorrectly converted (1970 year)
+            # This can happen if YDB returns microseconds but they were interpreted as nanoseconds
+            if len(df) > 0:
+                first_ts = df[self.timestamp_field].iloc[0]
+                if isinstance(first_ts, pd.Timestamp) and first_ts.year < 2000:
+                    # Fix: use nanoseconds value as microseconds
+                    ns_values = df[self.timestamp_field].astype('int64')
+                    df[self.timestamp_field] = pd.to_datetime(ns_values, unit='us')
         
         # Round timestamp to specified interval
         df[self.timestamp_field] = df[self.timestamp_field].dt.floor(interval)
@@ -236,6 +245,15 @@ class Preprocessing:
         # Ensure timestamp is datetime
         if not pd.api.types.is_datetime64_any_dtype(df[self.timestamp_field]):
             df[self.timestamp_field] = pd.to_datetime(df[self.timestamp_field])
+        else:
+            # Check if timestamps are incorrectly converted (1970 year)
+            # This can happen if YDB returns microseconds but they were interpreted as nanoseconds
+            if len(df) > 0:
+                first_ts = df[self.timestamp_field].iloc[0]
+                if isinstance(first_ts, pd.Timestamp) and first_ts.year < 2000:
+                    # Fix: use nanoseconds value as microseconds
+                    ns_values = df[self.timestamp_field].astype('int64')
+                    df[self.timestamp_field] = pd.to_datetime(ns_values, unit='us')
         
         # Round timestamp to specified interval
         df[self.timestamp_field] = df[self.timestamp_field].dt.floor(interval)

@@ -17,27 +17,63 @@ data_source:
         tpmC as metric_value,
         'tpmC' as metric_name
       FROM `perfomance/tpcc`
-      WHERE timestamp >= CurrentUtcDate() - 30 * Interval("P1D")
+      WHERE timestamp >= CurrentUtcDate() - 180 * Interval("P1D")
+      
+      UNION ALL
+      
+      SELECT 
+        timestamp,
+        cluster,
+        warehouses,
+        duration_seconds,
+        git_branch,
+        run_type,
+        newOrderLatency90 as metric_value,
+        'newOrderLatency90' as metric_name
+      FROM `perfomance/tpcc`
+      WHERE timestamp >= CurrentUtcDate() - 180 * Interval("P1D")
+        AND newOrderLatency90 IS NOT NULL
 
 context_fields: ["cluster", "warehouses", "git_branch", "run_type", "duration_seconds"]
 metric_fields: ["metric_name", "metric_value"]
 timestamp_field: "timestamp"
 
+# Направление метрик (как интерпретировать изменения)
+# "negative" - больше = хуже (duration_ms, error_rate, latency) - рост = degradation, падение = improvement
+# "positive" - больше = лучше (throughput, success_rate, tpmC) - рост = improvement, падение = degradation
+metric_direction:
+  default: "positive"  # По умолчанию: больше = лучше (для tpmC)
+  # Можно указать для конкретных метрик:
+  tpmC: "positive"
+  newOrderLatency90: "negative"  # Latency - негативная метрика (больше = хуже)
+  # duration_ms: "negative"
+  # error_rate: "negative"
+
 analytics:
   baseline_method: "rolling_mean"    # Options: rolling_mean, zscore, median, prophet, adtk-levelshift
   window_size: 7                     # Number of points for rolling window
   sensitivity: 2.0                   # Multiplier for threshold calculation (sigma)
+  # Параметры детекции по умолчанию
   min_absolute_change: 5              # Minimum absolute change to consider significant
-  min_relative_change: 0.1            # Minimum relative change (0.0-1.0) to consider significant
-  hysteresis_points: 3                # Number of consecutive points required for event
+  min_relative_change: 0.05           # Minimum relative change (5%)
+  # Параметры детекции для конкретных метрик (переопределяют значения по умолчанию)
+  metric_specific_params:
+    tpmC:
+      min_absolute_change: 400        # Для tpmC: изменение 400+ считается значимым (например, 205500 -> 205100)
+      min_relative_change: 0.002      # 0.2% относительное изменение (для значений ~200000 это ~400)
+    newOrderLatency90:
+      min_absolute_change: 5          # Для newOrderLatency90: изменение 5+ мс считается значимым
+      min_relative_change: 0.05       # 5% относительное изменение (для значений ~100мс это ~5мс)
+  hysteresis_points: 2                 # Number of consecutive points required for event (минимум 2 события)
   adaptive_threshold: true            # Use adaptive threshold based on recent volatility
+  min_data_points: 3                  # Minimum data points for analysis
 
 events:
   detect:
     - degradation_start               # Detect when metric drops below lower threshold
     - improvement_start               # Detect when metric rises above upper threshold
-    - threshold_shift                # Detect baseline level shifts
-  min_event_duration_minutes: 30      # Minimum duration for an event to be recorded
+    # - threshold_shift                # Detect baseline level shifts (отключено - создает много ложных срабатываний)
+  min_event_duration_minutes: 15     # Minimum duration for an event to be recorded - снижено с 30 для более быстрой реакции
 
 thresholds:
   keep_history: true                   # Keep historical threshold values

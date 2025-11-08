@@ -21,6 +21,8 @@ from preprocessing import Preprocessing
 from baseline_calculator import BaselineCalculator
 from event_detector import EventDetector
 from persistence import Persistence
+from visualization import EventVisualizer
+from summary_report import SummaryReportGenerator
 
 
 class AnalyticsJob:
@@ -103,6 +105,8 @@ class AnalyticsJob:
             print("\nStep 3: Computing baselines and detecting events...")
             all_thresholds = []
             all_events = []
+            # Store visualization data for groups with events
+            visualization_data = []
             
             processed = 0
             for group_key, group_df in grouped_data.items():
@@ -164,8 +168,16 @@ class AnalyticsJob:
                     if len(events) == 0 and (above_upper > 0 or below_lower > 0):
                         # There are points outside thresholds but no events detected
                         min_duration = self.config.get('events', {}).get('min_event_duration_minutes', 30)
-                        min_abs = self.config.get('analytics', {}).get('min_absolute_change', 0)
-                        min_rel = self.config.get('analytics', {}).get('min_relative_change', 0.0)
+                        # Get metric-specific parameters
+                        metric_specific_params = self.config.get('analytics', {}).get('metric_specific_params', {})
+                        if metric_name in metric_specific_params:
+                            min_abs = metric_specific_params[metric_name].get('min_absolute_change', 
+                                                                              self.config.get('analytics', {}).get('min_absolute_change', 0))
+                            min_rel = metric_specific_params[metric_name].get('min_relative_change',
+                                                                              self.config.get('analytics', {}).get('min_relative_change', 0.0))
+                        else:
+                            min_abs = self.config.get('analytics', {}).get('min_absolute_change', 0)
+                            min_rel = self.config.get('analytics', {}).get('min_relative_change', 0.0)
                         
                         if above_upper > 0:
                             max_value = float(series.max())
@@ -208,6 +220,17 @@ class AnalyticsJob:
                     }
                     all_events.append(event_data)
                 
+                # Store visualization data if there are events
+                if events:
+                    visualization_data.append({
+                        'metric_name': metric_name,
+                        'context_hash': context_hash,
+                        'context_json': context_json,
+                        'series': series,
+                        'baseline_result': baseline_result,
+                        'events': events,
+                    })
+                
                 processed += 1
                 if processed % 10 == 0:
                     print(f"Processed {processed}/{len(grouped_data)} groups...")
@@ -237,7 +260,7 @@ class AnalyticsJob:
                 print(f"Would save {len(all_events)} event records")
                 
                 # Save to local files
-                self._save_dry_run_results(all_events, all_thresholds)
+                self._save_dry_run_results(all_events, all_thresholds, visualization_data)
             
             # Summary
             elapsed = time.time() - self.start_time
@@ -306,13 +329,15 @@ class AnalyticsJob:
         except Exception:
             return "{}"
     
-    def _save_dry_run_results(self, events: List[Dict[str, Any]], thresholds: List[Dict[str, Any]]):
+    def _save_dry_run_results(self, events: List[Dict[str, Any]], thresholds: List[Dict[str, Any]], 
+                              visualization_data: List[Dict[str, Any]] = None):
         """
         Save events and thresholds to local JSON files in dry-run mode
         
         Args:
             events: List of event dictionaries
             thresholds: List of threshold dictionaries
+            visualization_data: List of dicts with series, baseline_result, events for visualization
         """
         # Create output directory if it doesn't exist
         output_dir = os.path.join(os.path.dirname(__file__), 'dry_run_output')
@@ -379,6 +404,24 @@ class AnalyticsJob:
                 print(f"  ✓ Saved thresholds summary to {thresholds_csv}")
             except Exception as e:
                 print(f"  ⚠ Could not save CSV: {e}")
+        
+        # Generate visualizations for groups with events
+        if visualization_data:
+            try:
+                EventVisualizer.generate_visualizations(visualization_data, output_dir, timestamp, job_name)
+            except Exception as e:
+                print(f"  ⚠ Could not generate visualizations: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Generate summary HTML report
+        if events:
+            try:
+                SummaryReportGenerator.generate_summary_html(events, visualization_data, output_dir, timestamp, job_name)
+            except Exception as e:
+                print(f"  ⚠ Could not generate summary HTML: {e}")
+                import traceback
+                traceback.print_exc()
 
 
 def main():

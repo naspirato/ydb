@@ -42,23 +42,35 @@ metric_fields: ["metric_name", "metric_value"]
 # Поле временной метки
 timestamp_field: "ts"
 
+# Направление метрик (как интерпретировать изменения)
+# "negative" - больше = хуже (duration_ms, error_rate, latency) - рост = degradation, падение = improvement
+# "positive" - больше = лучше (throughput, success_rate) - рост = improvement, падение = degradation
+# Можно указать для конкретных метрик или по умолчанию для всех
+metric_direction:
+  default: "negative"  # По умолчанию: больше = хуже
+  # Можно указать для конкретных метрик:
+  # duration_ms: "negative"
+  # error_rate: "negative"
+  # throughput: "positive"
+  # success_rate: "positive"
+
 analytics:
   baseline_method: "rolling_mean"    # варианты: rolling_mean, zscore, median, prophet, adtk-levelshift
-  window_size: 1                      # окно в днях для расчета baseline
+  window_size: 100                   # окно в точках для расчета baseline (было 1 - слишком мало!)
   sensitivity: 2.0                    # множитель sigma для порогов
-  min_absolute_change: 100            # минимальное абсолютное изменение (для duration_ms в мс)
-  min_relative_change: 0.15           # минимальное относительное изменение (15%)
+  min_absolute_change: 50             # минимальное абсолютное изменение (для duration_ms в мс) - снижено со 100
+  min_relative_change: 0.10           # минимальное относительное изменение (10%) - снижено с 15%
   hysteresis_points: 3                # количество точек для гистерезиса
   adaptive_threshold: true            # включить адаптивную чувствительность
-  min_data_points: 3                   # минимальное количество точек для анализа (по умолчанию 3)
+  min_data_points: 10                 # минимальное количество точек для анализа (увеличено для более стабильного baseline)
 
 events:
   detect:
     - degradation_start                # ухудшение производительности
     - improvement_start               # улучшение производительности
-    - threshold_shift                 # сдвиг baseline
+    # - threshold_shift                 # сдвиг baseline (отключено - создает много ложных срабатываний)
   output_table: "analytics/query_statistics_events"
-  min_event_duration_minutes: 60      # минимальная длительность события (1 час)
+  min_event_duration_minutes: 30      # минимальная длительность события (30 минут) - снижено с 60
 
 thresholds:
   output_table: "analytics/query_statistics_thresholds"

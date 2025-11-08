@@ -37,9 +37,13 @@ class EventDetector:
         self.min_event_duration = timedelta(
             minutes=self.events_config.get('min_event_duration_minutes', 30)
         )
-        self.min_absolute_change = self.analytics_config.get('min_absolute_change', 0)
-        self.min_relative_change = self.analytics_config.get('min_relative_change', 0.0)
+        # Get default parameters
+        self.min_absolute_change_default = self.analytics_config.get('min_absolute_change', 0)
+        self.min_relative_change_default = self.analytics_config.get('min_relative_change', 0.0)
         self.hysteresis_points = self.analytics_config.get('hysteresis_points', 3)
+        
+        # Get metric-specific parameters
+        self.metric_specific_params = self.analytics_config.get('metric_specific_params', {})
         
         # Metric direction: how to interpret metric changes
         # "negative" - больше = хуже (duration_ms, error_rate) - рост = degradation, падение = improvement
@@ -47,6 +51,20 @@ class EventDetector:
         metric_direction_config = config.get('metric_direction', {})
         self.metric_direction_default = metric_direction_config.get('default', 'negative')
         self.metric_direction_map = {k: v for k, v in metric_direction_config.items() if k != 'default'}
+    
+    def _get_metric_params(self, metric_name: str) -> tuple:
+        """
+        Get detection parameters for specific metric
+        
+        Returns:
+            (min_absolute_change, min_relative_change) tuple
+        """
+        if metric_name and metric_name in self.metric_specific_params:
+            params = self.metric_specific_params[metric_name]
+            min_abs = params.get('min_absolute_change', self.min_absolute_change_default)
+            min_rel = params.get('min_relative_change', self.min_relative_change_default)
+            return (min_abs, min_rel)
+        return (self.min_absolute_change_default, self.min_relative_change_default)
     
     def _get_metric_direction(self, metric_name: str) -> str:
         """Get metric direction (negative or positive)"""
@@ -67,8 +85,9 @@ class EventDetector:
         if series.empty or len(series) < 2:
             return []
         
-        # Get metric direction
+        # Get metric direction and parameters
         metric_direction = self._get_metric_direction(metric_name) if metric_name else self.metric_direction_default
+        min_abs_change, min_rel_change = self._get_metric_params(metric_name)
         
         events = []
         
@@ -78,19 +97,19 @@ class EventDetector:
         if 'degradation_start' in self.detect_types:
             if metric_direction == 'negative':
                 # Negative metric: above upper threshold = degradation
-                degradation_events = self._detect_degradation_above_threshold(series, baseline_result)
+                degradation_events = self._detect_degradation_above_threshold(series, baseline_result, min_abs_change, min_rel_change)
             else:
                 # Positive metric: below lower threshold = degradation
-                degradation_events = self._detect_degradation_below_threshold(series, baseline_result)
+                degradation_events = self._detect_degradation_below_threshold(series, baseline_result, min_abs_change, min_rel_change)
             events.extend(degradation_events)
         
         if 'improvement_start' in self.detect_types:
             if metric_direction == 'negative':
                 # Negative metric: below lower threshold = improvement
-                improvement_events = self._detect_improvement_below_threshold(series, baseline_result)
+                improvement_events = self._detect_improvement_below_threshold(series, baseline_result, min_abs_change, min_rel_change)
             else:
                 # Positive metric: above upper threshold = improvement
-                improvement_events = self._detect_improvement_above_threshold(series, baseline_result)
+                improvement_events = self._detect_improvement_above_threshold(series, baseline_result, min_abs_change, min_rel_change)
             events.extend(improvement_events)
         
         if 'threshold_shift' in self.detect_types:
@@ -102,8 +121,13 @@ class EventDetector:
         
         return filtered_events
     
-    def _detect_degradation_below_threshold(self, series: pd.Series, baseline_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _detect_degradation_below_threshold(self, series: pd.Series, baseline_result: Dict[str, Any], 
+                                           min_abs_change: float = None, min_rel_change: float = None) -> List[Dict[str, Any]]:
         """Detect degradation events (values below lower threshold) - for positive metrics"""
+        if min_abs_change is None:
+            min_abs_change = self.min_absolute_change_default
+        if min_rel_change is None:
+            min_rel_change = self.min_relative_change_default
         events = []
         
         lower_threshold = baseline_result.get('lower_threshold')
@@ -140,8 +164,8 @@ class EventDetector:
             change_relative = abs(change_absolute / baseline_at_start) if baseline_at_start != 0 else 0
             
             # Check significance
-            if (abs(change_absolute) >= self.min_absolute_change and 
-                change_relative >= self.min_relative_change):
+            if (abs(change_absolute) >= min_abs_change and 
+                change_relative >= min_rel_change):
                 
                 event = {
                     'event_type': 'degradation_start',
@@ -160,8 +184,13 @@ class EventDetector:
         
         return events
     
-    def _detect_degradation_above_threshold(self, series: pd.Series, baseline_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _detect_degradation_above_threshold(self, series: pd.Series, baseline_result: Dict[str, Any],
+                                           min_abs_change: float = None, min_rel_change: float = None) -> List[Dict[str, Any]]:
         """Detect degradation events (values above upper threshold) - for negative metrics"""
+        if min_abs_change is None:
+            min_abs_change = self.min_absolute_change_default
+        if min_rel_change is None:
+            min_rel_change = self.min_relative_change_default
         events = []
         
         upper_threshold = baseline_result.get('upper_threshold')
@@ -198,8 +227,8 @@ class EventDetector:
             change_relative = abs(change_absolute / baseline_at_start) if baseline_at_start != 0 else 0
             
             # Check significance
-            if (abs(change_absolute) >= self.min_absolute_change and 
-                change_relative >= self.min_relative_change):
+            if (abs(change_absolute) >= min_abs_change and 
+                change_relative >= min_rel_change):
                 
                 event = {
                     'event_type': 'degradation_start',
@@ -218,8 +247,13 @@ class EventDetector:
         
         return events
     
-    def _detect_improvement_below_threshold(self, series: pd.Series, baseline_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _detect_improvement_below_threshold(self, series: pd.Series, baseline_result: Dict[str, Any],
+                                           min_abs_change: float = None, min_rel_change: float = None) -> List[Dict[str, Any]]:
         """Detect improvement events (values below lower threshold) - for negative metrics"""
+        if min_abs_change is None:
+            min_abs_change = self.min_absolute_change_default
+        if min_rel_change is None:
+            min_rel_change = self.min_relative_change_default
         events = []
         
         lower_threshold = baseline_result.get('lower_threshold')
@@ -256,8 +290,8 @@ class EventDetector:
             change_relative = abs(change_absolute / baseline_at_start) if baseline_at_start != 0 else 0
             
             # Check significance
-            if (abs(change_absolute) >= self.min_absolute_change and 
-                change_relative >= self.min_relative_change):
+            if (abs(change_absolute) >= min_abs_change and 
+                change_relative >= min_rel_change):
                 
                 event = {
                     'event_type': 'improvement_start',
@@ -276,8 +310,13 @@ class EventDetector:
         
         return events
     
-    def _detect_improvement_above_threshold(self, series: pd.Series, baseline_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _detect_improvement_above_threshold(self, series: pd.Series, baseline_result: Dict[str, Any],
+                                           min_abs_change: float = None, min_rel_change: float = None) -> List[Dict[str, Any]]:
         """Detect improvement events (values above upper threshold) - for positive metrics"""
+        if min_abs_change is None:
+            min_abs_change = self.min_absolute_change_default
+        if min_rel_change is None:
+            min_rel_change = self.min_relative_change_default
         events = []
         
         upper_threshold = baseline_result.get('upper_threshold')
@@ -314,8 +353,8 @@ class EventDetector:
             change_relative = abs(change_absolute / baseline_at_start) if baseline_at_start != 0 else 0
             
             # Check significance
-            if (abs(change_absolute) >= self.min_absolute_change and 
-                change_relative >= self.min_relative_change):
+            if (abs(change_absolute) >= min_abs_change and 
+                change_relative >= min_rel_change):
                 
                 event = {
                     'event_type': 'improvement_start',
@@ -457,20 +496,34 @@ class EventDetector:
         """
         Find continuous segments where condition is True.
         Also handles sparse data by grouping nearby points (within reasonable time gap).
+        Supports very sparse data (measurements every few days).
         """
         segments = []
         in_segment = False
         segment_start = None
         
         # Maximum gap between points to consider them part of the same segment
-        # For irregular data, we allow gaps up to 2x the median interval
+        # For irregular data, we allow gaps up to 3x the median interval
+        # For very sparse data (every few days), we use a more generous gap
         if len(condition) > 1 and isinstance(condition.index, pd.DatetimeIndex):
             time_diffs = condition.index.to_series().diff().dropna()
             if len(time_diffs) > 0:
                 median_interval = time_diffs.median()
-                max_gap = median_interval * 3  # Allow 3x median interval as max gap
+                # For very sparse data (>= 2 days), use 3x median or 7 days, whichever is larger
+                # For moderately sparse data (hours to 2 days), use 5x median or 1 day
+                # This ensures we can handle measurements every few days
+                if median_interval >= timedelta(days=2):
+                    # Very sparse: measurements every few days
+                    max_gap_candidate = median_interval * 3
+                    max_gap_default = timedelta(days=7)
+                    max_gap = max(max_gap_candidate, max_gap_default)
+                else:
+                    # Moderately sparse: measurements every few hours to daily
+                    max_gap_candidate = median_interval * 5
+                    max_gap_default = timedelta(days=1)
+                    max_gap = max(max_gap_candidate, max_gap_default)
             else:
-                max_gap = timedelta(hours=1)  # Default: 1 hour
+                max_gap = timedelta(days=7)  # Default: 7 days for very sparse data
         else:
             max_gap = None
         
@@ -498,6 +551,61 @@ class EventDetector:
         
         return segments
     
+    def _get_data_frequency(self, series: pd.Series) -> Dict[str, Any]:
+        """
+        Determine data frequency characteristics
+        
+        Returns:
+            Dict with 'median_interval', 'typical_interval', 'is_sparse', 'is_dense', 'is_very_sparse'
+        """
+        if len(series) < 2:
+            return {
+                'median_interval': timedelta(hours=1),
+                'typical_interval': timedelta(hours=1),
+                'is_sparse': True,
+                'is_dense': False,
+                'is_very_sparse': False
+            }
+        
+        if not isinstance(series.index, pd.DatetimeIndex):
+            return {
+                'median_interval': timedelta(hours=1),
+                'typical_interval': timedelta(hours=1),
+                'is_sparse': True,
+                'is_dense': False,
+                'is_very_sparse': False
+            }
+        
+        time_diffs = series.index.to_series().diff().dropna()
+        if len(time_diffs) == 0:
+            return {
+                'median_interval': timedelta(hours=1),
+                'typical_interval': timedelta(hours=1),
+                'is_sparse': True,
+                'is_dense': False,
+                'is_very_sparse': False
+            }
+        
+        median_interval = time_diffs.median()
+        # Use median as typical interval (more robust than mean for irregular data)
+        typical_interval = median_interval
+        
+        # Classify data density
+        # Dense: measurements more frequent than every 10 minutes
+        # Sparse: measurements less frequent than every hour
+        # Very sparse: measurements every 2+ days (e.g., weekly reports, monthly reports)
+        is_dense = median_interval <= timedelta(minutes=10)
+        is_sparse = median_interval >= timedelta(hours=1)
+        is_very_sparse = median_interval >= timedelta(days=2)
+        
+        return {
+            'median_interval': median_interval,
+            'typical_interval': typical_interval,
+            'is_sparse': is_sparse,
+            'is_dense': is_dense,
+            'is_very_sparse': is_very_sparse
+        }
+    
     def _filter_events(self, events: List[Dict[str, Any]], series: pd.Series) -> List[Dict[str, Any]]:
         """
         Filter events by duration and apply hysteresis.
@@ -505,6 +613,13 @@ class EventDetector:
         """
         if not events:
             return []
+        
+        # Determine data frequency once for all events
+        frequency_info = self._get_data_frequency(series)
+        typical_interval = frequency_info['typical_interval']
+        is_sparse = frequency_info['is_sparse']
+        is_dense = frequency_info['is_dense']
+        is_very_sparse = frequency_info['is_very_sparse']
         
         filtered = []
         
@@ -531,6 +646,84 @@ class EventDetector:
             except:
                 num_points = 0
             
+            # Check if this is a single-point outlier (spike)
+            # Use data frequency to determine what constitutes an outlier
+            is_single_outlier = False
+            
+            if num_points == 1:
+                # Single point: check if duration is too short relative to data frequency
+                # For dense data (every minute): outlier if < 5-10 minutes
+                # For sparse data (daily): outlier if < 1-2 days
+                # For very sparse data (every few days): outlier if < 3-7 days
+                if is_very_sparse:
+                    min_duration_for_single_point = max(
+                        typical_interval * 2,  # At least 2 typical intervals for very sparse
+                        timedelta(days=3)  # Minimum 3 days for very sparse data
+                    )
+                elif is_dense:
+                    min_duration_for_single_point = max(
+                        typical_interval * 3,
+                        timedelta(minutes=5)
+                    )
+                else:
+                    min_duration_for_single_point = max(
+                        typical_interval * 3,
+                        timedelta(hours=1)
+                    )
+                
+                if duration < min_duration_for_single_point:
+                    is_single_outlier = True
+            elif num_points == 2:
+                # Two points: check if they're too close and duration is too short
+                try:
+                    event_points = series.loc[start_time:end_time]
+                    if len(event_points) == 2:
+                        time_diff = event_points.index[1] - event_points.index[0]
+                        # If two points are very close (< 2x typical interval) and duration is short, likely outlier
+                        if is_very_sparse:
+                            min_duration_for_two_points = max(
+                                typical_interval * 3,  # At least 3 typical intervals for very sparse
+                                timedelta(days=5)  # Minimum 5 days for very sparse data
+                            )
+                            # For very sparse data, points can be days apart - that's normal
+                            if time_diff < typical_interval * 1.5 and duration < min_duration_for_two_points:
+                                is_single_outlier = True
+                        elif is_dense:
+                            min_duration_for_two_points = max(
+                                typical_interval * 5,
+                                timedelta(minutes=10)
+                            )
+                            if time_diff < typical_interval * 2 and duration < min_duration_for_two_points:
+                                is_single_outlier = True
+                        else:
+                            min_duration_for_two_points = max(
+                                typical_interval * 5,
+                                timedelta(hours=2)
+                            )
+                            if time_diff < typical_interval * 2 and duration < min_duration_for_two_points:
+                                is_single_outlier = True
+                    elif len(event_points) < 2:
+                        # Less than 2 points found, treat as single point
+                        if is_very_sparse:
+                            min_duration_for_single_point = max(
+                                typical_interval * 2,
+                                timedelta(days=3)
+                            )
+                        elif is_dense:
+                            min_duration_for_single_point = max(
+                                typical_interval * 3,
+                                timedelta(minutes=5)
+                            )
+                        else:
+                            min_duration_for_single_point = max(
+                                typical_interval * 3,
+                                timedelta(hours=1)
+                            )
+                        if duration < min_duration_for_single_point:
+                            is_single_outlier = True
+                except:
+                    pass
+            
             # For sparse/irregular data: if we have many points, relax duration requirement
             # If we have enough points (>= hysteresis_points * 2), we accept shorter durations
             min_duration = self.min_event_duration
@@ -538,15 +731,31 @@ class EventDetector:
                 # For events with many points, reduce duration requirement by 50%
                 min_duration = self.min_event_duration * 0.5
             
+            # Also relax duration for very significant changes (>= 20% relative change)
+            # BUT: only if we have enough points and it's not a single outlier
+            event_change_relative = abs(event.get('change_relative', 0))
+            if event_change_relative >= 0.20 and not is_single_outlier and num_points >= self.hysteresis_points * 2:
+                # Significant changes should be detected even if duration is short
+                # But only if we have enough points (not a single outlier)
+                min_duration = min_duration * 0.5  # Reduce to 50% (was 30%, too aggressive)
+            
             if duration < min_duration:
                 # Still check if we have enough points to compensate
-                if num_points < self.hysteresis_points * 3:
+                # For very significant changes, accept even with fewer points, but not for single outliers
+                required_points = self.hysteresis_points * 3
+                if event_change_relative >= 0.20 and not is_single_outlier:
+                    # Very significant changes need at least 2x hysteresis_points (not just 1x)
+                    required_points = self.hysteresis_points * 2
+                if num_points < required_points:
                     continue
             
             # Apply hysteresis: require multiple consecutive points
-            if self.hysteresis_points > 1:
-                if num_points < self.hysteresis_points:
-                    continue
+            # For single outliers, require at least 2 points even if hysteresis_points = 1
+            min_points_required = self.hysteresis_points
+            if is_single_outlier:
+                min_points_required = max(2, self.hysteresis_points)  # At least 2 points for outliers
+            if num_points < min_points_required:
+                continue
             
             filtered.append(event)
         
