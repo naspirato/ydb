@@ -8,7 +8,7 @@ import json
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -28,16 +28,19 @@ from summary_report import SummaryReportGenerator
 class AnalyticsJob:
     """Main orchestrator for analytics pipeline"""
     
-    def __init__(self, config_path: str, dry_run: bool = False):
+    def __init__(self, config_path: str, dry_run: bool = False, event_deepness: Optional[str] = None):
         """
         Initialize analytics job
         
         Args:
             config_path: Path to YAML configuration file
             dry_run: If True, don't write to YDB
+            event_deepness: Optional time window for event analysis (e.g., "7d", "30d", "1h", "2w")
+                          Only events within this window will be analyzed
         """
         self.config_path = config_path
         self.dry_run = dry_run
+        self.event_deepness = event_deepness
         
         # Load configuration
         try:
@@ -80,26 +83,71 @@ class AnalyticsJob:
         try:
             # Step 1: Load data
             print("Step 1: Loading measurements from YDB...")
-            df = self.data_access.load_measurements()
             
-            if df.empty:
+            # Always load ALL data for baseline calculation (stable baseline on historical data)
+            df_all = self.data_access.load_measurements(start_ts=None, end_ts=None)
+            
+            # Calculate time window for event analysis if event_deepness is specified
+            event_start_ts = None
+            event_end_ts = None
+            if self.event_deepness:
+                event_end_ts = datetime.now()
+                event_start_ts = self._parse_event_deepness(self.event_deepness, event_end_ts)
+                print(f"  Analyzing events in window: {event_start_ts.strftime('%Y-%m-%d %H:%M:%S')} to {event_end_ts.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"  Baseline computed on all available data (for stability)")
+            
+            if df_all.empty:
                 print("Warning: No data loaded from YDB")
                 return
             
-            summary = self.data_access.get_data_summary(df)
-            print(f"Loaded {summary['total_rows']} rows")
+            summary = self.data_access.get_data_summary(df_all)
+            print(f"Loaded {summary['total_rows']} rows for baseline calculation")
             print(f"Metrics: {', '.join(summary['metrics'])}")
             print(f"Context combinations: {summary['context_combinations']}")
             
             # Check runtime
             self._check_runtime()
             
-            # Step 2: Preprocess and group data
+            # Step 2: Preprocess and group data (on ALL data for baseline)
             print("\nStep 2: Preprocessing and grouping data...")
-            df_cleaned = self.preprocessing.clean_data(df, remove_outliers=True)
+            df_cleaned = self.preprocessing.clean_data(df_all, remove_outliers=True)
             grouped_data = self.preprocessing.group_by_context(df_cleaned)
             
             print(f"Grouped into {len(grouped_data)} metric×context combinations")
+            
+            # For error detection: detect appearance/disappearance of error types
+            # Compare contexts before and after event_deepness window
+            new_error_contexts = set()
+            disappeared_error_contexts = set()
+            if self.event_deepness and event_start_ts and event_end_ts:
+                timestamp_field = self.config.get('timestamp_field')
+                if timestamp_field:
+                    # Get contexts before event window (historical)
+                    df_before = df_cleaned[df_cleaned[timestamp_field] < event_start_ts]
+                    contexts_before = set()
+                    if not df_before.empty:
+                        grouped_before = self.preprocessing.group_by_context(df_before)
+                        contexts_before = set(grouped_before.keys())
+                    
+                    # Get contexts in event window
+                    df_in_window = df_cleaned[
+                        (df_cleaned[timestamp_field] >= event_start_ts) & 
+                        (df_cleaned[timestamp_field] <= event_end_ts)
+                    ]
+                    contexts_in_window = set()
+                    if not df_in_window.empty:
+                        grouped_in_window = self.preprocessing.group_by_context(df_in_window)
+                        contexts_in_window = set(grouped_in_window.keys())
+                    
+                    # Detect new error types (appeared in window but not before)
+                    new_error_contexts = contexts_in_window - contexts_before
+                    # Detect disappeared error types (were before but not in window)
+                    disappeared_error_contexts = contexts_before - contexts_in_window
+                    
+                    if new_error_contexts:
+                        print(f"  ⚠ Detected {len(new_error_contexts)} new error types (appeared in event window)")
+                    if disappeared_error_contexts:
+                        print(f"  ✓ Detected {len(disappeared_error_contexts)} disappeared error types (gone in event window)")
             
             # Step 3: Process each group
             print("\nStep 3: Computing baselines and detecting events...")
@@ -115,9 +163,7 @@ class AnalyticsJob:
                 
                 # Validate group has enough data
                 min_points = self.config.get('analytics', {}).get('min_data_points', 3)
-                if not self.preprocessing.validate_group_data(group_df, min_points=min_points):
-                    print(f"Skipping group {group_key}: insufficient data (need at least {min_points} points, got {len(group_df)})")
-                    continue
+                has_enough_data = self.preprocessing.validate_group_data(group_df, min_points=min_points)
                 
                 # Extract metric name and context
                 metric_name = group_key[0]
@@ -125,14 +171,88 @@ class AnalyticsJob:
                 context_hash = self.preprocessing.compute_context_hash(context_values)
                 context_json = self._context_to_json(context_values)
                 
-                # Prepare time series
-                series = self.preprocessing.prepare_time_series(group_df)
+                # Check if this is a new error type (appeared in event window)
+                is_new_error = group_key in new_error_contexts
+                is_disappeared_error = group_key in disappeared_error_contexts
                 
-                if series.empty:
+                if not has_enough_data:
+                    # For error detection: if it's a new error type, create event even without baseline
+                    if is_new_error and metric_name == 'error_count':
+                        # Create "new error appeared" event
+                        timestamp_field = self.config.get('timestamp_field')
+                        if timestamp_field in group_df.columns:
+                            first_error_time = group_df[timestamp_field].min()
+                            error_count = len(group_df)
+                            
+                            event_data = {
+                                'timestamp': first_error_time,
+                                'metric_name': metric_name,
+                                'context_hash': context_hash,
+                                'context_json': context_json,
+                                'event_type': 'degradation_start',  # New error = degradation
+                                'event_start_time': first_error_time,
+                                'event_end_time': first_error_time,
+                                'severity': 'high',
+                                'baseline_before': 0.0,  # No baseline (new error)
+                                'baseline_after': 0.0,
+                                'threshold_before': None,
+                                'threshold_after': None,
+                                'change_absolute': float(error_count),
+                                'change_relative': float('inf') if error_count > 0 else 0.0,  # Infinite relative change (0 -> N)
+                                'current_value': float(error_count),
+                            }
+                            all_events.append(event_data)
+                            print(f"  ⚠ New error type detected: {context_json[:80]}... ({error_count} errors)")
+                        continue
+                    else:
+                        print(f"Skipping group {group_key}: insufficient data (need at least {min_points} points, got {len(group_df)})")
+                        continue
+                
+                # Prepare time series from ALL data (for stable baseline)
+                series_all = self.preprocessing.prepare_time_series(group_df)
+                
+                if series_all.empty:
                     continue
                 
-                # Compute baseline and thresholds
-                baseline_result = self.baseline_calculator.compute_baseline_and_thresholds(series)
+                # Compute baseline and thresholds on ALL data
+                baseline_result = self.baseline_calculator.compute_baseline_and_thresholds(series_all)
+                
+                # Filter series for event detection if event_deepness is specified
+                series_for_events = series_all
+                if self.event_deepness and event_start_ts and event_end_ts:
+                    timestamp_field = self.config.get('timestamp_field')
+                    if timestamp_field:
+                        # Filter series to event window
+                        mask = (series_all.index >= event_start_ts) & (series_all.index <= event_end_ts)
+                        series_for_events = series_all[mask]
+                        if len(series_for_events) == 0:
+                            # No data in event window - check if error disappeared
+                            if is_disappeared_error and metric_name == 'error_count':
+                                # Get last error time before window
+                                df_before_window = group_df[group_df[timestamp_field] < event_start_ts]
+                                if not df_before_window.empty:
+                                    last_error_time = df_before_window[timestamp_field].max()
+                                    
+                                    event_data = {
+                                        'timestamp': event_start_ts,
+                                        'metric_name': metric_name,
+                                        'context_hash': context_hash,
+                                        'context_json': context_json,
+                                        'event_type': 'improvement_start',  # Error disappeared = improvement
+                                        'event_start_time': event_start_ts,
+                                        'event_end_time': event_end_ts,
+                                        'severity': 'medium',
+                                        'baseline_before': float(series_all.iloc[-1]) if not series_all.empty else 0.0,
+                                        'baseline_after': 0.0,
+                                        'threshold_before': baseline_result.get('lower_threshold'),
+                                        'threshold_after': None,
+                                        'change_absolute': -float(series_all.iloc[-1]) if not series_all.empty else 0.0,
+                                        'change_relative': 1.0 if not series_all.empty and series_all.iloc[-1] > 0 else 0.0,  # 100% decrease
+                                        'current_value': 0.0,
+                                    }
+                                    all_events.append(event_data)
+                                    print(f"  ✓ Error type disappeared: {context_json[:80]}... (last seen: {last_error_time})")
+                            continue
                 
                 # Prepare threshold data for saving
                 threshold_data = {
@@ -150,19 +270,49 @@ class AnalyticsJob:
                 }
                 all_thresholds.append(threshold_data)
                 
-                # Detect events (pass metric_name for direction detection)
-                events = self.event_detector.detect_events(series, baseline_result, metric_name=metric_name)
+                # Detect events only in the filtered window (pass metric_name for direction detection)
+                events = self.event_detector.detect_events(series_for_events, baseline_result, metric_name=metric_name)
+                
+                # For new error types: if no events detected but it's a new error, create event anyway
+                # This ensures we always detect appearance of new error types
+                if is_new_error and metric_name == 'error_count' and len(events) == 0:
+                    # New error type appeared but no event detected by normal logic
+                    # Create event to mark appearance of new error type
+                    if not series_for_events.empty:
+                        first_error_time = series_for_events.index[0]
+                        # For aggregated data, sum all values; for raw data, use first value
+                        error_count = float(series_for_events.sum())
+                        
+                        event_data = {
+                            'timestamp': first_error_time,
+                            'metric_name': metric_name,
+                            'context_hash': context_hash,
+                            'context_json': context_json,
+                            'event_type': 'degradation_start',  # New error = degradation
+                            'event_start_time': first_error_time,
+                            'event_end_time': series_for_events.index[-1] if len(series_for_events) > 1 else first_error_time,
+                            'severity': 'high',
+                            'baseline_before': 0.0,  # No baseline before (new error)
+                            'baseline_after': float(baseline_result.get('baseline_value', 0.0)),
+                            'threshold_before': None,
+                            'threshold_after': baseline_result.get('upper_threshold'),
+                            'change_absolute': error_count,
+                            'change_relative': float('inf') if error_count > 0 else 0.0,  # Infinite relative change (0 -> N)
+                            'current_value': error_count,
+                        }
+                        events.append(event_data)
+                        print(f"  ⚠ New error type detected (with baseline): {context_json[:80]}... ({error_count} errors)")
                 
                 # Debug logging for event detection
                 if self.config.get('output', {}).get('log_to_console', False):
                     baseline_val = baseline_result.get('baseline_value')
                     upper = baseline_result.get('upper_threshold')
                     lower = baseline_result.get('lower_threshold')
-                    latest_value = float(series.iloc[-1]) if not series.empty else None
+                    latest_value = float(series_for_events.iloc[-1]) if not series_for_events.empty else None
                     
-                    # Count points outside thresholds
-                    above_upper = (series > upper).sum() if upper is not None else 0
-                    below_lower = (series < lower).sum() if lower is not None else 0
+                    # Count points outside thresholds (in event window)
+                    above_upper = (series_for_events > upper).sum() if upper is not None else 0
+                    below_lower = (series_for_events < lower).sum() if lower is not None else 0
                     
                     # Check why events might not be detected
                     if len(events) == 0 and (above_upper > 0 or below_lower > 0):
@@ -180,7 +330,7 @@ class AnalyticsJob:
                             min_rel = self.config.get('analytics', {}).get('min_relative_change', 0.0)
                         
                         if above_upper > 0:
-                            max_value = float(series.max())
+                            max_value = float(series_for_events.max())
                             change_abs = max_value - baseline_val if baseline_val else 0
                             change_rel = abs(change_abs / baseline_val) if baseline_val != 0 else 0
                             print(f"  ⚠ Group {metric_name}/{context_json[:50]}...: "
@@ -190,7 +340,7 @@ class AnalyticsJob:
                                   f"duration filter: {min_duration}min)")
                         
                         if below_lower > 0:
-                            min_value = float(series.min())
+                            min_value = float(series_for_events.min())
                             change_abs = min_value - baseline_val if baseline_val else 0
                             change_rel = abs(change_abs / baseline_val) if baseline_val != 0 else 0
                             print(f"  ⚠ Group {metric_name}/{context_json[:50]}...: "
@@ -221,14 +371,15 @@ class AnalyticsJob:
                     all_events.append(event_data)
                 
                 # Store visualization data if there are events
+                # Use series_all for visualization to show full context, but events are only in the window
                 if events:
                     visualization_data.append({
                         'metric_name': metric_name,
                         'context_hash': context_hash,
                         'context_json': context_json,
-                        'series': series,
+                        'series': series_all,  # Show full series for context
                         'baseline_result': baseline_result,
-                        'events': events,
+                        'events': events,  # Events are only in the filtered window
                     })
                 
                 processed += 1
@@ -285,6 +436,48 @@ class AnalyticsJob:
             raise RuntimeError(
                 f"Job exceeded maximum runtime of {self.max_runtime_minutes} minutes"
             )
+    
+    def _parse_event_deepness(self, deepness_str: str, reference_time: datetime) -> datetime:
+        """
+        Parse event deepness string (e.g., "7d", "30d", "1h", "2w") and calculate start timestamp
+        
+        Args:
+            deepness_str: String like "7d", "30d", "1h", "2w", "1m"
+            reference_time: Reference time (usually now) to subtract from
+            
+        Returns:
+            Start timestamp (reference_time - deepness)
+        """
+        import re
+        
+        # Parse pattern: number + unit (d=days, h=hours, w=weeks, m=minutes)
+        pattern = r'^(\d+)([dhwms])$'
+        match = re.match(pattern, deepness_str.lower())
+        
+        if not match:
+            raise ValueError(
+                f"Invalid event_deepness format: {deepness_str}. "
+                f"Expected format: number + unit (e.g., '7d', '30d', '1h', '2w', '30m'). "
+                f"Units: d=days, h=hours, w=weeks, m=minutes, s=seconds"
+            )
+        
+        value = int(match.group(1))
+        unit = match.group(2)
+        
+        if unit == 'd':
+            delta = timedelta(days=value)
+        elif unit == 'h':
+            delta = timedelta(hours=value)
+        elif unit == 'w':
+            delta = timedelta(weeks=value)
+        elif unit == 'm':
+            delta = timedelta(minutes=value)
+        elif unit == 's':
+            delta = timedelta(seconds=value)
+        else:
+            raise ValueError(f"Unknown unit: {unit}. Use d, h, w, m, or s")
+        
+        return reference_time - delta
     
     def _convert_to_native_type(self, value: Any) -> Any:
         """
@@ -437,10 +630,19 @@ def main():
         action='store_true',
         help='Run without writing to YDB'
     )
+    parser.add_argument(
+        '--event-deepness',
+        type=str,
+        default=None,
+        help='Time window for event analysis (e.g., "7d", "30d", "1h", "2w"). '
+             'Only events within this window will be analyzed. '
+             'Units: d=days, h=hours, w=weeks, m=minutes, s=seconds. '
+             'If not specified, analyzes all available data.'
+    )
     
     args = parser.parse_args()
     
-    job = AnalyticsJob(args.config, dry_run=args.dry_run)
+    job = AnalyticsJob(args.config, dry_run=args.dry_run, event_deepness=args.event_deepness)
     job.run()
 
 

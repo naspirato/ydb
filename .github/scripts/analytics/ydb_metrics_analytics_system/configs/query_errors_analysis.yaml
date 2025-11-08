@@ -38,7 +38,7 @@ data_source:
         AND operation_type IN ('scan_query')
 
 # Контекстные поля для группировки
-context_fields: ["operation_type", "script_name", "query_name"]
+context_fields: ["operation_type", "script_name"]
 
 # Поля метрик
 metric_fields: ["metric_name", "metric_value"]
@@ -48,7 +48,7 @@ timestamp_field: "ts"
 
 analytics:
   baseline_method: "rolling_mean"
-  window_size: 7                      # окно в днях
+  window_size: 1                      # окно в днях
   sensitivity: 2.5                    # более высокая чувствительность для ошибок
   min_absolute_change: 1               # любое увеличение количества ошибок важно
   min_relative_change: 0.5             # 50% изменение

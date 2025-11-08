@@ -249,37 +249,36 @@ class EventDetector:
     
     def _detect_improvement_below_threshold(self, series: pd.Series, baseline_result: Dict[str, Any],
                                            min_abs_change: float = None, min_rel_change: float = None) -> List[Dict[str, Any]]:
-        """Detect improvement events (values below lower threshold) - for negative metrics"""
+        """Detect improvement events (values significantly below baseline/norm) - for negative metrics"""
         if min_abs_change is None:
             min_abs_change = self.min_absolute_change_default
         if min_rel_change is None:
             min_rel_change = self.min_relative_change_default
         events = []
         
-        lower_threshold = baseline_result.get('lower_threshold')
-        if lower_threshold is None:
-            return events
-        
         baseline_series = baseline_result.get('baseline_series', pd.Series())
         if baseline_series.empty:
             return events
         
-        # Find points below threshold
-        below_threshold = series < lower_threshold
+        # For improvement: detect values significantly below baseline (norm)
+        # This catches improvements relative to normal performance, not just below lower_threshold
+        # Align baseline with series index
+        baseline_values = baseline_series.reindex(series.index, method='nearest')
         
-        # Debug: check how many points are below threshold
-        num_below = below_threshold.sum()
+        # Calculate improvement threshold: baseline - min_absolute_change
+        # OR baseline * (1 - min_relative_change) - whichever is more restrictive
+        improvement_threshold_abs = baseline_values - min_abs_change
+        improvement_threshold_rel = baseline_values * (1 - min_rel_change)
+        # Use the more restrictive (lower) threshold
+        improvement_threshold = pd.concat([improvement_threshold_abs, improvement_threshold_rel], axis=1).min(axis=1)
+        
+        # Find points significantly below baseline (improvement)
+        below_baseline_improvement = series < improvement_threshold
         
         # Find continuous segments
-        segments = self._find_continuous_segments(below_threshold)
-        
-        # Debug: if we have points below threshold but no segments, log it
-        if num_below > 0 and len(segments) == 0:
-            # Points are too scattered - this is expected for very sparse data
-            pass
+        segments = self._find_continuous_segments(below_baseline_improvement)
         
         for segment_start, segment_end in segments:
-            # Check if segment is significant
             segment_values = series.iloc[segment_start:segment_end+1]
             baseline_at_start = baseline_series.iloc[segment_start] if segment_start < len(baseline_series) else None
             
@@ -289,8 +288,9 @@ class EventDetector:
             change_absolute = float(segment_values.mean() - baseline_at_start)
             change_relative = abs(change_absolute / baseline_at_start) if baseline_at_start != 0 else 0
             
-            # Check significance
-            if (abs(change_absolute) >= min_abs_change and 
+            # Check significance (change must be negative for improvement in negative metrics)
+            if (change_absolute < 0 and  # Must be improvement (lower value)
+                abs(change_absolute) >= min_abs_change and 
                 change_relative >= min_rel_change):
                 
                 event = {
@@ -300,8 +300,8 @@ class EventDetector:
                     'severity': self._calculate_severity(change_absolute, change_relative, 'improvement'),
                     'baseline_before': float(baseline_at_start),
                     'baseline_after': float(baseline_series.iloc[min(segment_end, len(baseline_series)-1)]),
-                    'threshold_before': float(lower_threshold),
-                    'threshold_after': float(lower_threshold),
+                    'threshold_before': float(baseline_result.get('lower_threshold')) if baseline_result.get('lower_threshold') is not None else None,
+                    'threshold_after': float(baseline_result.get('lower_threshold')) if baseline_result.get('lower_threshold') is not None else None,
                     'change_absolute': change_absolute,
                     'change_relative': change_relative,
                     'current_value': float(segment_values.mean()),
