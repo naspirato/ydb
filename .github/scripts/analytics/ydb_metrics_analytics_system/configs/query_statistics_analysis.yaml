@@ -1,0 +1,75 @@
+# Конфигурация аналитики для статистики запросов YDB
+# Анализирует производительность операций из таблицы query_statistics
+# ВАЖНО: Этот конфиг анализирует только успешные запросы (status = 'success')
+# Для анализа ошибок используйте:
+#   - query_errors_analysis.yaml - количество ошибок
+#   - query_error_rate_analysis.yaml - процент ошибок
+
+job:
+  name: "query_statistics_analysis"
+  description: "Анализ производительности запросов YDB (duration_ms, rows_affected)"
+
+data_source:
+  # Опциональная агрегация по интервалам (None = без агрегации, анализируем каждое измерение)
+  # Если указать, например "1h" или "1D", значения будут усредняться по интервалам
+  # Для производительности обычно агрегация не нужна - анализируем каждое измерение отдельно
+  # aggregate_by: "1h"  # Раскомментируйте, если нужна агрегация по часам
+  ydb:
+    # Простой запрос - загружаем все успешные запросы без агрегации
+    # Анализируем каждое измерение отдельно для более точного обнаружения аномалий
+    query: |
+      SELECT
+        timestamp as ts,
+        operation_type,
+        script_name,
+        query_name,
+        cluster_version,
+        duration_ms as metric_value,
+        'duration_ms' as metric_name
+      FROM `analytics/query_statistics`
+      WHERE timestamp >= CurrentUtcTimestamp() - 30 * Interval("P1D")
+        AND status = 'success'
+        AND operation_type IN ('scan_query', 'bulk_upsert', 'dml_query')
+      
+
+# Контекстные поля для группировки метрик
+# Группируем по типу операции, скрипту и запросу
+context_fields: ["operation_type", "script_name", "query_name"]
+
+# Поля метрик: имя метрики и значение
+metric_fields: ["metric_name", "metric_value"]
+
+# Поле временной метки
+timestamp_field: "ts"
+
+analytics:
+  baseline_method: "rolling_mean"    # варианты: rolling_mean, zscore, median, prophet, adtk-levelshift
+  window_size: 1                      # окно в днях для расчета baseline
+  sensitivity: 2.0                    # множитель sigma для порогов
+  min_absolute_change: 100            # минимальное абсолютное изменение (для duration_ms в мс)
+  min_relative_change: 0.15           # минимальное относительное изменение (15%)
+  hysteresis_points: 3                # количество точек для гистерезиса
+  adaptive_threshold: true            # включить адаптивную чувствительность
+  min_data_points: 3                   # минимальное количество точек для анализа (по умолчанию 3)
+
+events:
+  detect:
+    - degradation_start                # ухудшение производительности
+    - improvement_start               # улучшение производительности
+    - threshold_shift                 # сдвиг baseline
+  output_table: "analytics/query_statistics_events"
+  min_event_duration_minutes: 60      # минимальная длительность события (1 час)
+
+thresholds:
+  output_table: "analytics/query_statistics_thresholds"
+  keep_history: true                  # сохранять историю порогов
+
+output:
+  write_to_ydb: true
+  log_to_console: true
+  dry_run: false
+
+runtime:
+  timezone: "UTC"
+  max_runtime_minutes: 30             # увеличенное время для больших объемов данных
+

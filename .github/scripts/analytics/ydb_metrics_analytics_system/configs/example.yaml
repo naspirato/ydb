@@ -1,0 +1,53 @@
+# Example configuration for TPC-C performance metrics analysis
+
+job:
+  name: "tpcc_performance_analysis"
+  description: "Анализ метрик TPC-C производительности"
+
+data_source:
+  ydb:
+    query: |
+      SELECT 
+        timestamp,
+        cluster,
+        warehouses,
+        duration_seconds,
+        git_branch,
+        run_type,
+        tpmC as metric_value,
+        'tpmC' as metric_name
+      FROM `perfomance/tpcc`
+      WHERE timestamp >= CurrentUtcDate() - 30 * Interval("P1D")
+
+context_fields: ["cluster", "warehouses", "git_branch", "run_type", "duration_seconds"]
+metric_fields: ["metric_name", "metric_value"]
+timestamp_field: "timestamp"
+
+analytics:
+  baseline_method: "rolling_mean"    # Options: rolling_mean, zscore, median, prophet, adtk-levelshift
+  window_size: 7                     # Number of points for rolling window
+  sensitivity: 2.0                   # Multiplier for threshold calculation (sigma)
+  min_absolute_change: 5              # Minimum absolute change to consider significant
+  min_relative_change: 0.1            # Minimum relative change (0.0-1.0) to consider significant
+  hysteresis_points: 3                # Number of consecutive points required for event
+  adaptive_threshold: true            # Use adaptive threshold based on recent volatility
+
+events:
+  detect:
+    - degradation_start               # Detect when metric drops below lower threshold
+    - improvement_start               # Detect when metric rises above upper threshold
+    - threshold_shift                # Detect baseline level shifts
+  min_event_duration_minutes: 30      # Minimum duration for an event to be recorded
+
+thresholds:
+  keep_history: true                   # Keep historical threshold values
+
+output:
+  write_to_ydb: true                   # Write results to YDB
+  log_to_console: true                 # Log to console
+  dry_run: false                       # If true, don't write to YDB (for testing)
+
+runtime:
+  timezone: "UTC"                      # Timezone for timestamps
+  max_runtime_minutes: 15              # Maximum runtime before timeout
+

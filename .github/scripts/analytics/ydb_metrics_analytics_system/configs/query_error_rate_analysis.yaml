@@ -1,0 +1,65 @@
+# Конфигурация аналитики для анализа процента ошибок запросов YDB
+# Отслеживает долю ошибок от общего числа запросов (error_rate)
+
+job:
+  name: "query_error_rate_analysis"
+  description: "Анализ процента ошибок выполнения запросов YDB"
+
+data_source:
+  aggregate_by: "1h"  # Автоматическая агрегация по часам в Python (1h = 1 час, можно указать: 15min, 30S, 1D и т.д.)
+  compute_error_rate: true  # Вычислять процент ошибок (error_rate) вместо количества
+  ydb:
+    # Простой запрос - загружаем все записи (успешные и ошибки) без агрегации
+    # Агрегация по часам и вычисление error_rate будут выполнены автоматически
+    query: |
+      SELECT
+        timestamp as ts,
+        operation_type,
+        script_name,
+        query_name,
+        cluster_version,
+        status,
+        1 as metric_value,
+        'error_rate' as metric_name
+      FROM `analytics/query_statistics`
+      WHERE timestamp >= CurrentUtcTimestamp() - 30 * Interval("P1D")
+        AND operation_type IN ('scan_query', 'bulk_upsert', 'dml_query')
+
+# Контекстные поля для группировки
+context_fields: ["operation_type", "script_name", "query_name", "cluster_version"]
+
+# Поля метрик
+metric_fields: ["metric_name", "metric_value"]
+
+# Поле временной метки
+timestamp_field: "ts"
+
+analytics:
+  baseline_method: "rolling_mean"
+  window_size: 7
+  sensitivity: 2.0
+  min_absolute_change: 1.0              # минимальное изменение 1 процентный пункт
+  min_relative_change: 0.3              # 30% изменение
+  hysteresis_points: 3
+  adaptive_threshold: true
+
+events:
+  detect:
+    - degradation_start                # увеличение процента ошибок
+    - improvement_start                  # уменьшение процента ошибок
+  output_table: "analytics/query_error_rate_events"
+  min_event_duration_minutes: 60       # минимальная длительность 1 час
+
+thresholds:
+  output_table: "analytics/query_error_rate_thresholds"
+  keep_history: true
+
+output:
+  write_to_ydb: true
+  log_to_console: true
+  dry_run: false
+
+runtime:
+  timezone: "UTC"
+  max_runtime_minutes: 25
+

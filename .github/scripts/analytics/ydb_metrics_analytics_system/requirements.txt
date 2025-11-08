@@ -1,0 +1,26 @@
+# Core dependencies (required)
+pandas>=1.5.0
+numpy>=1.20.0
+pyyaml>=6.0
+scipy>=1.9.0
+statsmodels>=0.13.0
+
+# Date/time utilities
+python-dateutil>=2.8.0
+
+# Advanced analytics (recommended for full version)
+# Note: Requires Python < 3.14 (numba dependency)
+adtk>=0.6.0
+pyod>=1.0.0
+prophet>=1.1.0
+plotly>=5.0.0  # Required by prophet for interactive plots (optional but recommended)
+
+# YDB SDK (should be installed separately, but listed for reference)
+# ydb>=2.0.0
+# ydb[yc]>=2.0.0
+
+# Note: Python version requirements:
+# - prophet requires numba which supports Python >=3.10,<3.14
+# - Recommended: Python 3.11 or 3.12
+# - Advanced methods (prophet, adtk-levelshift) will fall back to simpler methods if unavailable
+

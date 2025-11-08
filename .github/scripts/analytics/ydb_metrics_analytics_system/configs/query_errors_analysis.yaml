@@ -1,0 +1,78 @@
+# Конфигурация аналитики для анализа ошибок запросов YDB
+# Отслеживает появление ошибок и их частоту
+#
+# ЭТОТ КОНФИГ ЛУЧШЕ ВСЕГО ПОДХОДИТ ДЛЯ ОБНАРУЖЕНИЯ:
+# - Появления новых ошибок (degradation_start) - когда количество ошибок увеличивается
+# - Исчезновения ошибок (improvement_start) - когда количество ошибок уменьшается
+#
+# Особенности:
+# - Быстрое реагирование: min_event_duration_minutes: 30 (30 минут)
+# - Высокая чувствительность: реагирует на любое увеличение (min_absolute_change: 1)
+# - Анализирует абсолютное количество ошибок (по умолчанию агрегация по дням для малого объема данных)
+#
+# Альтернатива: query_error_rate_analysis.yaml - показывает процент ошибок,
+#               лучше для оценки качества сервиса при изменении нагрузки
+
+job:
+  name: "query_errors_analysis"
+  description: "Анализ ошибок выполнения запросов YDB - обнаружение появления и исчезновения ошибок"
+
+data_source:
+  # Для малого объема данных (неделя) лучше агрегировать по дням, а не по часам
+  # Если данных станет больше, можно вернуть "1h" для более детального анализа
+  aggregate_by: "1D"  # Автоматическая агрегация по дням в Python (1D = 1 день, можно указать: 1h, 15min, 30S и т.д.)
+  ydb:
+    # Простой запрос - загружаем все ошибки без агрегации
+    # Агрегация будет выполнена автоматически на основе aggregate_by: "1D"
+    query: |
+      SELECT
+        timestamp as ts,
+        operation_type,
+        script_name,
+        query_name,
+        1 as metric_value,
+        'error_count' as metric_name
+      FROM `analytics/query_statistics`
+      WHERE timestamp >= CurrentUtcTimestamp() - 30 * Interval("P1D")
+        AND status = 'error'
+        AND operation_type IN ('scan_query')
+
+# Контекстные поля для группировки
+context_fields: ["operation_type", "script_name", "query_name"]
+
+# Поля метрик
+metric_fields: ["metric_name", "metric_value"]
+
+# Поле временной метки
+timestamp_field: "ts"
+
+analytics:
+  baseline_method: "rolling_mean"
+  window_size: 7                      # окно в днях
+  sensitivity: 2.5                    # более высокая чувствительность для ошибок
+  min_absolute_change: 1               # любое увеличение количества ошибок важно
+  min_relative_change: 0.5             # 50% изменение
+  hysteresis_points: 2                 # меньше точек гистерезиса для быстрого реагирования
+  adaptive_threshold: true
+  min_data_points: 2                   # минимальное количество точек для анализа (по умолчанию 3, уменьшено для малого объема данных)
+
+events:
+  detect:
+    - degradation_start                # увеличение количества ошибок
+    - improvement_start                  # уменьшение количества ошибок
+  output_table: "analytics/query_errors_events"
+  min_event_duration_minutes: 30      # минимальная длительность 30 минут
+
+thresholds:
+  output_table: "analytics/query_errors_thresholds"
+  keep_history: true
+
+output:
+  write_to_ydb: true
+  log_to_console: true
+  dry_run: false
+
+runtime:
+  timezone: "UTC"
+  max_runtime_minutes: 20
+

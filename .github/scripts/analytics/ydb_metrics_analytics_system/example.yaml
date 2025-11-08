@@ -1,0 +1,55 @@
+# Конфигурация аналитики для тестов производительности
+
+job:
+  name: "read_latency_analysis"
+  description: "Анализ латентности и tmpc для бенчмарков чтения"
+
+data_source:
+  ydb:
+    endpoint: "grpcs://ydb.serverless.yandexcloud.net:2135"
+    database: "/ru-central1/b1xxx/etnxxx"
+    query: |
+      SELECT
+        ts,
+        cluster,
+        table_type,
+        benchmark,
+        query,
+        metric_name,
+        value
+      FROM measurements
+      WHERE ts >= DATETIME("2025-11-01T00:00:00Z")
+
+context_fields: ["cluster", "table_type", "benchmark", "query"]
+metric_fields: ["metric_name", "value"]
+timestamp_field: "ts"
+
+analytics:
+  baseline_method: "rolling_mean"    # варианты: rolling_mean, zscore, prophet, adtk-levelshift
+  window_size: 7
+  sensitivity: 2.0                   # множитель sigma
+  min_absolute_change: 5
+  min_relative_change: 0.1
+  hysteresis_points: 3
+  adaptive_threshold: true           # включить адаптивную чувствительность
+
+events:
+  detect:
+    - degradation_start
+    - improvement_start
+    - threshold_shift
+  output_table: "analytics_events"
+  min_event_duration_minutes: 30
+
+thresholds:
+  output_table: "analytics_thresholds"
+  keep_history: true
+
+output:
+  write_to_ydb: true
+  log_to_console: true
+  dry_run: false
+
+runtime:
+  timezone: "UTC"
+  max_runtime_minutes: 15

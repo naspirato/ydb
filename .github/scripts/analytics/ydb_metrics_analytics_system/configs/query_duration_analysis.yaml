@@ -1,0 +1,68 @@
+# Конфигурация аналитики для анализа длительности запросов YDB
+# Упрощенная версия - анализирует только duration_ms
+# ВАЖНО: Этот конфиг анализирует только успешные запросы (status = 'success')
+# Для анализа ошибок используйте:
+#   - query_errors_analysis.yaml - количество ошибок
+#   - query_error_rate_analysis.yaml - процент ошибок
+
+job:
+  name: "query_duration_analysis"
+  description: "Анализ длительности выполнения запросов YDB"
+
+data_source:
+  ydb:
+    # Фильтруем только успешные запросы для анализа производительности
+    query: |
+      SELECT
+        timestamp as ts,
+        operation_type,
+        script_name,
+        query_name,
+        cluster_version,
+        duration_ms as metric_value,
+        'duration_ms' as metric_name
+      FROM `analytics/query_statistics`
+      WHERE timestamp >= CurrentUtcTimestamp() - 30 * Interval("P1D")
+        AND status = 'success'
+        AND duration_ms IS NOT NULL
+        AND duration_ms > 0
+
+# Контекстные поля для группировки
+# Группируем по типу операции и скрипту (без query_name для более широкой группировки)
+context_fields: ["operation_type", "script_name", "cluster_version"]
+
+# Поля метрик
+metric_fields: ["metric_name", "metric_value"]
+
+# Поле временной метки
+timestamp_field: "ts"
+
+analytics:
+  baseline_method: "rolling_mean"
+  window_size: 7
+  sensitivity: 2.5                    # более высокая чувствительность для duration
+  min_absolute_change: 50              # минимальное изменение 50мс
+  min_relative_change: 0.2            # 20% изменение
+  hysteresis_points: 3
+  adaptive_threshold: true
+
+events:
+  detect:
+    - degradation_start
+    - improvement_start
+  output_table: "analytics/query_duration_events"
+  min_event_duration_minutes: 30
+
+thresholds:
+  output_table: "analytics/query_duration_thresholds"
+  keep_history: true
+
+output:
+  write_to_ydb: true
+  log_to_console: true
+  dry_run: false
+
+runtime:
+  timezone: "UTC"
+  max_runtime_minutes: 20
+
