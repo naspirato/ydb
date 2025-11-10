@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MASS - Metric Analytic Super System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 30px 10px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 20px;
+            margin-bottom: 4px;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+        
+        .header p {
+            opacity: 0.85;
+            font-size: 11px;
+            margin-bottom: 0;
+            line-height: 1.3;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            min-height: calc(100vh - 110px);
+        }
+        
+        .form-section {
+            padding: 30px;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            max-height: calc(100vh - 110px);
+        }
+        
+        .preview-section {
+            padding: 30px;
+            background: #f8f9fa;
+            overflow-y: auto;
+            max-height: calc(100vh - 110px);
+        }
+        
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .label-help {
+            font-size: 12px;
+            color: #888;
+            font-weight: normal;
+            margin-top: 4px;
+        }
+        
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        input[type="checkbox"] {
+            width: auto;
+        }
+        
+        .array-input {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .array-input input {
+            flex: 1;
+        }
+        
+        .btn-remove {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn-remove:hover {
+            background: #d32f2f;
+        }
+        
+        .btn-add {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        
+        .btn-add:hover {
+            background: #45a049;
+        }
+        
+        .btn-generate {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+        
+        .btn-generate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .preview {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            max-height: calc(100vh - 300px);
+            overflow-y: auto;
+        }
+        
+        .btn-copy {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 15px;
+            width: 100%;
+        }
+        
+        .btn-copy:hover {
+            background: #1976D2;
+        }
+        
+        .collapsible {
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .collapsible::before {
+            content: '▼ ';
+            display: inline-block;
+            transition: transform 0.3s;
+        }
+        
+        .collapsible.collapsed::before {
+            transform: rotate(-90deg);
+        }
+        
+        .collapsible-content {
+            margin-top: 15px;
+        }
+        
+        .collapsible-content.collapsed {
+            display: none;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .metric-direction-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .metric-param-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            background: #f9f9f9;
+        }
+        
+        .metric-param-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .metric-param-name {
+            font-weight: 600;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 MASS <span style="font-size: 14px; font-weight: 400;">(Metric Analytic Super System)</span></h1>
+            <p>Конструктор конфигураций и запуск аналитики метрик</p>
+            
+            <!-- Mode Switcher -->
+            <div style="margin-top: 6px; display: flex; gap: 8px; justify-content: center; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: rgba(255,255,255,0.2); padding: 5px 12px; border-radius: 5px; font-size: 13px;">
+                    <input type="radio" name="mode" value="generate" checked onchange="switchMode(this.value)" style="width: auto;">
+                    <span>🆕 Генерация нового конфига</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; background: rgba(255,255,255,0.2); padding: 5px 12px; border-radius: 5px; font-size: 13px;">
+                    <input type="radio" name="mode" value="edit" onchange="switchMode(this.value)" style="width: auto;">
+                    <span>✏️ Редактирование существующего</span>
+                </label>
+            </div>
+            
+            <!-- File Loader (only in edit mode) -->
+            <div id="fileLoader" style="display: none; margin-top: 6px;">
+                <label style="display: inline-block; background: rgba(255,255,255,0.9); color: #333; padding: 6px 15px; border-radius: 5px; cursor: pointer; font-weight: 500; font-size: 13px;">
+                    📁 Загрузить YAML файл
+                    <input type="file" id="yamlFileInput" accept=".yaml,.yml" style="display: none;" onchange="loadYamlFile(event)">
+                </label>
+                <span id="fileName" style="margin-left: 12px; color: rgba(255,255,255,0.9); font-size: 13px;"></span>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="form-section">
+                <form id="configForm">
+                    <!-- Basic Info -->
+                    <div class="section-title">📋 Основная информация</div>
+                    <div class="form-group">
+                        <label>Имя задачи (job.name) <span class="label-help">Уникальное имя для идентификации задачи</span></label>
+                        <input type="text" id="jobName" value="my_analysis" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Описание задачи (job.description)</label>
+                        <textarea id="jobDescription" placeholder="Описание того, что делает эта задача аналитики"></textarea>
+                    </div>
+                    
+                    <!-- Data Source -->
+                    <div class="section-title collapsible" onclick="toggleCollapse(this)">📊 Источник данных</div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label>SQL-запрос (data_source.ydb.query) <span class="label-help">Запрос для получения данных из YDB</span></label>
+                            <textarea id="ydbQuery" rows="8" placeholder='SELECT timestamp as ts, cluster, metric_value, &quot;metric_name&quot; FROM table WHERE ...' required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Агрегация по времени (data_source.aggregate_by) <span class="label-help">Опционально: 1h, 15min, 1D и т.д.</span></label>
+                            <input type="text" id="aggregateBy" placeholder="1h">
+                        </div>
+                    </div>
+                    
+                    <!-- Data Structure -->
+                    <div class="section-title collapsible" onclick="toggleCollapse(this)">🔗 Структура данных</div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label>Поля контекста (context_fields) <span class="label-help">Поля для группировки данных</span></label>
+                            <div id="contextFields">
+                                <div class="array-input">
+                                    <input type="text" placeholder="cluster" value="cluster">
+                                    <button type="button" class="btn-remove" onclick="removeArrayItem(this)">×</button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-add" onclick="addArrayItem('contextFields')">+ Добавить поле</button>
+                        </div>
+                        <div class="form-group">
+                            <label>Поля метрик (metric_fields) <span class="label-help">Обычно: ["metric_name", "metric_value"]</span></label>
+                            <div id="metricFields">
+                                <div class="array-input">
+                                    <input type="text" value="metric_name" readonly>
+                                    <button type="button" class="btn-remove" onclick="removeArrayItem(this)" disabled>×</button>
+                                </div>
+                                <div class="array-input">
+                                    <input type="text" value="metric_value" readonly>
+                                    <button type="button" class="btn-remove" onclick="removeArrayItem(this)" disabled>×</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Поле временной метки (timestamp_field)</label>
+                            <input type="text" id="timestampField" value="ts" required>
+                        </div>
+                    </div>
+                    
+                    <!-- Analytics -->
+                    <div class="section-title collapsible" onclick="toggleCollapse(this)">📈 Настройки аналитики</div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label>Метод baseline (analytics.baseline_method)</label>
+                            <select id="baselineMethod">
+                                <option value="rolling_mean" selected>rolling_mean - скользящее среднее</option>
+                                <option value="rolling_median">rolling_median - скользящая медиана</option>
+                                <option value="zscore">zscore - статистический метод</option>
+                                <option value="prophet">prophet - Facebook Prophet</option>
+                                <option value="adtk-levelshift">adtk-levelshift - ADTK</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Размер окна (analytics.window_size) <span class="label-help">Количество точек для расчета baseline</span></label>
+                            <input type="number" id="windowSize" value="7" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Чувствительность (analytics.sensitivity) <span class="label-help">Множитель стандартного отклонения</span></label>
+                            <input type="number" id="sensitivity" value="2.0" step="0.1" min="0.1" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Минимальное абсолютное изменение (analytics.min_absolute_change)</label>
+                            <input type="number" id="minAbsoluteChange" value="5" min="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Минимальное относительное изменение (analytics.min_relative_change) <span class="label-help">От 0.0 до 1.0 (например, 0.05 = 5%)</span></label>
+                            <input type="number" id="minRelativeChange" value="0.05" step="0.01" min="0" max="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Точки гистерезиса (analytics.hysteresis_points) <span class="label-help">Количество точек подряд для подтверждения события</span></label>
+                            <input type="number" id="hysteresisPoints" value="2" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="adaptiveThreshold" checked>
+                                Адаптивные пороги (analytics.adaptive_threshold)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Минимальное количество точек (analytics.min_data_points)</label>
+                            <input type="number" id="minDataPoints" value="3" min="1" required>
+                        </div>
+                    </div>
+                    
+                    <!-- Metric Direction -->
+                    <div class="section-title collapsible" onclick="toggleCollapse(this)">↕️ Направление метрик</div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label>Направление по умолчанию (metric_direction.default)</label>
+                            <select id="metricDirectionDefault">
+                                <option value="negative">negative - больше = хуже (latency, errors)</option>
+                                <option value="positive" selected>positive - больше = лучше (throughput, success)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Направление для конкретных метрик</label>
+                            <div id="metricDirections"></div>
+                            <button type="button" class="btn-add" onclick="addMetricDirection()">+ Добавить метрику</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Context Tracking -->
+                    <div class="section-title collapsible collapsed" onclick="toggleCollapse(this)">🔍 Отслеживание контекстов (опционально)</div>
+                    <div class="collapsible-content collapsed">
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="trackNewContexts">
+                                Отслеживать новые контексты (context_tracking.track_new_contexts)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="trackDisappearedContexts">
+                                Отслеживать исчезнувшие контексты (context_tracking.track_disappeared_contexts)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Метрика для отслеживания новых контекстов</label>
+                            <input type="text" id="newContextMetric" placeholder="error_count">
+                        </div>
+                        <div class="form-group">
+                            <label>Тип события для новых контекстов</label>
+                            <select id="newContextEventType">
+                                <option value="degradation_start">degradation_start - негативное событие</option>
+                                <option value="improvement_start">improvement_start - позитивное событие</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Метрика для отслеживания исчезнувших контекстов</label>
+                            <input type="text" id="disappearedContextMetric" placeholder="error_count">
+                        </div>
+                        <div class="form-group">
+                            <label>Минимальное количество точек отсутствия (min_absence_points)</label>
+                            <input type="number" id="minAbsencePoints" value="3" min="1">
+                        </div>
+                    </div>
+                    
+                    <!-- Events -->
+                    <div class="section-title collapsible" onclick="toggleCollapse(this)">⚡ Обнаружение событий</div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label>Типы событий для обнаружения (events.detect)</label>
+                            <div class="checkbox-group" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+                                <label class="checkbox-group">
+                                    <input type="checkbox" id="detectDegradation" checked>
+                                    degradation_start - начало деградации
+                                </label>
+                                <label class="checkbox-group">
+                                    <input type="checkbox" id="detectImprovement" checked>
+                                    improvement_start - начало улучшения
+                                </label>
+                                <label class="checkbox-group">
+                                    <input type="checkbox" id="detectThresholdShift">
+                                    threshold_shift - сдвиг baseline
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Таблица для событий (events.output_table) <span class="label-help">Опционально</span></label>
+                            <input type="text" id="eventsOutputTable" placeholder="analytics/events">
+                        </div>
+                        <div class="form-group">
+                            <label>Минимальная длительность события в минутах (events.min_event_duration_minutes)</label>
+                            <input type="number" id="minEventDuration" value="30" min="0" required>
+                        </div>
+                    </div>
+                    
+                    <!-- Output -->
+                    <div class="section-title collapsible" onclick="toggleCollapse(this)">💾 Вывод результатов</div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label>Таблица для порогов (thresholds.output_table) <span class="label-help">Опционально</span></label>
+                            <input type="text" id="thresholdsOutputTable" placeholder="analytics/thresholds">
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="keepHistory" checked>
+                                Сохранять историю порогов (thresholds.keep_history)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="writeToYdb" checked>
+                                Сохранять в YDB (output.write_to_ydb)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="logToConsole" checked>
+                                Логировать в консоль (output.log_to_console)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="dryRun">
+                                Режим dry-run (output.dry_run)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Runtime -->
+                    <div class="section-title collapsible collapsed" onclick="toggleCollapse(this)">⏱️ Настройки выполнения</div>
+                    <div class="collapsible-content collapsed">
+                        <div class="form-group">
+                            <label>Часовой пояс (runtime.timezone)</label>
+                            <input type="text" id="timezone" value="UTC">
+                        </div>
+                        <div class="form-group">
+                            <label>Максимальное время выполнения в минутах (runtime.max_runtime_minutes)</label>
+                            <input type="number" id="maxRuntime" value="15" min="1">
+                        </div>
+                    </div>
+                    
+                    <button type="button" class="btn-generate" onclick="generateConfig()">🚀 Сгенерировать конфиг</button>
+                    
+                    <!-- Analytics Actions -->
+                    <div style="margin-top: 20px; padding: 20px; background: #f0f0f0; border-radius: 8px;">
+                        <h3 style="margin-bottom: 15px;">⚙️ Действия с конфигом</h3>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Имя файла для сохранения:</label>
+                            <input type="text" id="configFileName" placeholder="my_analysis.yaml" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                            <button type="button" class="btn-save" onclick="saveConfig()" style="flex: 1; padding: 10px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                                💾 Сохранить конфиг
+                            </button>
+                            <button type="button" class="btn-run" onclick="runAnalytics()" style="flex: 1; padding: 10px; background: #2196F3; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                                ▶️ Запустить аналитику
+                            </button>
+                        </div>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="dryRunCheck" checked>
+                                <span>Dry run (не записывать в YDB)</span>
+                            </label>
+                        </div>
+                        
+                        <div id="runStatus" style="display: none; padding: 10px; border-radius: 6px; margin-top: 10px;"></div>
+                    </div>
+                    
+                    <!-- Reports Section -->
+                    <div style="margin-top: 20px; padding: 20px; background: #f0f0f0; border-radius: 8px;">
+                        <h3 style="margin-bottom: 15px;">📊 Отчеты</h3>
+                        <button type="button" class="btn-refresh-reports" onclick="loadReports()" style="width: 100%; padding: 10px; background: #FF9800; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; margin-bottom: 15px;">
+                            🔄 Обновить список отчетов
+                        </button>
+                        <div id="reportsList" style="max-height: 300px; overflow-y: auto;">
+                            <p style="color: #666; text-align: center; padding: 20px;">Нажмите "Обновить список отчетов" для загрузки</p>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="preview-section">
+                <div class="section-title">📄 Предпросмотр конфига</div>
+                <div class="preview" id="preview">Заполните форму и нажмите "Сгенерировать конфиг"</div>
+                <button type="button" class="btn-copy" onclick="copyToClipboard()">📋 Копировать в буфер обмена</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentMode = 'generate';
+        
+        function switchMode(mode) {
+            currentMode = mode;
+            const fileLoader = document.getElementById('fileLoader');
+            if (mode === 'edit') {
+                fileLoader.style.display = 'block';
+            } else {
+                fileLoader.style.display = 'none';
+                // Clear loaded file info
+                document.getElementById('fileName').textContent = '';
+                document.getElementById('yamlFileInput').value = '';
+            }
+        }
+        
+        function loadYamlFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            document.getElementById('fileName').textContent = '📄 ' + file.name;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const yamlText = e.target.result;
+                    // Parse YAML (simple parser for basic YAML structure)
+                    const config = parseYAML(yamlText);
+                    // Debug: log parsed config
+                    console.log('Parsed config:', JSON.stringify(config, null, 2));
+                    // Fill form with loaded values
+                    fillFormFromConfig(config);
+                    // Generate preview after a small delay to ensure DOM is updated
+                    setTimeout(function() {
+                        generateConfig();
+                    }, 100);
+                } catch (error) {
+                    alert('Ошибка загрузки файла: ' + error.message);
+                    console.error('Parse error:', error);
+                    console.error('YAML text:', yamlText);
+                }
+            };
+            reader.readAsText(file);
+        }
+        
+        function parseYAML(yamlText) {
+            // Improved YAML parser for basic structures
+            const lines = yamlText.split('\n');
+            const config = {};
+            const path = []; // Stack to track current path
+            let multilineMode = false;
+            let multilineKey = null;
+            let multilinePath = [];
+            let multilineContent = [];
+            let multilineIndent = 0;
+            let lastArrayKey = null; // Track last declared array key
+            let lastArrayPath = []; // Track path to last array
+            
+            function setValue(obj, pathArray, value) {
+                let current = obj;
+                for (let i = 0; i < pathArray.length - 1; i++) {
+                    const key = pathArray[i];
+                    if (!current[key] || typeof current[key] !== 'object' || Array.isArray(current[key])) {
+                        current[key] = {};
+                    }
+                    current = current[key];
+                }
+                current[pathArray[pathArray.length - 1]] = value;
+            }
+            
+            function getCurrentObject() {
+                let current = config;
+                for (const key of path) {
+                    if (!current[key]) current[key] = {};
+                    if (Array.isArray(current[key])) {
+                        // If it's an array, we need to work with the parent
+                        return null;
+                    }
+                    current = current[key];
+                }
+                return current;
+            }
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const trimmed = line.trim();
+                const indent = line.length - line.trimStart().length;
+                
+                // Handle multiline strings
+                if (multilineMode) {
+                    // Check if we should continue multiline
+                    // Continue if: indent is greater than multiline indent, OR
+                    //              indent equals multiline indent and line is not empty, OR
+                    //              line is empty but we're still in the multiline block
+                    if (indent >= multilineIndent) {
+                        // Still in multiline - add content (preserve original indentation relative to multiline start)
+                        if (trimmed === '' && multilineContent.length > 0) {
+                            // Empty line in multiline - preserve it
+                            multilineContent.push('');
+                        } else if (indent >= multilineIndent) {
+                            multilineContent.push(line.substring(Math.min(indent, multilineIndent)));
+                        }
+                    } else {
+                        // End of multiline - save and continue
+                        const value = multilineContent.join('\n');
+                        // Remove trailing empty lines but keep the structure
+                        const trimmedValue = value.replace(/\n+$/, '');
+                        setValue(config, multilinePath, trimmedValue);
+                        multilineMode = false;
+                        multilineKey = null;
+                        multilinePath = [];
+                        multilineContent = [];
+                        i--; // Re-process this line
+                        continue;
+                    }
+                    continue;
+                }
+                
+                // Skip empty lines and comments
+                if (trimmed === '' || trimmed.startsWith('#')) {
+                    continue;
+                }
+                
+                // Check for multiline string start (|)
+                const colonIndex = trimmed.indexOf(':');
+                if (colonIndex > 0) {
+                    const key = trimmed.substring(0, colonIndex).trim();
+                    let value = trimmed.substring(colonIndex + 1).trim();
+                    
+                    // Check for multiline indicator
+                    if (value === '|' || value === '|+') {
+                        multilineMode = true;
+                        multilineKey = key;
+                        multilineIndent = indent;
+                        multilinePath = [...path, key];
+                        multilineContent = [];
+                        continue;
+                    }
+                }
+                
+                // Calculate path depth based on indent (YAML uses 2 spaces per level typically)
+                const pathDepth = Math.floor(indent / 2);
+                while (path.length > pathDepth) {
+                    path.pop();
+                }
+                
+                // Parse key-value pairs
+                if (colonIndex > 0 && !trimmed.startsWith('-')) {
+                    const key = trimmed.substring(0, colonIndex).trim();
+                    let value = trimmed.substring(colonIndex + 1).trim();
+                    
+                    // Remove quotes
+                    if ((value.startsWith('"') && value.endsWith('"')) || 
+                        (value.startsWith("'") && value.endsWith("'"))) {
+                        value = value.slice(1, -1);
+                    }
+                    
+                    // Remove inline comments
+                    const commentIdx = value.indexOf(' #');
+                    if (commentIdx > 0) {
+                        value = value.substring(0, commentIdx).trim();
+                    }
+                    
+                    // Check for inline array format: ["item1", "item2"] or [item1, item2]
+                    if (value.startsWith('[') && value.endsWith(']')) {
+                        const arrayContent = value.slice(1, -1).trim();
+                        if (arrayContent === '') {
+                            // Empty array
+                            setValue(config, path.concat([key]), []);
+                            lastArrayKey = key;
+                            lastArrayPath = [...path, key];
+                        } else {
+                            // Parse inline array
+                            const items = [];
+                            // Split by comma, but respect quotes
+                            let currentItem = '';
+                            let inQuotes = false;
+                            let quoteChar = null;
+                            
+                            for (let charIdx = 0; charIdx < arrayContent.length; charIdx++) {
+                                const char = arrayContent[charIdx];
+                                
+                                if (!inQuotes && (char === '"' || char === "'")) {
+                                    // Start of quoted string - don't add quote to currentItem
+                                    inQuotes = true;
+                                    quoteChar = char;
+                                } else if (inQuotes && char === quoteChar) {
+                                    // End of quoted string - don't add quote to currentItem
+                                    inQuotes = false;
+                                    quoteChar = null;
+                                    // Don't add the closing quote to currentItem
+                                } else if (!inQuotes && char === ',') {
+                                    // Comma outside quotes - end of item
+                                    items.push(currentItem.trim());
+                                    currentItem = '';
+                                } else {
+                                    // Regular character - add to current item
+                                    currentItem += char;
+                                }
+                            }
+                            // Add last item if exists
+                            if (currentItem.trim()) {
+                                items.push(currentItem.trim());
+                            }
+                            
+                            // Items are already cleaned (quotes were not added to currentItem)
+                            setValue(config, path.concat([key]), items);
+                            lastArrayKey = key;
+                            lastArrayPath = [...path, key];
+                        }
+                    }
+                    // Parse value type
+                    else {
+                        let parsedValue = value;
+                        
+                        // Remove quotes if present (but keep the value as string)
+                        let unquotedValue = value;
+                        if ((value.startsWith('"') && value.endsWith('"')) || 
+                            (value.startsWith("'") && value.endsWith("'"))) {
+                            unquotedValue = value.slice(1, -1);
+                        }
+                        
+                        // Parse value type based on unquoted value
+                        if (unquotedValue === 'true') parsedValue = true;
+                        else if (unquotedValue === 'false') parsedValue = false;
+                        else if (unquotedValue === 'null' || unquotedValue === '') parsedValue = null;
+                        else if (unquotedValue !== '' && !isNaN(unquotedValue) && unquotedValue.trim() !== '') {
+                            parsedValue = unquotedValue.includes('.') ? parseFloat(unquotedValue) : parseInt(unquotedValue);
+                        } else {
+                            // Keep as string (use unquoted value)
+                            parsedValue = unquotedValue;
+                        }
+                        
+                        // Check if this is an array declaration
+                        if (value === '' || value === '[]') {
+                            setValue(config, path.concat([key]), []);
+                            lastArrayKey = key;
+                            lastArrayPath = [...path, key];
+                            path.push(key);
+                        } else if (value !== '') {
+                            setValue(config, path.concat([key]), parsedValue);
+                            lastArrayKey = null; // Clear array tracking when we set a value
+                        } else {
+                            // Empty value means nested object
+                            setValue(config, path.concat([key]), {});
+                            lastArrayKey = null; // Clear array tracking
+                            path.push(key);
+                        }
+                    }
+                }
+                // Parse array items
+                else if (trimmed.startsWith('- ')) {
+                    const arrayValue = trimmed.substring(2).trim();
+                    // Remove quotes
+                    let cleanValue = arrayValue;
+                    if ((arrayValue.startsWith('"') && arrayValue.endsWith('"')) || 
+                        (arrayValue.startsWith("'") && arrayValue.endsWith("'"))) {
+                        cleanValue = arrayValue.slice(1, -1);
+                    }
+                    
+                    // Remove inline comments (everything after #)
+                    const commentIndex = cleanValue.indexOf(' #');
+                    if (commentIndex > 0) {
+                        cleanValue = cleanValue.substring(0, commentIndex).trim();
+                    }
+                    
+                    // Try to find the array this item belongs to
+                    let added = false;
+                    
+                    // First, check if we have a tracked array at the current path level
+                    if (lastArrayKey && lastArrayPath.length > 0) {
+                        // Check if current path matches array path
+                        const pathDepth = Math.floor(indent / 2);
+                        const arrayPathDepth = lastArrayPath.length;
+                        
+                        // Check if we're at the right indent level (array items are typically 2 spaces more than array declaration)
+                        if (pathDepth === arrayPathDepth) {
+                            // Check if path matches
+                            const pathMatch = lastArrayPath.every((key, idx) => 
+                                idx < path.length && path[idx] === key
+                            );
+                            
+                            if (pathMatch) {
+                                // Add to tracked array
+                                let target = config;
+                                for (const p of lastArrayPath) {
+                                    if (!target[p]) target[p] = [];
+                                    target = target[p];
+                                }
+                                if (Array.isArray(target)) {
+                                    target.push(cleanValue);
+                                    added = true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // If not added, look for array in current context
+                    if (!added) {
+                        const parent = getCurrentObject();
+                        if (parent) {
+                            const lastKey = path[path.length - 1];
+                            if (lastKey && Array.isArray(parent[lastKey])) {
+                                parent[lastKey].push(cleanValue);
+                                added = true;
+                            } else {
+                                // Look backwards for array declaration
+                                // Array items are typically at indent level = array declaration indent + 2
+                                const expectedIndent = indent - 2;
+                                
+                                // Reconstruct the path up to the expected indent level
+                                const arrayPath = [];
+                                for (let k = 0; k < i; k++) {
+                                    const checkLine = lines[k];
+                                    const checkIndent = checkLine.length - checkLine.trimStart().length;
+                                    const checkTrimmed = checkLine.trim();
+                                    
+                                    if (checkTrimmed && !checkTrimmed.startsWith('#') && checkTrimmed.includes(':') && !checkTrimmed.startsWith('-')) {
+                                        const checkKey = checkTrimmed.substring(0, checkTrimmed.indexOf(':')).trim();
+                                        const checkValue = checkTrimmed.substring(checkTrimmed.indexOf(':') + 1).trim();
+                                        const checkDepth = Math.floor(checkIndent / 2);
+                                        
+                                        // Build path up to expected depth
+                                        while (arrayPath.length > checkDepth) {
+                                            arrayPath.pop();
+                                        }
+                                        if (arrayPath.length === checkDepth) {
+                                            arrayPath.push(checkKey);
+                                        }
+                                        
+                                        // Check if this is the array declaration we're looking for
+                                        if (checkIndent === expectedIndent && (checkValue === '' || checkValue === '[]')) {
+                                            // Found the array declaration - use current path
+                                            let target = config;
+                                            for (let p = 0; p < arrayPath.length - 1; p++) {
+                                                if (!target[arrayPath[p]]) target[arrayPath[p]] = {};
+                                                target = target[arrayPath[p]];
+                                            }
+                                            const arrayKey = arrayPath[arrayPath.length - 1];
+                                            if (!target[arrayKey] || !Array.isArray(target[arrayKey])) {
+                                                target[arrayKey] = [];
+                                            }
+                                            target[arrayKey].push(cleanValue);
+                                            added = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // If still not added, try top-level arrays
+                        if (!added && path.length === 0) {
+                            // Look for top-level array
+                            for (let j = i - 1; j >= 0 && j >= i - 30; j--) {
+                                const prevLine = lines[j].trim();
+                                if (prevLine && !prevLine.startsWith('#') && prevLine.includes(':')) {
+                                    const prevKey = prevLine.substring(0, prevLine.indexOf(':')).trim();
+                                    const prevValue = prevLine.substring(prevLine.indexOf(':') + 1).trim();
+                                    if ((prevValue === '' || prevValue === '[]') && config[prevKey] && Array.isArray(config[prevKey])) {
+                                        config[prevKey].push(cleanValue);
+                                        added = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Parse section headers (key with colon at end, no value)
+                else if (trimmed.endsWith(':') && colonIndex === trimmed.length - 1) {
+                    const key = trimmed.slice(0, -1).trim();
+                    setValue(config, path.concat([key]), {});
+                    path.push(key);
+                }
+            }
+            
+            // Handle trailing multiline
+            if (multilineMode && multilineContent.length > 0) {
+                const value = multilineContent.join('\n');
+                const trimmedValue = value.replace(/\n+$/, '');
+                setValue(config, multilinePath, trimmedValue);
+            }
+            
+            return config;
+        }
+        
+        function fillFormFromConfig(config) {
+            // Fill job section
+            if (config.job) {
+                if (config.job.name) document.getElementById('jobName').value = config.job.name;
+                if (config.job.description) document.getElementById('jobDescription').value = config.job.description;
+            }
+            
+            // Fill data_source section
+            if (config.data_source) {
+                if (config.data_source.ydb && config.data_source.ydb.query) {
+                    document.getElementById('ydbQuery').value = config.data_source.ydb.query;
+                }
+                if (config.data_source.aggregate_by) {
+                    document.getElementById('aggregateBy').value = config.data_source.aggregate_by;
+                }
+            }
+            
+            // Fill context_fields
+            if (config.context_fields && Array.isArray(config.context_fields)) {
+                const container = document.getElementById('contextFields');
+                container.innerHTML = '';
+                config.context_fields.forEach(field => {
+                    addArrayItem('contextFields');
+                    const lastInput = container.querySelector('.array-input:last-child input');
+                    if (lastInput) lastInput.value = field;
+                });
+            }
+            
+            // Fill metric_fields
+            if (config.metric_fields && Array.isArray(config.metric_fields)) {
+                const container = document.getElementById('metricFields');
+                container.innerHTML = '';
+                config.metric_fields.forEach((field, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'array-input';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = field;
+                    input.readOnly = true;
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'btn-remove';
+                    button.disabled = true;
+                    button.textContent = '×';
+                    div.appendChild(input);
+                    div.appendChild(button);
+                    container.appendChild(div);
+                });
+            }
+            
+            // Fill timestamp_field
+            if (config.timestamp_field) {
+                document.getElementById('timestampField').value = config.timestamp_field;
+            }
+            
+            // Fill analytics section
+            if (config.analytics) {
+                if (config.analytics.baseline_method) {
+                    document.getElementById('baselineMethod').value = config.analytics.baseline_method;
+                }
+                if (config.analytics.window_size) {
+                    document.getElementById('windowSize').value = config.analytics.window_size;
+                }
+                if (config.analytics.sensitivity) {
+                    document.getElementById('sensitivity').value = config.analytics.sensitivity;
+                }
+                if (config.analytics.min_absolute_change !== undefined) {
+                    document.getElementById('minAbsoluteChange').value = config.analytics.min_absolute_change;
+                }
+                if (config.analytics.min_relative_change !== undefined) {
+                    document.getElementById('minRelativeChange').value = config.analytics.min_relative_change;
+                }
+                if (config.analytics.hysteresis_points) {
+                    document.getElementById('hysteresisPoints').value = config.analytics.hysteresis_points;
+                }
+                if (config.analytics.adaptive_threshold !== undefined) {
+                    document.getElementById('adaptiveThreshold').checked = config.analytics.adaptive_threshold;
+                }
+                if (config.analytics.min_data_points) {
+                    document.getElementById('minDataPoints').value = config.analytics.min_data_points;
+                }
+            }
+            
+            // Fill metric_direction
+            if (config.metric_direction) {
+                console.log('Filling metric_direction:', config.metric_direction);
+                console.log('metric_direction type:', typeof config.metric_direction);
+                console.log('metric_direction keys:', Object.keys(config.metric_direction));
+                
+                if (config.metric_direction.default) {
+                    const defaultEl = document.getElementById('metricDirectionDefault');
+                    if (defaultEl) {
+                        // Clean default value - remove quotes if present
+                        let defaultValue = config.metric_direction.default;
+                        if (typeof defaultValue === 'string') {
+                            defaultValue = defaultValue.trim();
+                            if ((defaultValue.startsWith('"') && defaultValue.endsWith('"')) || 
+                                (defaultValue.startsWith("'") && defaultValue.endsWith("'"))) {
+                                defaultValue = defaultValue.slice(1, -1).trim();
+                            }
+                        }
+                        defaultEl.value = defaultValue;
+                        console.log('Set default direction to:', defaultValue);
+                    }
+                }
+                
+                // Clear existing metric directions
+                const metricDirectionsContainer = document.getElementById('metricDirections');
+                if (metricDirectionsContainer) {
+                    metricDirectionsContainer.innerHTML = '';
+                    
+                    // Process all entries in metric_direction
+                    Object.entries(config.metric_direction).forEach(([key, value]) => {
+                        if (key !== 'default') {
+                            console.log(`Processing metric direction: ${key} = ${value} (type: ${typeof value})`);
+                            
+                            // Clean value - remove quotes and trim
+                            let cleanValue = value;
+                            if (typeof value === 'string') {
+                                cleanValue = value.trim();
+                                // Remove surrounding quotes if present
+                                if ((cleanValue.startsWith('"') && cleanValue.endsWith('"')) || 
+                                    (cleanValue.startsWith("'") && cleanValue.endsWith("'"))) {
+                                    cleanValue = cleanValue.slice(1, -1).trim();
+                                }
+                            }
+                            
+                            console.log(`Cleaned value for ${key}: "${cleanValue}"`);
+                            
+                            // More flexible check - allow any string that contains 'positive' or 'negative'
+                            const isPositive = cleanValue === 'positive' || 
+                                              (typeof cleanValue === 'string' && cleanValue.toLowerCase().includes('positive'));
+                            const isNegative = cleanValue === 'negative' || 
+                                              (typeof cleanValue === 'string' && cleanValue.toLowerCase().includes('negative'));
+                            
+                            if (isPositive || isNegative) {
+                                const finalValue = isPositive ? 'positive' : 'negative';
+                                console.log(`Creating metric direction: ${key} = ${finalValue}`);
+                                
+                                // Create element and get reference directly
+                                const container = document.getElementById('metricDirections');
+                                const div = document.createElement('div');
+                                div.className = 'metric-direction-item';
+                                div.style.display = 'grid';
+                                div.style.gridTemplateColumns = '1fr auto auto';
+                                div.style.gap = '10px';
+                                div.style.marginBottom = '10px';
+                                
+                                const nameInput = document.createElement('input');
+                                nameInput.type = 'text';
+                                nameInput.className = 'metric-name';
+                                nameInput.placeholder = 'имя_метрики';
+                                nameInput.value = key; // Set value immediately
+                                
+                                const directionSelect = document.createElement('select');
+                                directionSelect.className = 'metric-direction';
+                                const opt1 = document.createElement('option');
+                                opt1.value = 'negative';
+                                opt1.textContent = 'negative';
+                                const opt2 = document.createElement('option');
+                                opt2.value = 'positive';
+                                opt2.textContent = 'positive';
+                                directionSelect.appendChild(opt1);
+                                directionSelect.appendChild(opt2);
+                                
+                                const removeBtn = document.createElement('button');
+                                removeBtn.type = 'button';
+                                removeBtn.className = 'btn-remove';
+                                removeBtn.textContent = '×';
+                                removeBtn.onclick = function() { div.remove(); };
+                                
+                                div.appendChild(nameInput);
+                                div.appendChild(directionSelect);
+                                div.appendChild(removeBtn);
+                                container.appendChild(div);
+                                
+                                // Set value AFTER element is added to DOM
+                                directionSelect.value = finalValue;
+                                
+                                // Verify and fix if needed
+                                if (directionSelect.value !== finalValue) {
+                                    console.warn(`Failed to set select value to ${finalValue}, current: ${directionSelect.value}`);
+                                    // Try setting selectedIndex
+                                    for (let i = 0; i < directionSelect.options.length; i++) {
+                                        if (directionSelect.options[i].value === finalValue) {
+                                            directionSelect.selectedIndex = i;
+                                            break;
+                                        }
+                                    }
+                                }
+                                console.log(`Successfully set ${key} direction to: ${directionSelect.value}`);
+                            } else {
+                                console.warn(`Skipping ${key} with value "${cleanValue}" - not recognized as positive or negative`);
+                            }
+                        }
+                    });
+                    
+                    console.log(`Total metric directions created: ${metricDirectionsContainer.children.length}`);
+                }
+            } else {
+                console.log('No metric_direction found in config');
+            }
+            
+            // Fill context_tracking
+            if (config.context_tracking) {
+                if (config.context_tracking.track_new_contexts !== undefined) {
+                    document.getElementById('trackNewContexts').checked = config.context_tracking.track_new_contexts;
+                }
+                if (config.context_tracking.track_disappeared_contexts !== undefined) {
+                    document.getElementById('trackDisappearedContexts').checked = config.context_tracking.track_disappeared_contexts;
+                }
+                if (config.context_tracking.context_change_rules) {
+                    const rules = config.context_tracking.context_change_rules;
+                    if (rules.new_context_metrics) {
+                        const metricName = Object.keys(rules.new_context_metrics)[0];
+                        if (metricName) {
+                            const newContextMetricEl = document.getElementById('newContextMetric');
+                            if (newContextMetricEl) newContextMetricEl.value = metricName;
+                            const rule = rules.new_context_metrics[metricName];
+                            if (rule.event_type) {
+                                const newContextEventTypeEl = document.getElementById('newContextEventType');
+                                if (newContextEventTypeEl) newContextEventTypeEl.value = rule.event_type;
+                            }
+                            if (rule.severity) {
+                                const newContextSeverityEl = document.getElementById('newContextSeverity');
+                                if (newContextSeverityEl) newContextSeverityEl.value = rule.severity;
+                            }
+                            if (rule.min_value !== undefined) {
+                                const newContextMinValueEl = document.getElementById('newContextMinValue');
+                                if (newContextMinValueEl) newContextMinValueEl.value = rule.min_value;
+                            }
+                        }
+                    }
+                    if (rules.disappeared_context_metrics) {
+                        const metricName = Object.keys(rules.disappeared_context_metrics)[0];
+                        if (metricName) {
+                            const disappearedContextMetricEl = document.getElementById('disappearedContextMetric');
+                            if (disappearedContextMetricEl) disappearedContextMetricEl.value = metricName;
+                            const rule = rules.disappeared_context_metrics[metricName];
+                            if (rule.event_type) {
+                                const disappearedContextEventTypeEl = document.getElementById('disappearedContextEventType');
+                                if (disappearedContextEventTypeEl) disappearedContextEventTypeEl.value = rule.event_type;
+                            }
+                            if (rule.severity) {
+                                const disappearedContextSeverityEl = document.getElementById('disappearedContextSeverity');
+                                if (disappearedContextSeverityEl) disappearedContextSeverityEl.value = rule.severity;
+                            }
+                            if (rule.min_absence_points !== undefined) {
+                                const minAbsencePointsEl = document.getElementById('minAbsencePoints');
+                                if (minAbsencePointsEl) minAbsencePointsEl.value = rule.min_absence_points;
+                            }
+                            if (rule.min_absence_duration_minutes !== undefined) {
+                                const minAbsenceDurationEl = document.getElementById('minAbsenceDuration');
+                                if (minAbsenceDurationEl) minAbsenceDurationEl.value = rule.min_absence_duration_minutes;
+                            }
+                            if (rule.absence_type) {
+                                const absenceTypeEl = document.getElementById('absenceType');
+                                if (absenceTypeEl) absenceTypeEl.value = rule.absence_type;
+                            }
+                            if (rule.min_historical_points !== undefined) {
+                                const minHistoricalPointsEl = document.getElementById('minHistoricalPoints');
+                                if (minHistoricalPointsEl) minHistoricalPointsEl.value = rule.min_historical_points;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Fill events
+            if (config.events) {
+                console.log('Filling events:', config.events);
+                if (config.events.detect) {
+                    let detectArray = Array.isArray(config.events.detect) ? config.events.detect : [];
+                    // Clean array items from comments and trim whitespace
+                    detectArray = detectArray.map(item => {
+                        if (typeof item === 'string') {
+                            // Remove inline comments
+                            const commentIdx = item.indexOf(' #');
+                            if (commentIdx > 0) {
+                                item = item.substring(0, commentIdx);
+                            }
+                            return item.trim();
+                        }
+                        return item;
+                    });
+                    console.log('Events detect array (cleaned):', detectArray);
+                    
+                    const detectDegradationEl = document.getElementById('detectDegradation');
+                    const detectImprovementEl = document.getElementById('detectImprovement');
+                    const detectThresholdShiftEl = document.getElementById('detectThresholdShift');
+                    
+                    console.log('Found elements:', {
+                        degradation: !!detectDegradationEl,
+                        improvement: !!detectImprovementEl,
+                        thresholdShift: !!detectThresholdShiftEl
+                    });
+                    
+                    if (detectDegradationEl) {
+                        detectDegradationEl.checked = detectArray.includes('degradation_start');
+                        console.log('Set degradation to:', detectDegradationEl.checked);
+                    }
+                    if (detectImprovementEl) {
+                        detectImprovementEl.checked = detectArray.includes('improvement_start');
+                        console.log('Set improvement to:', detectImprovementEl.checked);
+                    }
+                    if (detectThresholdShiftEl) {
+                        detectThresholdShiftEl.checked = detectArray.includes('threshold_shift');
+                        console.log('Set threshold_shift to:', detectThresholdShiftEl.checked);
+                    }
+                }
+                if (config.events.output_table) {
+                    const eventsTableEl = document.getElementById('eventsOutputTable');
+                    if (eventsTableEl) eventsTableEl.value = config.events.output_table;
+                }
+                if (config.events.min_event_duration_minutes) {
+                    const minDurationEl = document.getElementById('minEventDuration');
+                    if (minDurationEl) minDurationEl.value = config.events.min_event_duration_minutes;
+                }
+            }
+            
+            // Fill thresholds
+            if (config.thresholds) {
+                if (config.thresholds.output_table) {
+                    document.getElementById('thresholdsOutputTable').value = config.thresholds.output_table;
+                }
+                if (config.thresholds.keep_history !== undefined) {
+                    document.getElementById('keepHistory').checked = config.thresholds.keep_history;
+                }
+            }
+            
+            // Fill output
+            if (config.output) {
+                if (config.output.write_to_ydb !== undefined) {
+                    document.getElementById('writeToYdb').checked = config.output.write_to_ydb;
+                }
+                if (config.output.log_to_console !== undefined) {
+                    document.getElementById('logToConsole').checked = config.output.log_to_console;
+                }
+                if (config.output.dry_run !== undefined) {
+                    document.getElementById('dryRun').checked = config.output.dry_run;
+                }
+            }
+            
+            // Fill runtime
+            if (config.runtime) {
+                if (config.runtime.timezone) {
+                    document.getElementById('timezone').value = config.runtime.timezone;
+                }
+                if (config.runtime.max_runtime_minutes) {
+                    document.getElementById('maxRuntime').value = config.runtime.max_runtime_minutes;
+                }
+            }
+        }
+        
+        function toggleCollapse(element) {
+            element.classList.toggle('collapsed');
+            const content = element.nextElementSibling;
+            content.classList.toggle('collapsed');
+        }
+        
+        function addArrayItem(containerId) {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = 'array-input';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'новое поле';
+            
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn-remove';
+            button.textContent = '×';
+            button.onclick = function() { removeArrayItem(this); };
+            
+            div.appendChild(input);
+            div.appendChild(button);
+            container.appendChild(div);
+        }
+        
+        function removeArrayItem(button) {
+            button.parentElement.remove();
+        }
+        
+        function addMetricDirection() {
+            const container = document.getElementById('metricDirections');
+            const div = document.createElement('div');
+            div.className = 'metric-direction-item';
+            div.style.display = 'grid';
+            div.style.gridTemplateColumns = '1fr auto auto';
+            div.style.gap = '10px';
+            div.style.marginBottom = '10px';
+            
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.className = 'metric-name';
+            nameInput.placeholder = 'имя_метрики';
+            
+            const directionSelect = document.createElement('select');
+            directionSelect.className = 'metric-direction';
+            const opt1 = document.createElement('option');
+            opt1.value = 'negative';
+            opt1.textContent = 'negative';
+            const opt2 = document.createElement('option');
+            opt2.value = 'positive';
+            opt2.textContent = 'positive';
+            directionSelect.appendChild(opt1);
+            directionSelect.appendChild(opt2);
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn-remove';
+            removeBtn.textContent = '×';
+            removeBtn.onclick = function() { removeArrayItem(this); };
+            
+            div.appendChild(nameInput);
+            div.appendChild(directionSelect);
+            div.appendChild(removeBtn);
+            container.appendChild(div);
+        }
+        
+        function getArrayValues(containerId) {
+            const container = document.getElementById(containerId);
+            const inputs = container.querySelectorAll('input[type="text"]');
+            return Array.from(inputs).map(input => input.value.trim()).filter(v => v);
+        }
+        
+        function getMetricDirections() {
+            const container = document.getElementById('metricDirections');
+            const items = container.querySelectorAll('.metric-direction-item');
+            const result = {};
+            items.forEach(item => {
+                const name = item.querySelector('.metric-name').value.trim();
+                const direction = item.querySelector('.metric-direction').value;
+                if (name) {
+                    result[name] = direction;
+                }
+            });
+            return result;
+        }
+        
+        function generateConfig() {
+            const config = {
+                job: {
+                    name: document.getElementById('jobName').value || 'my_analysis',
+                    description: document.getElementById('jobDescription').value || ''
+                },
+                data_source: {
+                    ydb: {
+                        query: document.getElementById('ydbQuery').value || ''
+                    }
+                },
+                context_fields: getArrayValues('contextFields'),
+                metric_fields: getArrayValues('metricFields'),
+                timestamp_field: document.getElementById('timestampField').value || 'ts',
+                analytics: {
+                    baseline_method: document.getElementById('baselineMethod').value,
+                    window_size: parseInt(document.getElementById('windowSize').value) || 7,
+                    sensitivity: parseFloat(document.getElementById('sensitivity').value) || 2.0,
+                    min_absolute_change: parseInt(document.getElementById('minAbsoluteChange').value) || 5,
+                    min_relative_change: parseFloat(document.getElementById('minRelativeChange').value) || 0.05,
+                    hysteresis_points: parseInt(document.getElementById('hysteresisPoints').value) || 2,
+                    adaptive_threshold: document.getElementById('adaptiveThreshold').checked,
+                    min_data_points: parseInt(document.getElementById('minDataPoints').value) || 3
+                },
+                metric_direction: {
+                    default: document.getElementById('metricDirectionDefault').value
+                },
+                events: {
+                    detect: []
+                },
+                thresholds: {
+                    keep_history: document.getElementById('keepHistory').checked
+                },
+                output: {
+                    write_to_ydb: document.getElementById('writeToYdb').checked,
+                    log_to_console: document.getElementById('logToConsole').checked,
+                    dry_run: document.getElementById('dryRun').checked
+                },
+                runtime: {
+                    timezone: document.getElementById('timezone').value || 'UTC',
+                    max_runtime_minutes: parseInt(document.getElementById('maxRuntime').value) || 15
+                }
+            };
+            
+            // Add aggregate_by if specified
+            const aggregateBy = document.getElementById('aggregateBy').value.trim();
+            if (aggregateBy) {
+                config.data_source.aggregate_by = aggregateBy;
+            }
+            
+            // Add metric directions
+            const metricDirs = getMetricDirections();
+            Object.assign(config.metric_direction, metricDirs);
+            
+            // Add events - ensure at least one is selected
+            const detectDegradation = document.getElementById('detectDegradation');
+            const detectImprovement = document.getElementById('detectImprovement');
+            const detectThresholdShift = document.getElementById('detectThresholdShift');
+            
+            if (detectDegradation && detectDegradation.checked) {
+                config.events.detect.push('degradation_start');
+            }
+            if (detectImprovement && detectImprovement.checked) {
+                config.events.detect.push('improvement_start');
+            }
+            if (detectThresholdShift && detectThresholdShift.checked) {
+                config.events.detect.push('threshold_shift');
+            }
+            
+            // If no events selected, add default
+            if (config.events.detect.length === 0) {
+                config.events.detect.push('degradation_start');
+            }
+            
+            // Add output tables if specified
+            const eventsTable = document.getElementById('eventsOutputTable').value.trim();
+            if (eventsTable) {
+                config.events.output_table = eventsTable;
+            }
+            
+            const thresholdsTable = document.getElementById('thresholdsOutputTable').value.trim();
+            if (thresholdsTable) {
+                config.thresholds.output_table = thresholdsTable;
+            }
+            
+            // Add min_event_duration_minutes
+            const minDuration = parseInt(document.getElementById('minEventDuration').value);
+            if (minDuration) {
+                config.events.min_event_duration_minutes = minDuration;
+            }
+            
+            // Add context tracking if enabled
+            if (document.getElementById('trackNewContexts').checked || document.getElementById('trackDisappearedContexts').checked) {
+                config.context_tracking = {
+                    track_new_contexts: document.getElementById('trackNewContexts').checked,
+                    track_disappeared_contexts: document.getElementById('trackDisappearedContexts').checked,
+                    context_change_rules: {}
+                };
+                
+                const newMetric = document.getElementById('newContextMetric').value.trim();
+                if (newMetric && document.getElementById('trackNewContexts').checked) {
+                    config.context_tracking.context_change_rules.new_context_metrics = {
+                        [newMetric]: {
+                            event_type: document.getElementById('newContextEventType').value,
+                            severity: 'high',
+                            baseline_before: 0.0
+                        }
+                    };
+                }
+                
+                const disappearedMetric = document.getElementById('disappearedContextMetric').value.trim();
+                if (disappearedMetric && document.getElementById('trackDisappearedContexts').checked) {
+                    config.context_tracking.context_change_rules.disappeared_context_metrics = {
+                        [disappearedMetric]: {
+                            event_type: 'improvement_start',
+                            severity: 'medium',
+                            baseline_after: 0.0,
+                            min_absence_points: parseInt(document.getElementById('minAbsencePoints').value) || 3,
+                            absence_type: 'consecutive',
+                            min_historical_points: 2
+                        }
+                    };
+                }
+            }
+            
+            // Convert to YAML
+            const yaml = toYAML(config);
+            document.getElementById('preview').textContent = yaml;
+        }
+        
+        function toYAML(obj, indent = 0, parentKey = null) {
+            const spaces = '  '.repeat(indent);
+            let yaml = '';
+            
+            // Fields that should be inline arrays
+            const inlineArrayFields = ['context_fields', 'metric_fields'];
+            
+            // Fields that should use block literal (|) for multiline strings
+            const multilineFields = ['query'];
+            
+            if (Array.isArray(obj)) {
+                if (obj.length === 0) return '[]';
+                // Check if parent key is in inline array fields
+                if (parentKey && inlineArrayFields.includes(parentKey)) {
+                    // Generate inline array format
+                    const items = obj.map(item => formatValue(item)).join(', ');
+                    return '[' + items + ']';
+                }
+                // Otherwise use multiline format
+                obj.forEach(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        yaml += spaces + '-\n' + toYAML(item, indent + 1);
+                    } else {
+                        yaml += spaces + '- ' + formatValue(item) + '\n';
+                    }
+                });
+            } else if (typeof obj === 'object' && obj !== null) {
+                Object.entries(obj).forEach(([key, value]) => {
+                    if (value === null || value === undefined) {
+                        return;
+                    }
+                    
+                    if (Array.isArray(value)) {
+                        if (value.length === 0) {
+                            yaml += spaces + key + ': []\n';
+                        } else if (inlineArrayFields.includes(key)) {
+                            // Use inline format for specific fields
+                            const items = value.map(item => formatValue(item)).join(', ');
+                            yaml += spaces + key + ': [' + items + ']\n';
+                        } else {
+                            // Use multiline format for other arrays
+                            yaml += spaces + key + ':\n';
+                            value.forEach(item => {
+                                if (typeof item === 'object' && item !== null) {
+                                    yaml += spaces + '  -\n' + toYAML(item, indent + 2);
+                                } else {
+                                    yaml += spaces + '  - ' + formatValue(item) + '\n';
+                                }
+                            });
+                        }
+                    } else if (typeof value === 'object' && value !== null) {
+                        yaml += spaces + key + ':\n';
+                        yaml += toYAML(value, indent + 1, key);
+                    } else {
+                        // Check if this is a multiline string field
+                        if (typeof value === 'string' && multilineFields.includes(key) && value.includes('\n')) {
+                            // Use block literal (|) for multiline strings
+                            const lines = value.split('\n');
+                            yaml += spaces + key + ': |\n';
+                            lines.forEach(line => {
+                                yaml += spaces + '  ' + line + '\n';
+                            });
+                        } else {
+                            yaml += spaces + key + ': ' + formatValue(value) + '\n';
+                        }
+                    }
+                });
+            } else {
+                yaml += spaces + formatValue(obj) + '\n';
+            }
+            
+            return yaml;
+        }
+        
+        function formatValue(value) {
+            if (typeof value === 'string') {
+                // Check if string needs quoting
+                if (value.includes(':') || value.includes('#') || value.includes('\n') || 
+                    value.includes('&') || value.includes('*') || value.includes('!') ||
+                    value.includes('|') || value.includes('>') || value.includes("'") ||
+                    value.includes('"') || value.includes('[') || value.includes(']') ||
+                    value.includes('{') || value.includes('}') || value.includes(',') ||
+                    value.trim() !== value || /^\d/.test(value)) {
+                    // Escape quotes and use double quotes
+                    return '"' + value.replace(/"/g, '\\"') + '"';
+                }
+                return value;
+            } else if (typeof value === 'boolean') {
+                return value ? 'true' : 'false';
+            } else if (typeof value === 'number') {
+                return value.toString();
+            }
+            return String(value);
+        }
+        
+        function copyToClipboard(event) {
+            const preview = document.getElementById('preview');
+            const text = preview.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = event ? event.target : document.querySelector('.btn-copy');
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Скопировано!';
+                btn.style.background = '#4CAF50';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '#2196F3';
+                }, 2000);
+            }).catch(err => {
+                alert('Ошибка копирования: ' + err);
+            });
+        }
+        
+        // API functions
+        const API_BASE = window.location.origin;
+        
+        async function saveConfig() {
+            const filename = document.getElementById('configFileName').value.trim();
+            if (!filename) {
+                alert('Укажите имя файла');
+                return;
+            }
+            
+            const yaml = document.getElementById('preview').textContent;
+            if (!yaml || yaml.includes('Заполните форму')) {
+                alert('Сначала сгенерируйте конфиг');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/save-config`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filename: filename,
+                        content: yaml
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    alert(`Конфиг сохранен: ${data.path}`);
+                    document.getElementById('configFileName').value = '';
+                } else {
+                    alert(`Ошибка: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`Ошибка при сохранении: ${error.message}`);
+            }
+        }
+        
+        async function runAnalytics() {
+            const filename = document.getElementById('configFileName').value.trim();
+            const dryRun = document.getElementById('dryRunCheck').checked;
+            const statusDiv = document.getElementById('runStatus');
+            
+            // Get current config
+            const yaml = document.getElementById('preview').textContent;
+            if (!yaml || yaml.includes('Заполните форму')) {
+                alert('Сначала сгенерируйте конфиг');
+                return;
+            }
+            
+            // Save config first if filename provided
+            let configPath = null;
+            if (filename) {
+                try {
+                    const saveResponse = await fetch(`${API_BASE}/api/save-config`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            filename: filename,
+                            content: yaml
+                        })
+                    });
+                    
+                    const saveData = await saveResponse.json();
+                    if (!saveResponse.ok) {
+                        alert(`Ошибка при сохранении конфига: ${saveData.error}`);
+                        return;
+                    }
+                    configPath = saveData.path;
+                } catch (error) {
+                    alert(`Ошибка при сохранении: ${error.message}`);
+                    return;
+                }
+            } else {
+                // Use temporary file
+                const tempFilename = `temp_${Date.now()}.yaml`;
+                try {
+                    const saveResponse = await fetch(`${API_BASE}/api/save-config`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            filename: tempFilename,
+                            content: yaml
+                        })
+                    });
+                    
+                    const saveData = await saveResponse.json();
+                    if (!saveResponse.ok) {
+                        alert(`Ошибка при сохранении конфига: ${saveData.error}`);
+                        return;
+                    }
+                    configPath = saveData.path;
+                } catch (error) {
+                    alert(`Ошибка при сохранении: ${error.message}`);
+                    return;
+                }
+            }
+            
+            // Show status
+            statusDiv.style.display = 'block';
+            statusDiv.style.background = '#fff3cd';
+            statusDiv.style.color = '#856404';
+            statusDiv.textContent = '⏳ Запуск аналитики...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/run`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        config_path: configPath,
+                        dry_run: dryRun
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    statusDiv.style.background = '#d4edda';
+                    statusDiv.style.color = '#155724';
+                    statusDiv.innerHTML = `
+                        <strong>✅ Аналитика завершена успешно!</strong><br>
+                        <pre style="margin-top: 10px; font-size: 12px; overflow-x: auto;">${data.output}</pre>
+                    `;
+                    
+                    // Reload reports
+                    setTimeout(loadReports, 1000);
+                } else {
+                    statusDiv.style.background = '#f8d7da';
+                    statusDiv.style.color = '#721c24';
+                    statusDiv.innerHTML = `
+                        <strong>❌ Ошибка при выполнении аналитики</strong><br>
+                        <pre style="margin-top: 10px; font-size: 12px; overflow-x: auto;">${data.error || data.output || 'Неизвестная ошибка'}</pre>
+                    `;
+                }
+            } catch (error) {
+                statusDiv.style.background = '#f8d7da';
+                statusDiv.style.color = '#721c24';
+                statusDiv.innerHTML = `<strong>❌ Ошибка:</strong> ${error.message}`;
+            }
+        }
+        
+        async function loadReports() {
+            const reportsList = document.getElementById('reportsList');
+            reportsList.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">Загрузка...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/reports`);
+                const data = await response.json();
+                
+                if (data.reports && data.reports.length > 0) {
+                    let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                    data.reports.forEach(report => {
+                        const date = new Date(report.modified);
+                        const dateStr = date.toLocaleString('ru-RU');
+                        
+                        // Extract job name from filename (format: {job_name}_summary_{timestamp}.html)
+                        const filename = report.name;
+                        const jobNameMatch = filename.match(/^(.+?)_summary_/);
+                        const jobName = jobNameMatch ? jobNameMatch[1] : filename.replace('_summary_', ' ').replace('.html', '');
+                        
+                        html += `
+                            <div style="padding: 12px; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                                            <span style="font-size: 18px;">📊</span>
+                                            <strong style="font-size: 14px; color: #333;">${jobName}</strong>
+                                            <span style="background: #4CAF50; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">Summary</span>
+                                        </div>
+                                        <small style="color: #666; font-size: 12px;">${dateStr} • ${(report.size / 1024).toFixed(1)} KB</small>
+                                    </div>
+                                    <a href="${API_BASE}${report.path}" target="_blank" style="padding: 10px 20px; background: #2196F3; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500; white-space: nowrap; margin-left: 15px;">
+                                        📄 Открыть отчет
+                                    </a>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    reportsList.innerHTML = html;
+                } else {
+                    reportsList.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">Отчеты не найдены. Запустите аналитику для генерации отчетов.</p>';
+                }
+            } catch (error) {
+                reportsList.innerHTML = `<p style="color: #d32f2f; text-align: center; padding: 20px;">Ошибка загрузки: ${error.message}</p>`;
+            }
+        }
+        
+        // Initialize with default values
+        window.addEventListener('DOMContentLoaded', function() {
+            const queryField = document.getElementById('ydbQuery');
+            if (queryField) {
+                queryField.value = 'SELECT\n  timestamp as ts,\n  cluster,\n  metric_value,\n  \'metric_name\' as metric_name\nFROM `your_table`\nWHERE timestamp >= CurrentUtcTimestamp() - 30 * Interval("P1D")';
+            }
+            
+            // Set default context field value if exists
+            const contextFieldsContainer = document.getElementById('contextFields');
+            if (contextFieldsContainer) {
+                const firstInput = contextFieldsContainer.querySelector('.array-input:first-child input');
+                if (firstInput) {
+                    firstInput.value = 'cluster';
+                }
+            }
+            
+            // Generate initial config
+            setTimeout(function() {
+                if (typeof generateConfig === 'function') {
+                    generateConfig();
+                }
+            }, 100);
+            
+            // Load reports on startup
+            loadReports();
+        });
+    </script>
+</body>
+</html>
+

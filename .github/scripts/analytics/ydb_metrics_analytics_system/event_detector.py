@@ -405,8 +405,8 @@ class EventDetector:
                     change_absolute = baseline_after - baseline_before
                     change_relative = abs(change_absolute / baseline_before) if baseline_before != 0 else 0
                     
-                    if (abs(change_absolute) >= self.min_absolute_change and 
-                        change_relative >= self.min_relative_change):
+                    if (abs(change_absolute) >= self.min_absolute_change_default and 
+                        change_relative >= self.min_relative_change_default):
                         
                         event = {
                             'event_type': 'threshold_shift',
@@ -455,8 +455,8 @@ class EventDetector:
             
             # Check if change is significant (use stricter thresholds for threshold_shift)
             # Threshold shift should be more significant than regular degradation/improvement
-            min_abs_for_shift = self.min_absolute_change * 1.5  # 50% more strict
-            min_rel_for_shift = self.min_relative_change * 1.5  # 50% more strict
+            min_abs_for_shift = self.min_absolute_change_default * 1.5  # 50% more strict
+            min_rel_for_shift = self.min_relative_change_default * 1.5  # 50% more strict
             
             if (abs(change_absolute) >= min_abs_for_shift and 
                 change_relative >= min_rel_for_shift):

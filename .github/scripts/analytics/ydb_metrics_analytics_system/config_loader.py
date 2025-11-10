@@ -16,6 +16,8 @@ class ConfigLoader:
     
     REQUIRED_SECTIONS = ['job', 'data_source', 'context_fields', 'metric_fields', 
                         'timestamp_field', 'analytics', 'events', 'thresholds', 'output']
+    # Optional sections
+    OPTIONAL_SECTIONS = ['context_tracking', 'metric_direction', 'runtime']
     
     REQUIRED_JOB_FIELDS = ['name']
     REQUIRED_DATA_SOURCE_FIELDS = ['ydb']
@@ -107,6 +109,14 @@ class ConfigLoader:
         # Validate runtime section if present
         if 'runtime' in self.config:
             self._validate_runtime()
+        
+        # Validate context_tracking section if present
+        if 'context_tracking' in self.config:
+            self._validate_context_tracking()
+        
+        # Validate metric_direction section if present
+        if 'metric_direction' in self.config:
+            self._validate_metric_direction()
     
     def _validate_job(self):
         """Validate job section"""
@@ -260,6 +270,70 @@ class ConfigLoader:
             max_runtime = runtime['max_runtime_minutes']
             if not isinstance(max_runtime, (int, float)) or max_runtime <= 0:
                 raise ConfigError("runtime.max_runtime_minutes must be a positive number")
+    
+    def _validate_context_tracking(self):
+        """Validate context_tracking section"""
+        context_tracking = self.config['context_tracking']
+        
+        if 'track_new_contexts' in context_tracking:
+            if not isinstance(context_tracking['track_new_contexts'], bool):
+                raise ConfigError("context_tracking.track_new_contexts must be a boolean")
+        
+        if 'track_disappeared_contexts' in context_tracking:
+            if not isinstance(context_tracking['track_disappeared_contexts'], bool):
+                raise ConfigError("context_tracking.track_disappeared_contexts must be a boolean")
+        
+        if 'context_change_rules' in context_tracking:
+            rules = context_tracking['context_change_rules']
+            
+            # Validate new_context_metrics
+            if 'new_context_metrics' in rules:
+                for metric_name, rule_config in rules['new_context_metrics'].items():
+                    if not isinstance(rule_config, dict):
+                        raise ConfigError(f"context_tracking.context_change_rules.new_context_metrics.{metric_name} must be a dictionary")
+                    
+                    if 'event_type' in rule_config:
+                        if rule_config['event_type'] not in self.VALID_EVENT_TYPES:
+                            raise ConfigError(f"Invalid event_type in new_context_metrics.{metric_name}: {rule_config['event_type']}")
+            
+            # Validate disappeared_context_metrics
+            if 'disappeared_context_metrics' in rules:
+                for metric_name, rule_config in rules['disappeared_context_metrics'].items():
+                    if not isinstance(rule_config, dict):
+                        raise ConfigError(f"context_tracking.context_change_rules.disappeared_context_metrics.{metric_name} must be a dictionary")
+                    
+                    if 'event_type' in rule_config:
+                        if rule_config['event_type'] not in self.VALID_EVENT_TYPES:
+                            raise ConfigError(f"Invalid event_type in disappeared_context_metrics.{metric_name}: {rule_config['event_type']}")
+                    
+                    # Validate absence rules
+                    if 'min_absence_points' in rule_config:
+                        if not isinstance(rule_config['min_absence_points'], int) or rule_config['min_absence_points'] < 1:
+                            raise ConfigError(f"context_tracking.context_change_rules.disappeared_context_metrics.{metric_name}.min_absence_points must be a positive integer")
+                    
+                    if 'min_absence_duration_minutes' in rule_config:
+                        if not isinstance(rule_config['min_absence_duration_minutes'], (int, float)) or rule_config['min_absence_duration_minutes'] < 0:
+                            raise ConfigError(f"context_tracking.context_change_rules.disappeared_context_metrics.{metric_name}.min_absence_duration_minutes must be a non-negative number")
+                    
+                    if 'absence_type' in rule_config:
+                        if rule_config['absence_type'] not in ['consecutive', 'total']:
+                            raise ConfigError(f"context_tracking.context_change_rules.disappeared_context_metrics.{metric_name}.absence_type must be 'consecutive' or 'total'")
+                    
+                    if 'min_historical_points' in rule_config:
+                        if not isinstance(rule_config['min_historical_points'], int) or rule_config['min_historical_points'] < 1:
+                            raise ConfigError(f"context_tracking.context_change_rules.disappeared_context_metrics.{metric_name}.min_historical_points must be a positive integer")
+    
+    def _validate_metric_direction(self):
+        """Validate metric_direction section"""
+        metric_direction = self.config['metric_direction']
+        
+        if 'default' in metric_direction:
+            if metric_direction['default'] not in ['negative', 'positive']:
+                raise ConfigError("metric_direction.default must be 'negative' or 'positive'")
+        
+        for metric_name, direction in metric_direction.items():
+            if metric_name != 'default' and direction not in ['negative', 'positive']:
+                raise ConfigError(f"metric_direction.{metric_name} must be 'negative' or 'positive'")
     
     def get_config(self) -> Dict[str, Any]:
         """Get validated configuration"""

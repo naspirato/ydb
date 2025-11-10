@@ -23,6 +23,7 @@ from event_detector import EventDetector
 from persistence import Persistence
 from visualization import EventVisualizer
 from summary_report import SummaryReportGenerator
+from context_tracker import ContextTracker
 
 
 class AnalyticsJob:
@@ -62,6 +63,7 @@ class AnalyticsJob:
         self.preprocessing = Preprocessing(self.config)
         self.baseline_calculator = BaselineCalculator(self.config)
         self.event_detector = EventDetector(self.config)
+        self.context_tracker = ContextTracker(self.config, self.preprocessing)
         
         # Initialize persistence only if not dry_run
         if not self.dry_run:
@@ -115,39 +117,19 @@ class AnalyticsJob:
             
             print(f"Grouped into {len(grouped_data)} metric×context combinations")
             
-            # For error detection: detect appearance/disappearance of error types
-            # Compare contexts before and after event_deepness window
-            new_error_contexts = set()
-            disappeared_error_contexts = set()
-            if self.event_deepness and event_start_ts and event_end_ts:
-                timestamp_field = self.config.get('timestamp_field')
-                if timestamp_field:
-                    # Get contexts before event window (historical)
-                    df_before = df_cleaned[df_cleaned[timestamp_field] < event_start_ts]
-                    contexts_before = set()
-                    if not df_before.empty:
-                        grouped_before = self.preprocessing.group_by_context(df_before)
-                        contexts_before = set(grouped_before.keys())
-                    
-                    # Get contexts in event window
-                    df_in_window = df_cleaned[
-                        (df_cleaned[timestamp_field] >= event_start_ts) & 
-                        (df_cleaned[timestamp_field] <= event_end_ts)
-                    ]
-                    contexts_in_window = set()
-                    if not df_in_window.empty:
-                        grouped_in_window = self.preprocessing.group_by_context(df_in_window)
-                        contexts_in_window = set(grouped_in_window.keys())
-                    
-                    # Detect new error types (appeared in window but not before)
-                    new_error_contexts = contexts_in_window - contexts_before
-                    # Detect disappeared error types (were before but not in window)
-                    disappeared_error_contexts = contexts_before - contexts_in_window
-                    
-                    if new_error_contexts:
-                        print(f"  ⚠ Detected {len(new_error_contexts)} new error types (appeared in event window)")
-                    if disappeared_error_contexts:
-                        print(f"  ✓ Detected {len(disappeared_error_contexts)} disappeared error types (gone in event window)")
+            # Detect context changes using context_tracker
+            context_changes = self.context_tracker.detect_context_changes(
+                df_cleaned, event_start_ts, event_end_ts
+            )
+            new_error_contexts = context_changes.get('new', set())
+            disappeared_error_contexts = context_changes.get('disappeared', set())
+            new_with_rules = context_changes.get('new_with_rules', {})
+            disappeared_with_rules = context_changes.get('disappeared_with_rules', {})
+            
+            if new_error_contexts:
+                print(f"  ⚠ Detected {len(new_error_contexts)} new context types (appeared in event window)")
+            if disappeared_error_contexts:
+                print(f"  ✓ Detected {len(disappeared_error_contexts)} disappeared context types (gone in event window)")
             
             # Step 3: Process each group
             print("\nStep 3: Computing baselines and detecting events...")
@@ -171,38 +153,43 @@ class AnalyticsJob:
                 context_hash = self.preprocessing.compute_context_hash(context_values)
                 context_json = self._context_to_json(context_values)
                 
-                # Check if this is a new error type (appeared in event window)
-                is_new_error = group_key in new_error_contexts
-                is_disappeared_error = group_key in disappeared_error_contexts
+                # Check if this is a new or disappeared context
+                is_new_context = group_key in new_error_contexts
+                is_disappeared_context = group_key in disappeared_error_contexts
+                new_rule = new_with_rules.get(group_key)
+                disappeared_rule = disappeared_with_rules.get(group_key)
                 
                 if not has_enough_data:
-                    # For error detection: if it's a new error type, create event even without baseline
-                    if is_new_error and metric_name == 'error_count':
-                        # Create "new error appeared" event
+                    # For new contexts: create event even without baseline if rule exists
+                    if is_new_context and new_rule:
                         timestamp_field = self.config.get('timestamp_field')
                         if timestamp_field in group_df.columns:
-                            first_error_time = group_df[timestamp_field].min()
-                            error_count = len(group_df)
+                            first_time = group_df[timestamp_field].min()
+                            metric_value_field = self.config.get('metric_fields', [None, None])[1]
+                            if metric_value_field and metric_value_field in group_df.columns:
+                                value = float(group_df[metric_value_field].sum() if 'count' in metric_name.lower() else group_df[metric_value_field].mean())
+                            else:
+                                value = float(len(group_df))
                             
                             event_data = {
-                                'timestamp': first_error_time,
+                                'timestamp': first_time,
                                 'metric_name': metric_name,
                                 'context_hash': context_hash,
                                 'context_json': context_json,
-                                'event_type': 'degradation_start',  # New error = degradation
-                                'event_start_time': first_error_time,
-                                'event_end_time': first_error_time,
-                                'severity': 'high',
-                                'baseline_before': 0.0,  # No baseline (new error)
+                                'event_type': new_rule.get('event_type', 'degradation_start'),
+                                'event_start_time': first_time,
+                                'event_end_time': first_time,
+                                'severity': new_rule.get('severity', 'high'),
+                                'baseline_before': new_rule.get('baseline_before', 0.0),
                                 'baseline_after': 0.0,
                                 'threshold_before': None,
                                 'threshold_after': None,
-                                'change_absolute': float(error_count),
-                                'change_relative': float('inf') if error_count > 0 else 0.0,  # Infinite relative change (0 -> N)
-                                'current_value': float(error_count),
+                                'change_absolute': value,
+                                'change_relative': float('inf') if value > 0 else 0.0,
+                                'current_value': value,
                             }
                             all_events.append(event_data)
-                            print(f"  ⚠ New error type detected: {context_json[:80]}... ({error_count} errors)")
+                            print(f"  ⚠ New context detected: {context_json[:80]}... (value: {value})")
                         continue
                     else:
                         print(f"Skipping group {group_key}: insufficient data (need at least {min_points} points, got {len(group_df)})")
@@ -226,32 +213,33 @@ class AnalyticsJob:
                         mask = (series_all.index >= event_start_ts) & (series_all.index <= event_end_ts)
                         series_for_events = series_all[mask]
                         if len(series_for_events) == 0:
-                            # No data in event window - check if error disappeared
-                            if is_disappeared_error and metric_name == 'error_count':
-                                # Get last error time before window
+                            # No data in event window - check if context disappeared
+                            if is_disappeared_context and disappeared_rule:
+                                # Get last occurrence time before window
                                 df_before_window = group_df[group_df[timestamp_field] < event_start_ts]
                                 if not df_before_window.empty:
-                                    last_error_time = df_before_window[timestamp_field].max()
+                                    last_time = df_before_window[timestamp_field].max()
+                                    last_value = float(series_all.iloc[-1]) if not series_all.empty else 0.0
                                     
                                     event_data = {
                                         'timestamp': event_start_ts,
                                         'metric_name': metric_name,
                                         'context_hash': context_hash,
                                         'context_json': context_json,
-                                        'event_type': 'improvement_start',  # Error disappeared = improvement
+                                        'event_type': disappeared_rule.get('event_type', 'improvement_start'),
                                         'event_start_time': event_start_ts,
                                         'event_end_time': event_end_ts,
-                                        'severity': 'medium',
-                                        'baseline_before': float(series_all.iloc[-1]) if not series_all.empty else 0.0,
-                                        'baseline_after': 0.0,
+                                        'severity': disappeared_rule.get('severity', 'medium'),
+                                        'baseline_before': last_value,
+                                        'baseline_after': disappeared_rule.get('baseline_after', 0.0),
                                         'threshold_before': baseline_result.get('lower_threshold'),
                                         'threshold_after': None,
-                                        'change_absolute': -float(series_all.iloc[-1]) if not series_all.empty else 0.0,
-                                        'change_relative': 1.0 if not series_all.empty and series_all.iloc[-1] > 0 else 0.0,  # 100% decrease
+                                        'change_absolute': -last_value,
+                                        'change_relative': 1.0 if last_value > 0 else 0.0,  # 100% decrease
                                         'current_value': 0.0,
                                     }
                                     all_events.append(event_data)
-                                    print(f"  ✓ Error type disappeared: {context_json[:80]}... (last seen: {last_error_time})")
+                                    print(f"  ✓ Context disappeared: {context_json[:80]}... (last seen: {last_time})")
                             continue
                 
                 # Prepare threshold data for saving
@@ -273,35 +261,35 @@ class AnalyticsJob:
                 # Detect events only in the filtered window (pass metric_name for direction detection)
                 events = self.event_detector.detect_events(series_for_events, baseline_result, metric_name=metric_name)
                 
-                # For new error types: if no events detected but it's a new error, create event anyway
-                # This ensures we always detect appearance of new error types
-                if is_new_error and metric_name == 'error_count' and len(events) == 0:
-                    # New error type appeared but no event detected by normal logic
-                    # Create event to mark appearance of new error type
+                # For new contexts: if no events detected but it's a new context, create event anyway
+                # This ensures we always detect appearance of new contexts
+                if is_new_context and new_rule and len(events) == 0:
+                    # New context appeared but no event detected by normal logic
+                    # Create event to mark appearance of new context
                     if not series_for_events.empty:
-                        first_error_time = series_for_events.index[0]
+                        first_time = series_for_events.index[0]
                         # For aggregated data, sum all values; for raw data, use first value
-                        error_count = float(series_for_events.sum())
+                        value = float(series_for_events.sum() if 'count' in metric_name.lower() else series_for_events.mean())
                         
                         event_data = {
-                            'timestamp': first_error_time,
+                            'timestamp': first_time,
                             'metric_name': metric_name,
                             'context_hash': context_hash,
                             'context_json': context_json,
-                            'event_type': 'degradation_start',  # New error = degradation
-                            'event_start_time': first_error_time,
-                            'event_end_time': series_for_events.index[-1] if len(series_for_events) > 1 else first_error_time,
-                            'severity': 'high',
-                            'baseline_before': 0.0,  # No baseline before (new error)
+                            'event_type': new_rule.get('event_type', 'degradation_start'),
+                            'event_start_time': first_time,
+                            'event_end_time': series_for_events.index[-1] if len(series_for_events) > 1 else first_time,
+                            'severity': new_rule.get('severity', 'high'),
+                            'baseline_before': new_rule.get('baseline_before', 0.0),
                             'baseline_after': float(baseline_result.get('baseline_value', 0.0)),
                             'threshold_before': None,
                             'threshold_after': baseline_result.get('upper_threshold'),
-                            'change_absolute': error_count,
-                            'change_relative': float('inf') if error_count > 0 else 0.0,  # Infinite relative change (0 -> N)
-                            'current_value': error_count,
+                            'change_absolute': value,
+                            'change_relative': float('inf') if value > 0 else 0.0,
+                            'current_value': value,
                         }
                         events.append(event_data)
-                        print(f"  ⚠ New error type detected (with baseline): {context_json[:80]}... ({error_count} errors)")
+                        print(f"  ⚠ New context detected (with baseline): {context_json[:80]}... (value: {value})")
                 
                 # Debug logging for event detection
                 if self.config.get('output', {}).get('log_to_console', False):
