@@ -80,7 +80,7 @@ COPILOT_WAIT_MINUTES = 15
 # If Copilot finished but didn't reply, we re-ask once; if still no reply after that, set this label
 AUTODEBUG_BROKEN_LABEL = "autodebug_broken"
 # Max concurrent autodebug issues/PRs: don't create new issues if this many open; only work in this many PRs at a time in --check-issues
-MAX_CONCURRENT_AUTODEBUG = 3
+MAX_CONCURRENT_AUTODEBUG = 15
 # Comment author logins that count as "Copilot replied" (PR comments)
 COPILOT_COMMENT_AUTHORS = frozenset({"copilot-swe-agent[bot]", "github-copilot[bot]", "Copilot"})
 
