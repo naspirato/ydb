@@ -6,7 +6,6 @@ import re
 import ydb
 import logging
 import sys
-from pathlib import Path
 from collections import defaultdict
 
 # Add the parent directory to the path to import update_mute_issues
@@ -23,6 +22,9 @@ from update_mute_issues import (
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 from ydb_wrapper import YDBWrapper
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import DEFAULT_BUILD_TYPE, make_profile_id
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -99,25 +101,13 @@ def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_
     return result
 
 
-def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
-    # Get today's date.
-    today = datetime.date.today()
-    start_date = today - datetime.timedelta(days=days_window-1)
-    end_date = today
-    
+def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=7, ydb_wrapper=None):
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
-    logging.info(f"Date range: {start_date} to {end_date}")
     
-    try:
-        with YDBWrapper() as ydb_wrapper:
-            # Check credentials
-            if not ydb_wrapper.check_credentials():
-                return []
-            
-            # Get table path from config
-            tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
-            
-            query_string = f'''
+    def _run(w):
+        tests_monitor_table = w.get_table_path("tests_monitor")
+        
+        query_string = f'''
     SELECT 
         test_name, 
         suite_folder, 
@@ -136,34 +126,35 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
         days_in_state,
         is_test_chunk
     FROM `{tests_monitor_table}`
-    WHERE date_window >= CurrentUtcDate() - 7*Interval("P1D")
+    WHERE date_window >= CurrentUtcDate() - {days_window}*Interval("P1D")
         AND branch = '{branch}' 
         AND build_type = '{build_type}'
     '''
-            
-            logging.info(f"SQL Query:\n{query_string}")
-            
-            logging.info("Successfully connected to YDB")
-            
-            logging.info("Starting to fetch results...")
-            results = ydb_wrapper.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
-            
-            # Filter out suite-level entries (aggregates, not individual tests)
-            # Similar to generate-summary.py which skips results with suite=True
-            # Suite tests have test_name like "unittest", "py3test", "gtest"
-            suite_test_names = {'unittest', 'py3test', 'gtest'}
-            filtered_results = [
-                result for result in results
-                if result.get('test_name') and result.get('test_name') not in suite_test_names
-            ]
-            
-            logging.info(f"Query completed successfully. Total rows returned: {len(results)}, after filtering suite tests: {len(filtered_results)}")
-            return filtered_results
         
+        logging.info(f"SQL Query:\n{query_string}")
+        
+        results = w.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
+        
+        suite_test_names = {'unittest', 'py3test', 'gtest'}
+        filtered_results = [
+            result for result in results
+            if result.get('test_name') and result.get('test_name') not in suite_test_names
+        ]
+        
+        logging.info(f"Query completed. Total rows: {len(results)}, after filtering: {len(filtered_results)}")
+        return filtered_results
+
+    try:
+        if ydb_wrapper:
+            return _run(ydb_wrapper)
+        with YDBWrapper() as w:
+            if not w.check_credentials():
+                return []
+            return _run(w)
+
     except Exception as e:
         logging.error(f"Error executing query: {e}")
         logging.error(f"Query parameters: branch='{branch}', build_type='{build_type}', days_window={days_window}")
-        logging.error(f"Date range: {start_date} to {end_date}")
         raise
 
 
@@ -730,7 +721,7 @@ def read_tests_from_file(file_path):
     return result
 
 
-def create_mute_issues(all_tests, file_path, close_issues=True):
+def create_mute_issues(all_tests, file_path, close_issues=True, branch='main'):
     tests_from_file = read_tests_from_file(file_path)
     muted_tests_in_issues = get_muted_tests_from_issues()
     prepared_tests_by_suite = {}
@@ -745,36 +736,60 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
     if close_issues:
         closed_issues, partially_unmuted_issues = close_unmuted_issues(muted_tests_set)
     
-    # First, collect all tests into temporary dictionary
-    for test in all_tests:
-        for test_from_file in tests_from_file:
-            if test['full_name'] == test_from_file['full_name']:
-                if test['full_name'] in muted_tests_in_issues:
-                    logging.info(
-                        f"test {test['full_name']} already have issue, {muted_tests_in_issues[test['full_name']][0]['url']}"
-                    )
-                else:
-                    key = f"{test_from_file['testsuite']}:{test['owner']}"
-                    if not temp_tests_by_suite.get(key):
-                        temp_tests_by_suite[key] = []
-                    temp_tests_by_suite[key].append(
-                        {
-                            'mute_string': f"{ test.get('suite_folder')} {test.get('test_name')}",
-                            'test_name': test.get('test_name'),
-                            'suite_folder': test.get('suite_folder'),
-                            'full_name': test.get('full_name'),
-                            'success_rate': test.get('success_rate'),
-                            'days_in_state': test.get('days_in_state'),
-                            'date_window': test.get('date_window', 'N/A'),
-                            'owner': test.get('owner'),
-                            'state': test.get('state'),
-                            'summary': test.get('summary'),
-                            'fail_count': test.get('fail_count'),
-                            'pass_count': test.get('pass_count'),
-                            'branch': test.get('branch'),
-                            'build_type': test.get('build_type', 'relwithdebinfo'),
-                        }
-                    )
+    monitor_by_name = {}
+    for t in sorted(all_tests, key=lambda x: x.get('date_window') or 0):
+        if t.get('full_name'):
+            monitor_by_name[t['full_name']] = t
+
+    for test_from_file in tests_from_file:
+        full_name = test_from_file['full_name']
+        if full_name in muted_tests_in_issues:
+            logging.info(
+                f"test {full_name} already have issue, {muted_tests_in_issues[full_name][0]['url']}"
+            )
+            continue
+
+        monitor = monitor_by_name.get(full_name)
+        if monitor:
+            entry = {
+                'mute_string': f"{monitor.get('suite_folder')} {monitor.get('test_name')}",
+                'test_name': monitor.get('test_name'),
+                'suite_folder': monitor.get('suite_folder'),
+                'full_name': full_name,
+                'success_rate': monitor.get('success_rate'),
+                'days_in_state': monitor.get('days_in_state'),
+                'date_window': monitor.get('date_window', 'N/A'),
+                'owner': monitor.get('owner'),
+                'state': monitor.get('state'),
+                'summary': monitor.get('summary'),
+                'fail_count': monitor.get('fail_count'),
+                'pass_count': monitor.get('pass_count'),
+                'branch': monitor.get('branch'),
+                'build_type': monitor.get('build_type', DEFAULT_BUILD_TYPE),
+            }
+        else:
+            entry = {
+                'mute_string': f"{test_from_file['testsuite']} {test_from_file['testcase']}",
+                'test_name': test_from_file['testcase'],
+                'suite_folder': test_from_file['testsuite'],
+                'full_name': full_name,
+                'success_rate': 0,
+                'days_in_state': 0,
+                'date_window': 'N/A',
+                'owner': 'Unknown',
+                'state': 'Muted',
+                'summary': 'added manually, no monitor data',
+                'fail_count': 0,
+                'pass_count': 0,
+                'branch': branch,
+                'build_type': DEFAULT_BUILD_TYPE,
+            }
+            logging.info(f"test {full_name} not in monitor, using fallback data")
+
+        key = f"{test_from_file['testsuite']}:{entry['owner']}"
+        if not temp_tests_by_suite.get(key):
+            temp_tests_by_suite[key] = []
+        temp_tests_by_suite[key].append(entry)
     
     # Split groups larger than 40 tests
     for key, tests in temp_tests_by_suite.items():
@@ -815,7 +830,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
                     'github_issue_title': title,
                     'owner_team': owner_value,
                     'branch': first_test.get('branch', 'main'),
-                    'build_type': first_test.get('build_type', 'relwithdebinfo'),
+                    'build_type': first_test.get('build_type', DEFAULT_BUILD_TYPE),
                 })
 
     # Sort results by owner
@@ -942,7 +957,7 @@ def enqueue_to_digest_queue(ydb_wrapper, queue_items):
     for item in queue_items:
         branch = item['branch']
         build_type = item['build_type']
-        profile_id = f"{branch}-{build_type}"
+        profile_id = make_profile_id(branch, build_type)
         rows.append({
             'profile_id':          profile_id,
             'github_issue_number': item['github_issue_number'],
@@ -991,10 +1006,7 @@ def mute_worker(args):
         mute_check.load(input_muted_ya_path)
         logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
-        logging.info("Executing single query for 7 days window...")
-        
-        # Single query for maximum window (7 days).
-        all_data = execute_query(args.branch, days_window=7)
+        all_data = execute_query(args.branch, days_window=7, ydb_wrapper=ydb_wrapper)
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.
@@ -1014,10 +1026,8 @@ def mute_worker(args):
             file_path = args.file_path
             logging.info(f"Creating issues from file: {file_path}")
 
-            # Reuse already aggregated data for issue creation.
-            queue_items = create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
+            queue_items = create_mute_issues(all_data, file_path, close_issues=args.close_issues, branch=args.branch)
 
-            # Enqueue new issues for the Telegram digest (best-effort: don't fail the run).
             try:
                 enqueue_to_digest_queue(ydb_wrapper, queue_items or [])
             except Exception as exc:
@@ -1038,13 +1048,13 @@ if __name__ == "__main__":
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',
-        help='create issues by muted_ya like files',
+        help='sync issues with muted_ya file: create missing, close orphaned, enqueue to digest',
     )
     create_issues_parser.add_argument(
-        '--file_path', default=f'{repo_path}/mute_update/to_mute.txt', required=False, help='file path'
+        '--file_path', default=muted_ya_path, required=False, help='Path to muted_ya.txt'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
-    create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')
+    create_issues_parser.add_argument('--close_issues', action=argparse.BooleanOptionalAction, default=True, help='Close issues when all tests are unmuted (default: True)')
 
     args = parser.parse_args()
 

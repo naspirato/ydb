@@ -39,9 +39,27 @@ SELECT
     gim.github_issue_url as github_issue_url,
     gim.github_issue_number as github_issue_number,
     gim.github_issue_state as github_issue_state,
-    gim.github_issue_created_at as github_issue_created_at
+    gim.github_issue_created_at as github_issue_created_at,
+    gim.owner_override as owner_override
 FROM `test_results/analytics/tests_monitor` AS tm
-LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim
+LEFT JOIN (
+    SELECT
+        full_name,
+        branch,
+        build_type,
+        github_issue_url,
+        github_issue_number,
+        github_issue_state,
+        github_issue_created_at,
+        owner_override
+    FROM (
+        SELECT
+            g.*,
+            ROW_NUMBER() OVER (PARTITION BY g.full_name, g.branch, g.build_type ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC) AS rn
+        FROM `test_results/analytics/github_issue_mapping` AS g
+    )
+    WHERE rn = 1
+) AS gim
     ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
     AND tm.build_type = gim.build_type
