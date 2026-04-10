@@ -1065,6 +1065,8 @@ def mute_worker(args):
 
         logging.info(f"Starting mute worker with mode: {args.mode}")
         logging.info(f"Branch: {args.branch}")
+        build_type = getattr(args, 'build_type', 'relwithdebinfo')
+        logging.info(f"build_type: {build_type}")
         
         # Use provided muted_ya file or fallback to default.
         input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
@@ -1077,7 +1079,7 @@ def mute_worker(args):
         logging.info("Executing single query for 7 days window...")
         
         # Single query for maximum window (7 days).
-        all_data = execute_query(args.branch, days_window=7)
+        all_data = execute_query(args.branch, build_type=build_type, days_window=7)
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.
@@ -1102,13 +1104,13 @@ def mute_worker(args):
             create_unmute_overrides_table(ydb_wrapper, overrides_table_path)
 
             synced_count = sync_fast_unmute_overrides(
-                ydb_wrapper, overrides_table_path, args.branch, 'relwithdebinfo'
+                ydb_wrapper, overrides_table_path, args.branch, build_type
             )
             if synced_count:
                 logging.info(f"Synced {synced_count} fast-unmute override rows")
 
             active_overrides = load_active_unmute_overrides(
-                ydb_wrapper, overrides_table_path, args.branch, 'relwithdebinfo'
+                ydb_wrapper, overrides_table_path, args.branch, build_type
             )
             logging.info(f"Loaded {len(active_overrides)} active fast-unmute overrides")
 
@@ -1134,11 +1136,26 @@ def mute_worker(args):
                 if full_name in active_overrides:
                     consumed.add(full_name)
 
+            observed_overrides = set(active_overrides).intersection(
+                {test.get('full_name') for test in aggregated_for_fast_unmute}
+            )
+            override_denominator = len(observed_overrides) or len(active_overrides)
+            override_hit_rate = (
+                (len(consumed) / override_denominator) * 100 if override_denominator else 0.0
+            )
+            logging.info(
+                "FAST_UNMUTE_OVERRIDE_METRICS: "
+                f"active={len(active_overrides)}, "
+                f"observed={len(observed_overrides)}, "
+                f"consumed={len(consumed)}, "
+                f"hit_rate={override_hit_rate:.1f}%"
+            )
+
             consumed_count = consume_unmute_overrides(
                 ydb_wrapper,
                 overrides_table_path,
                 args.branch,
-                'relwithdebinfo',
+                build_type,
                 consumed,
             )
             if consumed_count:
@@ -1162,6 +1179,7 @@ if __name__ == "__main__":
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
+    update_muted_ya_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for monitor query')
     update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
 
     create_issues_parser = subparsers.add_parser(
@@ -1172,6 +1190,7 @@ if __name__ == "__main__":
         '--file_path', default=f'{repo_path}/mute_update/to_mute.txt', required=False, help='file path'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
+    create_issues_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for monitor query')
     create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')
 
     args = parser.parse_args()

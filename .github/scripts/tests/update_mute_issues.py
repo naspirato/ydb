@@ -28,6 +28,11 @@ GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
 FAST_UNMUTE_LABEL = "fast-unmute-1d"
 UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
 UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
+KNOWN_BOT_LOGINS = {
+    "ydbot",
+    "github-actions[bot]",
+    "dependabot[bot]",
+}
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -279,6 +284,22 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
                   state
                   body
                   createdAt
+                  closedAt
+                  timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
+                    nodes {
+                      ... on ClosedEvent {
+                        actor {
+                          __typename
+                          ... on User {
+                            login
+                          }
+                          ... on Bot {
+                            login
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
               fieldValues(first: 20) {
@@ -355,6 +376,25 @@ def _extract_issue_number(issue_url):
         return None
     match = re.search(r"/issues/(\d+)$", issue_url)
     return int(match.group(1)) if match else None
+
+
+def _extract_close_actor(content):
+    timeline_nodes = (content or {}).get('timelineItems', {}).get('nodes', [])
+    if not timeline_nodes:
+        return None, None
+    actor = timeline_nodes[0].get('actor') or {}
+    return actor.get('login'), actor.get('__typename')
+
+
+def _is_bot_actor(login, actor_type):
+    if actor_type == "Bot":
+        return True
+    if not login:
+        return True
+    login_l = login.lower()
+    if login_l in KNOWN_BOT_LOGINS:
+        return True
+    return login_l.endswith("[bot]")
 
 
 def _extract_unmuted_tests_from_comment(comment_body):
@@ -847,7 +887,12 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
     return closed_issues, partially_unmuted_issues
 
 
-def collect_fast_unmute_overrides(branch='main', build_type='relwithdebinfo', label_name=FAST_UNMUTE_LABEL):
+def collect_fast_unmute_overrides(
+    branch='main',
+    build_type='relwithdebinfo',
+    label_name=FAST_UNMUTE_LABEL,
+    require_non_bot_close_actor=True,
+):
     """Collect per-test fast-unmute overrides from closed issues with explicit label.
 
     For each closed issue with `label_name`, compute:
@@ -857,8 +902,15 @@ def collect_fast_unmute_overrides(branch='main', build_type='relwithdebinfo', la
     """
     overrides = []
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
+    stats = {
+        'issues_total': 0,
+        'issues_with_label': 0,
+        'issues_with_non_bot_close': 0,
+        'overrides_total': 0,
+    }
 
     for issue in issues:
+        stats['issues_total'] += 1
         content = issue.get('content')
         if not content or content.get('state') != 'CLOSED':
             continue
@@ -873,6 +925,12 @@ def collect_fast_unmute_overrides(branch='main', build_type='relwithdebinfo', la
 
         if label_name not in issue_labels:
             continue
+        stats['issues_with_label'] += 1
+
+        close_actor_login, close_actor_type = _extract_close_actor(content)
+        if require_non_bot_close_actor and _is_bot_actor(close_actor_login, close_actor_type):
+            continue
+        stats['issues_with_non_bot_close'] += 1
 
         parsed = parse_body(content.get('body', ''))
         tests = parsed[0] if isinstance(parsed, tuple) else []
@@ -898,7 +956,15 @@ def collect_fast_unmute_overrides(branch='main', build_type='relwithdebinfo', la
                     'issue_number': issue_number,
                 }
             )
+            stats['overrides_total'] += 1
 
+    print(
+        "FAST_UNMUTE_OVERRIDE_COLLECT: "
+        f"issues_total={stats['issues_total']}, "
+        f"issues_with_label={stats['issues_with_label']}, "
+        f"issues_with_non_bot_close={stats['issues_with_non_bot_close']}, "
+        f"overrides_total={stats['overrides_total']}"
+    )
     return overrides
 
 
