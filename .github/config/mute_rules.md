@@ -65,6 +65,12 @@ The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
 - Get confirmation from the test owner.
 - After merging, move the issue to Unmuted status, link the PR and issue.
 
+### Fast unmute (1-day window) for manually fixed tests
+
+- Attach at least one related PR in the issue **Development** section.
+- Close the mute issue manually (not by bot).
+- Fast-unmute is activated automatically from this signal; no dedicated label is required.
+
 ## 📊 Dashboard for analyzing muted and flaky tests
 
 For analyzing test status, finding mute/unmute candidates, and tracking stability, use the interactive dashboard:

@@ -24,6 +24,14 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 # project
 
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
+FAST_UNMUTE_AUTO_COMMENT_MARKER = "<!--fast-unmute-auto:v1-->"
+UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
+UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
+KNOWN_BOT_LOGINS = {
+    "ydbot",
+    "github-actions[bot]",
+    "dependabot[bot]",
+}
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -62,7 +70,9 @@ def handle_github_errors(response):
                 raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
 
 def run_query(query, variables=None):
-    GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not GITHUB_TOKEN:
+        raise Exception("Neither GITHUB_TOKEN nor GH_TOKEN is set")
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
     request = requests.post(
         'https://api.github.com/graphql', json={'query': query, 'variables': variables}, headers=HEADERS
@@ -267,11 +277,60 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
               content {
                 ... on Issue {
                   id
+                  number
                   title
                   url
                   state
                   body
                   createdAt
+                  closedAt
+                  timelineItems(
+                    last: 50,
+                    itemTypes: [CLOSED_EVENT, CONNECTED_EVENT, CROSS_REFERENCED_EVENT]
+                  ) {
+                    nodes {
+                      __typename
+                      ... on ClosedEvent {
+                        actor {
+                          __typename
+                          ... on User {
+                            login
+                          }
+                          ... on Bot {
+                            login
+                          }
+                        }
+                      }
+                      ... on ConnectedEvent {
+                        subject {
+                          __typename
+                          ... on PullRequest {
+                            number
+                            url
+                            state
+                            isDraft
+                            repository {
+                              nameWithOwner
+                            }
+                          }
+                        }
+                      }
+                      ... on CrossReferencedEvent {
+                        source {
+                          __typename
+                          ... on PullRequest {
+                            number
+                            url
+                            state
+                            isDraft
+                            repository {
+                              nameWithOwner
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
               fieldValues(first: 20) {
@@ -343,6 +402,220 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
     return issues
 
 
+def _extract_close_actor(content):
+    timeline_nodes = (content or {}).get('timelineItems', {}).get('nodes', [])
+    for node in reversed(timeline_nodes):
+        if node.get('__typename') != 'ClosedEvent':
+            continue
+        actor = node.get('actor') or {}
+        return actor.get('login'), actor.get('__typename')
+    return None, None
+
+
+def _is_bot_actor(login, actor_type):
+    if actor_type == 'Bot':
+        return True
+    if not login:
+        return True
+    login_l = login.lower()
+    if login_l in KNOWN_BOT_LOGINS:
+        return True
+    return login_l.endswith('[bot]')
+
+
+def _extract_unmuted_tests_from_comment(comment_body):
+    if not comment_body:
+        return set()
+
+    if UNMUTE_LIST_START_MARKER in comment_body and UNMUTE_LIST_END_MARKER in comment_body:
+        start_idx = comment_body.find(UNMUTE_LIST_START_MARKER) + len(UNMUTE_LIST_START_MARKER)
+        end_idx = comment_body.find(UNMUTE_LIST_END_MARKER)
+        payload = comment_body[start_idx:end_idx]
+    else:
+        # Backward-compatible fallback for legacy comments without markers.
+        payload = comment_body
+
+    tests = set()
+    for line in payload.split('\n'):
+        line = line.strip()
+        if line.startswith('- Test '):
+            tests.add(line[len('- Test '):].replace(' unmuted', ''))
+    return tests
+
+
+def _collect_issue_unmuted_tests(issue_id):
+    unmuted = set()
+    for comment in get_issue_comments(issue_id):
+        unmuted.update(_extract_unmuted_tests_from_comment(comment))
+    return unmuted
+
+
+def _build_unmute_comment(header, tests):
+    tests_payload = "\n".join(f"- Test {test}" for test in sorted(tests))
+    return (
+        f"{header}\n"
+        f"{UNMUTE_LIST_START_MARKER}\n"
+        f"{tests_payload}\n"
+        f"{UNMUTE_LIST_END_MARKER}"
+    )
+
+
+def _extract_linked_development_pull_requests(content):
+    timeline_nodes = (content or {}).get('timelineItems', {}).get('nodes', [])
+    repo_full_name = f"{ORG_NAME}/{REPO_NAME}".lower()
+    linked_prs = {}
+
+    for node in timeline_nodes:
+        pr = None
+        if node.get('__typename') == 'ConnectedEvent':
+            subject = node.get('subject') or {}
+            if subject.get('__typename') == 'PullRequest':
+                pr = subject
+        elif node.get('__typename') == 'CrossReferencedEvent':
+            source = node.get('source') or {}
+            if source.get('__typename') == 'PullRequest':
+                pr = source
+
+        if not pr:
+            continue
+
+        pr_repo = ((pr.get('repository') or {}).get('nameWithOwner') or '').lower()
+        if pr_repo and pr_repo != repo_full_name:
+            continue
+
+        if pr.get('isDraft'):
+            continue
+
+        if pr.get('state') not in {'OPEN', 'MERGED'}:
+            continue
+
+        number = pr.get('number')
+        if number is None:
+            continue
+        linked_prs[number] = pr
+
+    return [linked_prs[number] for number in sorted(linked_prs)]
+
+
+def _has_fast_unmute_comment(comments):
+    return any(FAST_UNMUTE_AUTO_COMMENT_MARKER in (comment or '') for comment in comments)
+
+
+def _build_fast_unmute_comment(issue_number, closer_login, linked_prs):
+    linked_pr_lines = "\n".join(
+        f"- #{pr.get('number')} ({pr.get('state')}): {pr.get('url')}" for pr in linked_prs
+    )
+    return (
+        f"{FAST_UNMUTE_AUTO_COMMENT_MARKER}\n"
+        f"Fast-unmute flow enabled for issue #{issue_number}.\n\n"
+        "Reason:\n"
+        f"- issue was closed manually by @{closer_login}\n"
+        "- linked PR found in Development context\n\n"
+        "Linked PRs:\n"
+        f"{linked_pr_lines}\n\n"
+        "Result:\n"
+        "- tests from this issue become eligible for 1-day unmute window in mute update flow"
+    )
+
+
+def collect_fast_unmute_overrides(
+    branch='main',
+    build_type='relwithdebinfo',
+    require_non_bot_close_actor=True,
+    require_linked_development_pr=True,
+    add_auto_comment=True,
+):
+    """Collect fast-unmute overrides from closed mute issues.
+
+    Fast path is enabled for an issue only when:
+      - issue is closed manually by a non-bot actor
+      - issue has linked pull request(s) in Development context
+
+    For each eligible issue:
+      T_remaining_before_close = T_all (from issue body) - T_prev_unmuted (from issue comments)
+    """
+    overrides = []
+    issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
+    stats = {
+        'issues_total': 0,
+        'issues_closed': 0,
+        'issues_non_bot_closed': 0,
+        'issues_with_linked_pr': 0,
+        'issues_branch_match': 0,
+        'overrides_total': 0,
+    }
+
+    for issue in issues:
+        stats['issues_total'] += 1
+        content = issue.get('content') or {}
+        if content.get('state') != 'CLOSED':
+            continue
+        stats['issues_closed'] += 1
+
+        body = content.get('body', '')
+        if '<!--mute_list_start-->' not in body or '<!--mute_list_end-->' not in body:
+            continue
+
+        close_actor_login, close_actor_type = _extract_close_actor(content)
+        if require_non_bot_close_actor and _is_bot_actor(close_actor_login, close_actor_type):
+            continue
+        stats['issues_non_bot_closed'] += 1
+
+        linked_prs = _extract_linked_development_pull_requests(content)
+        if require_linked_development_pr and not linked_prs:
+            continue
+        stats['issues_with_linked_pr'] += 1
+
+        tests, branches = parse_body(body)
+        if branch not in branches:
+            continue
+        stats['issues_branch_match'] += 1
+
+        issue_id = content.get('id')
+        if not issue_id:
+            continue
+        all_tests = set(tests)
+        previously_unmuted = _collect_issue_unmuted_tests(issue_id)
+        remaining_tests = sorted(all_tests - previously_unmuted)
+        if not remaining_tests:
+            continue
+
+        issue_number = content.get('number')
+        for test_name in remaining_tests:
+            overrides.append(
+                {
+                    'full_name': test_name,
+                    'branch': branch,
+                    'build_type': build_type,
+                    'window_days': 1,
+                    'reason': 'issue_closed_by_human_with_linked_pr',
+                    'issue_number': issue_number,
+                }
+            )
+            stats['overrides_total'] += 1
+
+        if add_auto_comment and issue_id and linked_prs:
+            comments = get_issue_comments(issue_id)
+            if not _has_fast_unmute_comment(comments):
+                comment = _build_fast_unmute_comment(
+                    issue_number=issue_number,
+                    closer_login=close_actor_login or 'unknown',
+                    linked_prs=linked_prs,
+                )
+                add_issue_comment(issue_id, comment)
+
+    print(
+        "FAST_UNMUTE_OVERRIDE_COLLECT: "
+        f"issues_total={stats['issues_total']}, "
+        f"issues_closed={stats['issues_closed']}, "
+        f"issues_non_bot_closed={stats['issues_non_bot_closed']}, "
+        f"issues_with_linked_pr={stats['issues_with_linked_pr']}, "
+        f"issues_branch_match={stats['issues_branch_match']}, "
+        f"overrides_total={stats['overrides_total']}"
+    )
+    return overrides
+
+
 def generate_github_issue_title_and_body(test_data):
     owner = test_data[0]['owner']
     branch = test_data[0]['branch']
@@ -389,6 +662,10 @@ def generate_github_issue_title_and_body(test_data):
         f"{test_mute_strings_string}\n"
         "```\n\n"
         f"Owner: {owner}\n\n"
+        "**Fast unmute (1-day window):**\n"
+        "- After the fix, attach at least one related PR in this issue's **Development** section.\n"
+        "- Close this issue manually (by human, not bot).\n"
+        "- Fast-unmute flow is auto-enabled from close actor + linked PR signal (no manual label required).\n\n"
         "**Read more in [mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**\n\n"
         f"**Summary history:** \n {summary_string}\n"
         "\n\n"
@@ -704,12 +981,7 @@ def has_unmute_comment(comments, unmuted_tests):
     test_set = set(unmuted_tests)
     for comment in comments:
         if "tests have been unmuted" in comment:
-            # Extract test names from the comment
-            comment_tests = set()
-            for line in comment.split('\n'):
-                if line.startswith('- Test '):
-                    test_name = line[7:]  # Remove '- Test ' prefix
-                    comment_tests.add(test_name.replace(' unmuted', ''))
+            comment_tests = _extract_unmuted_tests_from_comment(comment)
             # If all current unmuted tests are in the comment, we don't need a new one
             if test_set.issubset(comment_tests):
                 return True
@@ -769,7 +1041,7 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
                 if len(unmuted_tests) == len(issue_info['tests']):
                     # Полностью размьючен
                     if not has_unmute_comment(existing_comments, unmuted_tests):
-                        comment = "All tests have been unmuted:\n" + "\n".join(f"- Test {test}" for test in sorted(unmuted_tests))
+                        comment = _build_unmute_comment("All tests have been unmuted:", unmuted_tests)
                         add_issue_comment(issue_id, comment)
                         if not do_not_close_issues:
                             close_issue(issue_id)
@@ -783,7 +1055,7 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
                 elif 0 < len(unmuted_tests) < len(issue_info['tests']):
                     # Частично размьючен
                     if not has_unmute_comment(existing_comments, unmuted_tests):
-                        comment = "Some tests have been unmuted:\n" + "\n".join(f"- Test {test}" for test in sorted(unmuted_tests))
+                        comment = _build_unmute_comment("Some tests have been unmuted:", unmuted_tests)
                         add_issue_comment(issue_id, comment)
                         print(f"Added comment about unmuted tests to issue: {issue_info['url']}")
                         still_muted_tests = [test for test in issue_info['tests'] if test in muted_tests_set]
@@ -803,11 +1075,10 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
 
 def main():
 
-    if "GITHUB_TOKEN" not in os.environ:
-        print("Error: Env variable GITHUB_TOKEN is missing, skipping")
+    if "GITHUB_TOKEN" not in os.environ and "GH_TOKEN" not in os.environ:
+        print("Error: Env variable GITHUB_TOKEN or GH_TOKEN is missing, skipping")
         return 1
-    else:
-        github_token = os.environ["GITHUB_TOKEN"]
+    return 0
 
 if __name__ == "__main__":
     main()
