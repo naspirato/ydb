@@ -961,9 +961,23 @@ def mute_worker(args):
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
 
+            stable_unmute_candidates = {
+                test.get('full_name')
+                for test in aggregated_for_unmute
+                if test.get('full_name') and is_unmute_candidate(test, aggregated_for_unmute)
+            }
+            stable_delete_candidates = {
+                test.get('full_name')
+                for test in aggregated_for_delete
+                if test.get('full_name') and is_delete_candidate(test, aggregated_for_delete)
+            }
+
             overrides = collect_fast_unmute_overrides(
                 branch=args.branch,
                 build_type=build_type,
+                stable_unmute_candidates=stable_unmute_candidates,
+                delete_candidates=stable_delete_candidates,
+                require_linked_development_pr=False,
             )
             fast_override_days_by_test = {
                 item['full_name']: int(item.get('window_days', FAST_UNMUTE_DAYS))

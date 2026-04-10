@@ -10,6 +10,13 @@
 - **Runs (pass + fail + mute) >= 4**
 - **AND no failures (fail + mute = 0)**
 
+### Manual fast-unmute request (1-day window):
+- Bot maintains one or more issue comments with checkbox lists (`mute_control_v1`).
+- If a user marks a test with `[x]`, status becomes `pending_24h`.
+- The request becomes eligible only after full 24 hours from `requested_at`.
+- After cooldown, fast rule applies: in last 1 day runs >= 4 and fail+mute = 0.
+- On success, bot keeps a historical strikethrough entry with reason (`stable_1d_manual`, `stable_7d`, `no_runs_7d`).
+
 ### Remove from mute if in the last 7 days:
 - **No runs at all** (pass + fail + mute + skip = 0)
 
