@@ -257,3 +257,11 @@ sequenceDiagram
     W->>TG: Send messages with plots
 ```
 
+## Draft extension: optional fast unmute
+
+Default behavior remains unchanged: 7-day unmute window and normal issue lifecycle.
+
+For an opt-in fast path proposal (1-day window via explicit issue signal, with per-test overrides and safe handling of partially unmuted issue lists), see:
+
+- [fast_unmute_override_design.md](./fast_unmute_override_design.md)
+
