@@ -18,6 +18,7 @@ from update_mute_issues import (
     generate_github_issue_title_and_body,
     get_muted_tests_from_issues,
     close_unmuted_issues,
+    collect_fast_unmute_overrides,
 )
 
 # Add analytics directory to path for ydb_wrapper import
@@ -35,6 +36,12 @@ muted_ya_path = '.github/config/muted_ya.txt'
 MUTE_DAYS = 4
 UNMUTE_DAYS = 7
 DELETE_DAYS = 7
+FAST_UNMUTE_DAYS = 1
+UNMUTE_OVERRIDES_TABLE_NAME = "unmute_overrides"
+
+
+def _utc_now():
+    return datetime.datetime.now(datetime.timezone.utc)
 
 def is_chunk_test(test):
     # First, check the is_test_chunk field if it exists.
@@ -175,6 +182,141 @@ def add_lines_to_file(file_path, lines_to_add):
         logging.info(f"Lines added to {file_path}")
     except Exception as e:
         logging.error(f"Error adding lines to {file_path}: {e}")
+
+
+def create_unmute_overrides_table(ydb_wrapper, table_path):
+    create_sql = f"""
+        CREATE TABLE IF NOT EXISTS `{table_path}` (
+            `full_name` Utf8 NOT NULL,
+            `branch` Utf8 NOT NULL,
+            `build_type` Utf8 NOT NULL,
+            `window_days` Uint32 NOT NULL,
+            `reason` Utf8 NOT NULL,
+            `issue_number` Uint64,
+            `activated_at` Timestamp NOT NULL,
+            `expires_at` Timestamp,
+            `active` Uint8 NOT NULL,
+            `consumed_at` Timestamp,
+            PRIMARY KEY (`full_name`, `branch`, `build_type`)
+        )
+        PARTITION BY HASH(full_name)
+        WITH (STORE = COLUMN)
+    """
+    ydb_wrapper.create_table(table_path, create_sql)
+
+
+def upsert_unmute_overrides(ydb_wrapper, table_path, overrides):
+    if not overrides:
+        return 0
+
+    now = _utc_now()
+    rows = []
+    seen = set()
+    for item in overrides:
+        full_name = item.get('full_name')
+        branch = item.get('branch')
+        build_type = item.get('build_type')
+        if not full_name or not branch or not build_type:
+            continue
+        key = (full_name, branch, build_type)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        rows.append(
+            {
+                'full_name': full_name,
+                'branch': branch,
+                'build_type': build_type,
+                'window_days': int(item.get('window_days', FAST_UNMUTE_DAYS)),
+                'reason': item.get('reason', 'issue_fast_unmute_1d'),
+                'issue_number': item.get('issue_number'),
+                'activated_at': now,
+                'expires_at': item.get('expires_at'),
+                'active': 1,
+                'consumed_at': None,
+            }
+        )
+
+    if not rows:
+        return 0
+
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("window_days", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("activated_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("expires_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("active", ydb.OptionalType(ydb.PrimitiveType.Uint8))
+        .add_column("consumed_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    )
+    ydb_wrapper.bulk_upsert_batches(
+        table_path,
+        rows,
+        column_types,
+        batch_size=500,
+        query_name="upsert_unmute_overrides",
+    )
+    return len(rows)
+
+
+def load_active_unmute_overrides(ydb_wrapper, table_path, branch, build_type):
+    query = f"""
+        SELECT full_name, window_days
+        FROM `{table_path}`
+        WHERE branch = '{branch}'
+          AND build_type = '{build_type}'
+          AND active = 1
+          AND (expires_at IS NULL OR expires_at > CurrentUtcTimestamp())
+    """
+    rows = ydb_wrapper.execute_scan_query(query, query_name="load_active_unmute_overrides")
+    return {row['full_name']: int(row.get('window_days', FAST_UNMUTE_DAYS)) for row in rows}
+
+
+def consume_unmute_overrides(ydb_wrapper, table_path, branch, build_type, full_names):
+    if not full_names:
+        return 0
+
+    now = _utc_now()
+    rows = [
+        {
+            'full_name': full_name,
+            'branch': branch,
+            'build_type': build_type,
+            'active': 0,
+            'consumed_at': now,
+        }
+        for full_name in sorted(set(full_names))
+    ]
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("active", ydb.OptionalType(ydb.PrimitiveType.Uint8))
+        .add_column("consumed_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    )
+    ydb_wrapper.bulk_upsert_batches(
+        table_path,
+        rows,
+        column_types,
+        batch_size=500,
+        query_name="consume_unmute_overrides",
+    )
+    return len(rows)
+
+
+def sync_fast_unmute_overrides(ydb_wrapper, table_path, branch, build_type):
+    try:
+        overrides = collect_fast_unmute_overrides(branch=branch, build_type=build_type)
+    except Exception as e:
+        logging.warning(f"Failed to collect fast-unmute overrides from GitHub: {e}")
+        return 0
+    return upsert_unmute_overrides(ydb_wrapper, table_path, overrides)
 
 def aggregate_test_data(all_data, period_days):
     """Universal helper to aggregate test data for a given period."""
@@ -373,34 +515,45 @@ def is_mute_candidate(test, aggregated_data):
     
     return result
 
-def is_unmute_candidate(test, aggregated_data):
-    """Check whether a test is an unmute candidate for the given period."""
-    # Find this test in aggregated data.
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-    
+def is_unmute_candidate(test, aggregated_data, fast_aggregated_data=None, fast_override_days_by_test=None):
+    """Check whether a test is an unmute candidate, with optional per-test fast override."""
+    full_name = test.get('full_name')
+    fast_override_days_by_test = fast_override_days_by_test or {}
+    use_fast_window = full_name in fast_override_days_by_test and fast_aggregated_data is not None
+
+    source = fast_aggregated_data if use_fast_window else aggregated_data
+    if isinstance(source, dict):
+        test_data = source.get(full_name)
+    else:
+        test_data = None
+        for agg_test in source:
+            if agg_test['full_name'] == full_name:
+                test_data = agg_test
+                break
+
     if not test_data:
         return False
-    
+
     # Update test fields used by debug output.
     test['pass_count'] = test_data['pass_count']
     test['fail_count'] = test_data['fail_count']
     test['mute_count'] = test_data['mute_count']
     test['period_days'] = test_data.get('period_days')
     test['is_muted'] = test_data.get('is_muted', False)
-    
+
     total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
     total_fails = test_data['fail_count'] + test_data['mute_count']
-    
+
     result = total_runs >= 4 and total_fails == 0
-    
-    # Add detailed logging for diagnostics.
-    if test_data.get('is_muted', False):  # Log only for currently muted tests.
-        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test_data['mute_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
-    
+
+    if test_data.get('is_muted', False):
+        mode = "FAST" if use_fast_window else "DEFAULT"
+        logging.debug(
+            f"UNMUTE_CHECK[{mode}]: {full_name} - runs:{total_runs}, fails:{total_fails}, "
+            f"mute_count:{test_data['mute_count']}, state:{test_data.get('state')}, "
+            f"muted:{test_data.get('is_muted')}, result:{result}"
+        )
+
     return result
 
 def is_delete_candidate(test, aggregated_data):
@@ -511,7 +664,16 @@ def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=F
         add_lines_to_file(debug_path, [line + '\n' for line in sorted_debug_list])
     logging.info(f"Created {os.path.basename(file_path)} with {len(sorted_test_set)} tests")
 
-def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete):
+def apply_and_add_mutes(
+    all_data,
+    output_path,
+    mute_check,
+    aggregated_for_mute,
+    aggregated_for_unmute,
+    aggregated_for_delete,
+    aggregated_for_fast_unmute=None,
+    fast_override_days_by_test=None,
+):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
     
@@ -533,10 +695,20 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
         # 2. Unmute candidates.
+        fast_override_days_by_test = fast_override_days_by_test or {}
+        aggregated_for_fast_unmute_index = {
+            test['full_name']: test for test in (aggregated_for_fast_unmute or [])
+        }
+
         def is_unmute_candidate_wrapper(test):
             if is_chunk_test(test):
                 return False  # Do not unmute chunks individually.
-            return is_unmute_candidate(test, aggregated_for_unmute)
+            return is_unmute_candidate(
+                test,
+                aggregated_for_unmute,
+                fast_aggregated_data=aggregated_for_fast_unmute_index,
+                fast_override_days_by_test=fast_override_days_by_test,
+            )
         
         # Regular unmute candidates (non-chunk tests only).
         to_unmute, to_unmute_debug = create_file_set(
@@ -546,7 +718,16 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         # Wildcard unmute patterns:
         # If all pattern chunks pass the filter, unmute the whole pattern.
         # If at least one chunk fails, the pattern is not unmuted.
-        wildcard_unmute = get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_candidate)
+        wildcard_unmute = get_wildcard_unmute_candidates(
+            aggregated_for_unmute,
+            mute_check,
+            lambda test, _: is_unmute_candidate(
+                test,
+                aggregated_for_unmute,
+                fast_aggregated_data=aggregated_for_fast_unmute_index,
+                fast_override_days_by_test=fast_override_days_by_test,
+            ),
+        )
         wildcard_unmute_patterns = [p for p, d in wildcard_unmute]
         wildcard_unmute_debugs = [d for p, d in wildcard_unmute]
         
@@ -704,7 +885,10 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         logging.error(f"Error processing test data: {e}. Check your query results for valid keys.")
         return []
 
-    return len(to_mute)
+    return {
+        'to_mute_count': len(to_mute),
+        'to_unmute': to_unmute,
+    }
 
 
 
@@ -881,6 +1065,8 @@ def mute_worker(args):
 
         logging.info(f"Starting mute worker with mode: {args.mode}")
         logging.info(f"Branch: {args.branch}")
+        build_type = getattr(args, 'build_type', 'relwithdebinfo')
+        logging.info(f"build_type: {build_type}")
         
         # Use provided muted_ya file or fallback to default.
         input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
@@ -893,21 +1079,87 @@ def mute_worker(args):
         logging.info("Executing single query for 7 days window...")
         
         # Single query for maximum window (7 days).
-        all_data = execute_query(args.branch, days_window=7)
+        all_data = execute_query(args.branch, build_type=build_type, days_window=7)
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.
         aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS for mute
         aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS for unmute
+        aggregated_for_fast_unmute = aggregate_test_data(all_data, FAST_UNMUTE_DAYS)
         aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS for delete
     
-        logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
+        logging.info(
+            "Aggregated data: "
+            f"mute={len(aggregated_for_mute)}, "
+            f"unmute={len(aggregated_for_unmute)}, "
+            f"fast_unmute={len(aggregated_for_fast_unmute)}, "
+            f"delete={len(aggregated_for_delete)}"
+        )
     
         if args.mode == 'update_muted_ya':
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
-            apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete)
+            overrides_table_path = ydb_wrapper.get_table_path(UNMUTE_OVERRIDES_TABLE_NAME)
+            create_unmute_overrides_table(ydb_wrapper, overrides_table_path)
+
+            synced_count = sync_fast_unmute_overrides(
+                ydb_wrapper, overrides_table_path, args.branch, build_type
+            )
+            if synced_count:
+                logging.info(f"Synced {synced_count} fast-unmute override rows")
+
+            active_overrides = load_active_unmute_overrides(
+                ydb_wrapper, overrides_table_path, args.branch, build_type
+            )
+            logging.info(f"Loaded {len(active_overrides)} active fast-unmute overrides")
+
+            result = apply_and_add_mutes(
+                all_data,
+                output_path,
+                mute_check,
+                aggregated_for_mute,
+                aggregated_for_unmute,
+                aggregated_for_delete,
+                aggregated_for_fast_unmute=aggregated_for_fast_unmute,
+                fast_override_days_by_test=active_overrides,
+            )
+            if not isinstance(result, dict):
+                result = {}
+
+            consumed = set()
+            for mute_line in result.get('to_unmute', []):
+                parts = mute_line.split(' ', 1)
+                if len(parts) != 2:
+                    continue
+                full_name = f"{parts[0]}/{parts[1]}"
+                if full_name in active_overrides:
+                    consumed.add(full_name)
+
+            observed_overrides = set(active_overrides).intersection(
+                {test.get('full_name') for test in aggregated_for_fast_unmute}
+            )
+            override_denominator = len(observed_overrides) or len(active_overrides)
+            override_hit_rate = (
+                (len(consumed) / override_denominator) * 100 if override_denominator else 0.0
+            )
+            logging.info(
+                "FAST_UNMUTE_OVERRIDE_METRICS: "
+                f"active={len(active_overrides)}, "
+                f"observed={len(observed_overrides)}, "
+                f"consumed={len(consumed)}, "
+                f"hit_rate={override_hit_rate:.1f}%"
+            )
+
+            consumed_count = consume_unmute_overrides(
+                ydb_wrapper,
+                overrides_table_path,
+                args.branch,
+                build_type,
+                consumed,
+            )
+            if consumed_count:
+                logging.info(f"Consumed {consumed_count} fast-unmute overrides")
 
         elif args.mode == 'create_issues':
             file_path = args.file_path
@@ -927,6 +1179,7 @@ if __name__ == "__main__":
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
+    update_muted_ya_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for monitor query')
     update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
 
     create_issues_parser = subparsers.add_parser(
@@ -937,6 +1190,7 @@ if __name__ == "__main__":
         '--file_path', default=f'{repo_path}/mute_update/to_mute.txt', required=False, help='file path'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
+    create_issues_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for monitor query')
     create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')
 
     args = parser.parse_args()

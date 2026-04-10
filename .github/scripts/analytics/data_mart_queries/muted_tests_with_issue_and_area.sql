@@ -28,6 +28,14 @@ SELECT
     tm.days_in_state_filtered AS days_in_state_filtered,
     tm.owner_team_key AS owner_team,
     Coalesce(om.area, 'area/-') AS area,
+    CAST(
+        CASE
+            WHEN uo.full_name IS NOT NULL AND uo.active = 1 THEN TRUE
+            ELSE FALSE
+        END AS Uint8
+    ) AS was_unmuted_manually,
+    Coalesce(uo.window_days, 7u) AS days_until_unmute,
+    7u AS days_until_delete,
     gim.github_issue_url AS github_issue_url,
     gim.github_issue_number AS github_issue_number,
     gim.github_issue_state AS github_issue_state,
@@ -51,6 +59,10 @@ LEFT JOIN (
     FROM `test_results/analytics/area_to_owner_mapping`
     GROUP BY owner_team
 ) AS om ON tm.owner_team_key = om.owner_team
+LEFT JOIN `test_results/analytics/unmute_overrides` AS uo
+    ON tm.full_name = uo.full_name
+    AND tm.branch = uo.branch
+    AND tm.build_type = uo.build_type
 LEFT JOIN (
     SELECT
         full_name AS full_name,
