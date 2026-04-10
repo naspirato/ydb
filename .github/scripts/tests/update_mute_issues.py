@@ -33,6 +33,9 @@ UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
 MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
 MUTE_CONTROL_PART_MAX_TESTS = 200
 MANUAL_FAST_UNMUTE_WAIT_HOURS = 24
+REASON_NO_RUNS_DEFAULT_WINDOW = "no_runs_default_window"
+REASON_STABLE_MANUAL_FAST_WINDOW = "stable_manual_fast_window"
+REASON_STABLE_DEFAULT_WINDOW = "stable_default_window"
 KNOWN_BOT_LOGINS = {
     "ydbot",
     "github-actions[bot]",
@@ -582,7 +585,7 @@ def _render_control_comment(issue_number, part_idx, part_total, items):
         check = "x" if requested and state == 'active' else " "
 
         if state == 'resolved':
-            reason_text = reason or 'stable_7d'
+            reason_text = reason or REASON_STABLE_DEFAULT_WINDOW
             meta = f"state:resolved reason:{reason_text}"
             if resolved_at:
                 meta += f" resolved_at:{resolved_at}"
@@ -709,10 +712,10 @@ def _build_pending_status_comment(issue_number, new_requests):
 
 def _derive_resolution_reason(test_name, had_manual_request, stable_unmute_candidates, delete_candidates):
     if test_name in delete_candidates:
-        return 'no_runs_7d'
+        return REASON_NO_RUNS_DEFAULT_WINDOW
     if test_name in stable_unmute_candidates:
-        return 'stable_1d_manual' if had_manual_request else 'stable_7d'
-    return 'stable_7d'
+        return REASON_STABLE_MANUAL_FAST_WINDOW if had_manual_request else REASON_STABLE_DEFAULT_WINDOW
+    return REASON_STABLE_DEFAULT_WINDOW
 
 
 def collect_fast_unmute_overrides(

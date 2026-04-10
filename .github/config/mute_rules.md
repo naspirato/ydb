@@ -15,7 +15,7 @@
 - If a user marks a test with `[x]`, status becomes `pending_24h`.
 - The request becomes eligible only after full 24 hours from `requested_at`.
 - After cooldown, fast rule applies: in last 1 day runs >= 4 and fail+mute = 0.
-- On success, bot keeps a historical strikethrough entry with reason (`stable_1d_manual`, `stable_7d`, `no_runs_7d`).
+- On success, bot keeps a historical strikethrough entry with reason (`stable_manual_fast_window`, `stable_default_window`, `no_runs_default_window`).
 
 ### Remove from mute if in the last 7 days:
 - **No runs at all** (pass + fail + mute + skip = 0)
