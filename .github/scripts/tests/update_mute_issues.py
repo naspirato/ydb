@@ -3,6 +3,7 @@ import sys
 import requests
 from github import Github #pip3 install PyGithub
 from urllib.parse import quote_plus
+import re
 
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -24,6 +25,14 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 # project
 
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
+FAST_UNMUTE_LABEL = "fast-unmute-1d"
+UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
+UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
+KNOWN_BOT_LOGINS = {
+    "ydbot",
+    "github-actions[bot]",
+    "dependabot[bot]",
+}
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -62,7 +71,9 @@ def handle_github_errors(response):
                 raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
 
 def run_query(query, variables=None):
-    GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not GITHUB_TOKEN:
+        raise Exception("Neither GITHUB_TOKEN nor GH_TOKEN is set")
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
     request = requests.post(
         'https://api.github.com/graphql', json={'query': query, 'variables': variables}, headers=HEADERS
@@ -267,11 +278,28 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
               content {
                 ... on Issue {
                   id
+                  number
                   title
                   url
                   state
                   body
                   createdAt
+                  closedAt
+                  timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
+                    nodes {
+                      ... on ClosedEvent {
+                        actor {
+                          __typename
+                          ... on User {
+                            login
+                          }
+                          ... on Bot {
+                            login
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
               fieldValues(first: 20) {
@@ -341,6 +369,62 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
             has_next_page = False
 
     return issues
+
+
+def _extract_issue_number(issue_url):
+    if not issue_url:
+        return None
+    match = re.search(r"/issues/(\d+)$", issue_url)
+    return int(match.group(1)) if match else None
+
+
+def _extract_close_actor(content):
+    timeline_nodes = (content or {}).get('timelineItems', {}).get('nodes', [])
+    if not timeline_nodes:
+        return None, None
+    actor = timeline_nodes[0].get('actor') or {}
+    return actor.get('login'), actor.get('__typename')
+
+
+def _is_bot_actor(login, actor_type):
+    if actor_type == "Bot":
+        return True
+    if not login:
+        return True
+    login_l = login.lower()
+    if login_l in KNOWN_BOT_LOGINS:
+        return True
+    return login_l.endswith("[bot]")
+
+
+def _extract_unmuted_tests_from_comment(comment_body):
+    if not comment_body:
+        return set()
+
+    if UNMUTE_LIST_START_MARKER in comment_body and UNMUTE_LIST_END_MARKER in comment_body:
+        start_idx = comment_body.find(UNMUTE_LIST_START_MARKER) + len(UNMUTE_LIST_START_MARKER)
+        end_idx = comment_body.find(UNMUTE_LIST_END_MARKER)
+        payload = comment_body[start_idx:end_idx]
+    else:
+        # Backward-compatible fallback for legacy comments without markers.
+        payload = comment_body
+
+    tests = set()
+    for line in payload.split('\n'):
+        line = line.strip()
+        if line.startswith('- Test '):
+            tests.add(line[len('- Test '):].replace(' unmuted', ''))
+    return tests
+
+
+def _build_unmute_comment(header, tests):
+    tests_payload = "\n".join(f"- Test {test}" for test in sorted(tests))
+    return (
+        f"{header}\n"
+        f"{UNMUTE_LIST_START_MARKER}\n"
+        f"{tests_payload}\n"
+        f"{UNMUTE_LIST_END_MARKER}"
+    )
 
 
 def generate_github_issue_title_and_body(test_data):
@@ -704,16 +788,18 @@ def has_unmute_comment(comments, unmuted_tests):
     test_set = set(unmuted_tests)
     for comment in comments:
         if "tests have been unmuted" in comment:
-            # Extract test names from the comment
-            comment_tests = set()
-            for line in comment.split('\n'):
-                if line.startswith('- Test '):
-                    test_name = line[7:]  # Remove '- Test ' prefix
-                    comment_tests.add(test_name.replace(' unmuted', ''))
+            comment_tests = _extract_unmuted_tests_from_comment(comment)
             # If all current unmuted tests are in the comment, we don't need a new one
             if test_set.issubset(comment_tests):
                 return True
     return False
+
+
+def _collect_issue_unmuted_tests(issue_id):
+    unmuted = set()
+    for comment in get_issue_comments(issue_id):
+        unmuted.update(_extract_unmuted_tests_from_comment(comment))
+    return unmuted
 
 def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
     """Closes issues where all tests are no longer muted.
@@ -769,7 +855,7 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
                 if len(unmuted_tests) == len(issue_info['tests']):
                     # Полностью размьючен
                     if not has_unmute_comment(existing_comments, unmuted_tests):
-                        comment = "All tests have been unmuted:\n" + "\n".join(f"- Test {test}" for test in sorted(unmuted_tests))
+                        comment = _build_unmute_comment("All tests have been unmuted:", unmuted_tests)
                         add_issue_comment(issue_id, comment)
                         if not do_not_close_issues:
                             close_issue(issue_id)
@@ -783,7 +869,7 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
                 elif 0 < len(unmuted_tests) < len(issue_info['tests']):
                     # Частично размьючен
                     if not has_unmute_comment(existing_comments, unmuted_tests):
-                        comment = "Some tests have been unmuted:\n" + "\n".join(f"- Test {test}" for test in sorted(unmuted_tests))
+                        comment = _build_unmute_comment("Some tests have been unmuted:", unmuted_tests)
                         add_issue_comment(issue_id, comment)
                         print(f"Added comment about unmuted tests to issue: {issue_info['url']}")
                         still_muted_tests = [test for test in issue_info['tests'] if test in muted_tests_set]
@@ -801,13 +887,93 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
     return closed_issues, partially_unmuted_issues
 
 
+def collect_fast_unmute_overrides(
+    branch='main',
+    build_type='relwithdebinfo',
+    label_name=FAST_UNMUTE_LABEL,
+    require_non_bot_close_actor=True,
+):
+    """Collect per-test fast-unmute overrides from closed issues with explicit label.
+
+    For each closed issue with `label_name`, compute:
+      T_remaining_before_close = T_all (from issue body) - T_prev_unmuted (from comment markers)
+
+    Only tests in `T_remaining_before_close` are returned as override candidates.
+    """
+    overrides = []
+    issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
+    stats = {
+        'issues_total': 0,
+        'issues_with_label': 0,
+        'issues_with_non_bot_close': 0,
+        'overrides_total': 0,
+    }
+
+    for issue in issues:
+        stats['issues_total'] += 1
+        content = issue.get('content')
+        if not content or content.get('state') != 'CLOSED':
+            continue
+
+        issue_labels = set()
+        for field_value in issue.get('fieldValues', {}).get('nodes', []):
+            labels = field_value.get('labels', {}).get('nodes', [])
+            for label in labels:
+                name = label.get('name')
+                if name:
+                    issue_labels.add(name)
+
+        if label_name not in issue_labels:
+            continue
+        stats['issues_with_label'] += 1
+
+        close_actor_login, close_actor_type = _extract_close_actor(content)
+        if require_non_bot_close_actor and _is_bot_actor(close_actor_login, close_actor_type):
+            continue
+        stats['issues_with_non_bot_close'] += 1
+
+        parsed = parse_body(content.get('body', ''))
+        tests = parsed[0] if isinstance(parsed, tuple) else []
+        branches = parsed[1] if isinstance(parsed, tuple) else ['main']
+        if branch not in branches:
+            continue
+
+        all_tests = set(tests)
+        previously_unmuted = _collect_issue_unmuted_tests(content['id'])
+        remaining_tests = sorted(all_tests - previously_unmuted)
+        if not remaining_tests:
+            continue
+
+        issue_number = content.get('number') or _extract_issue_number(content.get('url'))
+        for test_name in remaining_tests:
+            overrides.append(
+                {
+                    'full_name': test_name,
+                    'branch': branch,
+                    'build_type': build_type,
+                    'window_days': 1,
+                    'reason': 'issue_fast_unmute_1d',
+                    'issue_number': issue_number,
+                }
+            )
+            stats['overrides_total'] += 1
+
+    print(
+        "FAST_UNMUTE_OVERRIDE_COLLECT: "
+        f"issues_total={stats['issues_total']}, "
+        f"issues_with_label={stats['issues_with_label']}, "
+        f"issues_with_non_bot_close={stats['issues_with_non_bot_close']}, "
+        f"overrides_total={stats['overrides_total']}"
+    )
+    return overrides
+
+
 def main():
 
-    if "GITHUB_TOKEN" not in os.environ:
-        print("Error: Env variable GITHUB_TOKEN is missing, skipping")
+    if "GITHUB_TOKEN" not in os.environ and "GH_TOKEN" not in os.environ:
+        print("Error: Env variable GITHUB_TOKEN or GH_TOKEN is missing, skipping")
         return 1
-    else:
-        github_token = os.environ["GITHUB_TOKEN"]
+    return 0
 
 if __name__ == "__main__":
     main()
