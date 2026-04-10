@@ -1,3 +1,6 @@
+ $default_unmute_days = 7;
+ $default_delete_days = 7;
+
 SELECT 
     tm.state_filtered as state_filtered, 
     tm.test_name as test_name, 
@@ -39,11 +42,23 @@ SELECT
     gim.github_issue_url as github_issue_url,
     gim.github_issue_number as github_issue_number,
     gim.github_issue_state as github_issue_state,
-    gim.github_issue_created_at as github_issue_created_at
+    gim.github_issue_created_at as github_issue_created_at,
+    CAST(
+        CASE
+            WHEN uo.reason = 'issue_fast_unmute_1d' AND uo.consumed_at IS NOT NULL THEN TRUE
+            ELSE FALSE
+        END AS Uint8
+    ) as was_unmuted_manually,
+    CAST(Coalesce(uo.window_days, $default_unmute_days) AS Uint32) as days_untill_unmute,
+    CAST($default_delete_days AS Uint32) as days_untill_delete
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim
     ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
+LEFT JOIN `test_results/analytics/unmute_overrides` AS uo
+    ON tm.full_name = uo.full_name
+    AND tm.branch = uo.branch
+    AND tm.build_type = uo.build_type
 WHERE tm.date_window >= CurrentUtcDate() - 2 * Interval("P1D")
     AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-25%')
     AND tm.is_test_chunk = 0
