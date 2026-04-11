@@ -1,9 +1,5 @@
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
-$default_unmute_days = 7u;
-$manual_fast_unmute_days = 1u;
-$manual_wait_hours = $manual_fast_unmute_days * 24u;
-
 SELECT 
     tm.state_filtered as state_filtered, 
     tm.test_name as test_name, 
@@ -49,10 +45,10 @@ SELECT
     mru.manual_unmute_status as manual_unmute_status,
     CAST(mru.manual_request_active AS Uint8) as is_manual_unmute_requested,
     mru.manual_requested_at as manual_unmute_requested_at,
-    CAST(Coalesce(mru.effective_unmute_window_days, $default_unmute_days) AS Uint32) as effective_unmute_window_days,
-    CAST(Coalesce(mru.default_unmute_window_days, $default_unmute_days) AS Uint32) as default_unmute_window_days,
-    CAST(Coalesce(mru.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS Uint32) as manual_fast_unmute_window_days,
-    CAST(Coalesce(mru.manual_fast_unmute_wait_hours, $manual_wait_hours) AS Uint32) as manual_unmute_wait_hours,
+    CAST(Coalesce(mru.effective_unmute_window_days, 0u) AS Uint32) as effective_unmute_window_days,
+    CAST(Coalesce(mru.default_unmute_window_days, 0u) AS Uint32) as default_unmute_window_days,
+    CAST(Coalesce(mru.manual_fast_unmute_window_days, 0u) AS Uint32) as manual_fast_unmute_window_days,
+    CAST(Coalesce(mru.manual_fast_unmute_wait_hours, 0u) AS Uint32) as manual_unmute_wait_hours,
     CAST(Coalesce(mru.wait_hours_left, 0u) AS Uint32) as manual_unmute_hours_until_ready
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim

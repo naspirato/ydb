@@ -9,6 +9,10 @@ import re
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import parse_body
 from mute_thresholds import get_thresholds
+from manual_unmute_contract import (
+    LEGACY_PENDING_24H_STATUS,
+    PENDING_FAST_UNMUTE_WAIT_STATUS,
+)
 
 
 ORG_NAME = 'ydb-platform'
@@ -36,7 +40,6 @@ MANUAL_FAST_UNMUTE_WINDOW_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
 MANUAL_FAST_UNMUTE_WAIT_HOURS = MANUAL_FAST_UNMUTE_WINDOW_DAYS * 24
 DEFAULT_UNMUTE_WINDOW_DAYS = THRESHOLDS["default_unmute_window_days"]
 MUTE_CONTROL_PART_MAX_TESTS = THRESHOLDS["control_comment_part_max_tests"]
-PENDING_FAST_UNMUTE_WAIT_STATUS = "pending_fast_unmute_wait"
 REASON_NO_RUNS_DEFAULT_WINDOW = "no_runs_default_window"
 REASON_STABLE_MANUAL_FAST_WINDOW = "stable_manual_fast_window"
 REASON_STABLE_DEFAULT_WINDOW = "stable_default_window"

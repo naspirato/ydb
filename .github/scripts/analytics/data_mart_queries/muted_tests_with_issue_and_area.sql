@@ -1,4 +1,7 @@
 $window_days = 365;
+$default_unmute_days = 7u;
+$manual_fast_unmute_days = 1u;
+$manual_wait_hours = $manual_fast_unmute_days * 24u;
 
 SELECT
     tm.state_filtered AS state_filtered,
@@ -31,11 +34,11 @@ SELECT
     Coalesce(mu.manual_unmute_status, 'none') AS manual_request_status,
     mu.resolution_reason AS manual_request_reason,
     mu.manual_requested_at AS manual_requested_at,
-    Coalesce(mu.manual_wait_hours, 0u) AS manual_wait_hours_total,
+    Coalesce(mu.manual_wait_hours, $manual_wait_hours) AS manual_wait_hours_total,
     Coalesce(mu.hours_until_ready, 0u) AS manual_wait_hours_left,
-    Coalesce(mu.effective_unmute_window_days, mu.default_unmute_window_days) AS effective_unmute_window_days,
-    Coalesce(mu.default_unmute_window_days, 0u) AS default_unmute_window_days,
-    Coalesce(mu.manual_fast_unmute_window_days, 0u) AS manual_fast_unmute_window_days,
+    Coalesce(mu.effective_unmute_window_days, $default_unmute_days) AS effective_unmute_window_days,
+    Coalesce(mu.default_unmute_window_days, $default_unmute_days) AS default_unmute_window_days,
+    Coalesce(mu.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS manual_fast_unmute_window_days,
     gim.github_issue_url AS github_issue_url,
     gim.github_issue_number AS github_issue_number,
     gim.github_issue_state AS github_issue_state,

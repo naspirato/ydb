@@ -16,6 +16,11 @@ from export_issues_to_ydb import fetch_repository_issues
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "tests"))
 from mute_thresholds import get_thresholds
+from manual_unmute_contract import (
+    MANUAL_UNMUTE_ADDITIONAL_COLUMNS,
+    MANUAL_UNMUTE_BASE_COLUMNS,
+    build_manual_unmute_row_payload,
+)
 
 
 ORG_NAME = "ydb-platform"
@@ -179,45 +184,47 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
                 delta = ready_at - now
                 wait_hours_left = max(0, int(delta.total_seconds() // 3600))
             manual_wait_hours_left = int(wait_hours_left if wait_hours_left is not None else 0)
-            manual_request_status = item.get("status", "idle")
 
             for branch in branches:
+                row = {
+                    "issue_number": int(issue_number),
+                    "full_name": full_name,
+                    "branch": branch,
+                    "build_type": DEFAULT_BUILD_TYPE,
+                    "issue_state": issue_state,
+                    "issue_closed_by_login": close_actor_login,
+                    "issue_closed_by_type": close_actor_type,
+                    "linked_pr_count": len(linked_pr_numbers),
+                    "requested": 1 if item.get("requested") else 0,
+                    "control_state": item.get("state", "active"),
+                    "control_status": item.get("status", "idle"),
+                    "reason": item.get("reason", ""),
+                    "requested_at": requested_at,
+                    "resolved_at": resolved_at,
+                    "wait_hours_left": manual_wait_hours_left,
+                    "effective_unmute_window_days": _effective_unmute_window(
+                        item.get("status", "idle"), default_window_days, fast_window_days
+                    ),
+                    "default_unmute_window_days": int(default_window_days),
+                    "manual_fast_unmute_window_days": int(fast_window_days),
+                    "manual_fast_unmute_wait_hours": int(wait_hours),
+                    "exported_at": now,
+                }
+
+                row.update(
+                    build_manual_unmute_row_payload(
+                        status=item.get("status", "idle"),
+                        state=item.get("state", "active"),
+                        requested=bool(item.get("requested")),
+                        requested_at=requested_at,
+                        resolution_reason=item.get("reason", "") or None,
+                        wait_hours=int(wait_hours),
+                        wait_hours_left=manual_wait_hours_left,
+                    )
+                )
+
                 rows.append(
-                    {
-                        "issue_number": int(issue_number),
-                        "full_name": full_name,
-                        "branch": branch,
-                        "build_type": DEFAULT_BUILD_TYPE,
-                        "issue_state": issue_state,
-                        "issue_closed_by_login": close_actor_login,
-                        "issue_closed_by_type": close_actor_type,
-                        "linked_pr_count": len(linked_pr_numbers),
-                        "requested": 1 if item.get("requested") else 0,
-                        "control_state": item.get("state", "active"),
-                        "control_status": item.get("status", "idle"),
-                        "reason": item.get("reason", ""),
-                        "requested_at": requested_at,
-                        "resolved_at": resolved_at,
-                        "wait_hours_left": manual_wait_hours_left,
-                        "manual_unmute_status": manual_request_status,
-                        "manual_request_status": manual_request_status,
-                        "manual_request_active": 1
-                        if (item.get("state") == "active" and item.get("requested"))
-                        else 0,
-                        "manual_requested_at": requested_at,
-                        "hours_until_ready": manual_wait_hours_left,
-                        "manual_wait_hours": int(wait_hours),
-                        "manual_wait_hours_total": int(wait_hours),
-                        "manual_wait_hours_left": manual_wait_hours_left,
-                        "manual_request_reason": item.get("reason", "") or None,
-                        "effective_unmute_window_days": _effective_unmute_window(
-                            item.get("status", "idle"), default_window_days, fast_window_days
-                        ),
-                        "default_unmute_window_days": int(default_window_days),
-                        "manual_fast_unmute_window_days": int(fast_window_days),
-                        "manual_fast_unmute_wait_hours": int(wait_hours),
-                        "exported_at": now,
-                    }
+                    row
                 )
     return rows
 
@@ -265,38 +272,13 @@ def create_table(ydb_wrapper, table_path):
 
 
 def build_column_types():
-    return (
-        ydb.BulkUpsertColumns()
-        .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("issue_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("issue_closed_by_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("issue_closed_by_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("linked_pr_count", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("requested", ydb.OptionalType(ydb.PrimitiveType.Uint8))
-        .add_column("control_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("control_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("requested_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("resolved_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("wait_hours_left", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("manual_unmute_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("manual_request_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("manual_request_active", ydb.OptionalType(ydb.PrimitiveType.Uint8))
-        .add_column("manual_requested_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("hours_until_ready", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("manual_wait_hours", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("manual_wait_hours_total", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("manual_wait_hours_left", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("manual_request_reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("effective_unmute_window_days", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("default_unmute_window_days", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("manual_fast_unmute_window_days", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("manual_fast_unmute_wait_hours", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-    )
+    columns = ydb.BulkUpsertColumns()
+
+    for name, type_name in MANUAL_UNMUTE_BASE_COLUMNS + MANUAL_UNMUTE_ADDITIONAL_COLUMNS:
+        primitive = getattr(ydb.PrimitiveType, type_name)
+        columns = columns.add_column(name, ydb.OptionalType(primitive))
+
+    return columns
 
 
 def load_thresholds():
