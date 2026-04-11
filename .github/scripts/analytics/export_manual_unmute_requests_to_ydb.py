@@ -17,9 +17,9 @@ from export_issues_to_ydb import fetch_repository_issues
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "tests"))
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
-    MANUAL_UNMUTE_ADDITIONAL_COLUMNS,
-    MANUAL_UNMUTE_BASE_COLUMNS,
+    MANUAL_UNMUTE_TABLE_COLUMNS,
     build_manual_unmute_row_payload,
+    normalize_manual_unmute_status,
 )
 
 
@@ -29,7 +29,6 @@ REPO_NAME = "ydb"
 MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
 DEFAULT_BRANCH = "main"
 DEFAULT_BUILD_TYPE = "relwithdebinfo"
-PENDING_FAST_UNMUTE_WAIT_STATUS = "pending_fast_unmute_wait"
 
 
 def _parse_body_for_branches(body):
@@ -78,9 +77,10 @@ def _parse_control_items(comment_body):
         reason_match = re.search(r"reason:([a-z0-9_]+)", line)
         requested_at_match = re.search(r"requested_at:([0-9T:\\-+Z]+)", line)
         resolved_at_match = re.search(r"resolved_at:([0-9T:\\-+Z]+)", line)
-        status = status_match.group(1) if status_match else (PENDING_FAST_UNMUTE_WAIT_STATUS if requested else "idle")
-        if status == "pending_24h":
-            status = PENDING_FAST_UNMUTE_WAIT_STATUS
+        status = normalize_manual_unmute_status(
+            status_match.group(1) if status_match else "",
+            requested=requested,
+        )
 
         items[test_name] = {
             "requested": requested,
@@ -195,19 +195,11 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
                     "issue_closed_by_login": close_actor_login,
                     "issue_closed_by_type": close_actor_type,
                     "linked_pr_count": len(linked_pr_numbers),
-                    "requested": 1 if item.get("requested") else 0,
-                    "control_state": item.get("state", "active"),
-                    "control_status": item.get("status", "idle"),
-                    "reason": item.get("reason", ""),
-                    "requested_at": requested_at,
-                    "resolved_at": resolved_at,
-                    "wait_hours_left": manual_wait_hours_left,
                     "effective_unmute_window_days": _effective_unmute_window(
                         item.get("status", "idle"), default_window_days, fast_window_days
                     ),
                     "default_unmute_window_days": int(default_window_days),
                     "manual_fast_unmute_window_days": int(fast_window_days),
-                    "manual_fast_unmute_wait_hours": int(wait_hours),
                     "exported_at": now,
                 }
 
@@ -240,26 +232,15 @@ def create_table(ydb_wrapper, table_path):
             `issue_closed_by_login` Utf8,
             `issue_closed_by_type` Utf8,
             `linked_pr_count` Uint32,
-            `requested` Uint8 NOT NULL,
-            `control_state` Utf8,
-            `control_status` Utf8,
-            `reason` Utf8,
-            `requested_at` Timestamp,
-            `resolved_at` Timestamp,
-            `wait_hours_left` Uint32,
             `manual_unmute_status` Utf8,
-            `manual_request_status` Utf8,
             `manual_request_active` Uint8,
             `manual_requested_at` Timestamp,
             `hours_until_ready` Uint32,
             `manual_wait_hours` Uint32,
-            `manual_wait_hours_total` Uint32,
-            `manual_wait_hours_left` Uint32,
-            `manual_request_reason` Utf8,
             `effective_unmute_window_days` Uint32,
             `default_unmute_window_days` Uint32,
             `manual_fast_unmute_window_days` Uint32,
-            `manual_fast_unmute_wait_hours` Uint32,
+            `resolution_reason` Utf8,
             `exported_at` Timestamp NOT NULL,
             PRIMARY KEY (`branch`, `build_type`, `full_name`, `issue_number`)
         )
@@ -274,7 +255,7 @@ def create_table(ydb_wrapper, table_path):
 def build_column_types():
     columns = ydb.BulkUpsertColumns()
 
-    for name, type_name in MANUAL_UNMUTE_BASE_COLUMNS + MANUAL_UNMUTE_ADDITIONAL_COLUMNS:
+    for name, type_name in MANUAL_UNMUTE_TABLE_COLUMNS:
         primitive = getattr(ydb.PrimitiveType, type_name)
         columns = columns.add_column(name, ydb.OptionalType(primitive))
 
@@ -287,7 +268,7 @@ def load_thresholds():
     return (
         int(data["default_unmute_window_days"]),
         fast_window_days,
-        int(data["manual_fast_unmute_wait_hours"]),
+        fast_window_days * 24,
     )
 
 
@@ -298,7 +279,7 @@ def main():
         "Thresholds:"
         f" default_unmute_window_days={default_window_days},"
         f" manual_fast_unmute_window_days={fast_window_days},"
-        f" manual_fast_unmute_wait_hours={wait_hours} (derived)"
+        f" manual_wait_hours={wait_hours} (derived)"
     )
 
     with YDBWrapper() as ydb_wrapper:

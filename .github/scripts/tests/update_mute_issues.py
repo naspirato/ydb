@@ -10,8 +10,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import parse_body
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
-    LEGACY_PENDING_24H_STATUS,
     PENDING_FAST_UNMUTE_WAIT_STATUS,
+    normalize_manual_unmute_status,
 )
 
 
@@ -644,9 +644,10 @@ def _parse_control_items(comment_body):
         reason_match = re.search(r'reason:([a-z0-9_]+)', line)
         requested_at_match = re.search(r'requested_at:([0-9T:\-+Z]+)', line)
         resolved_at_match = re.search(r'resolved_at:([0-9T:\-+Z]+)', line)
-        status = status_match.group(1) if status_match else (PENDING_FAST_UNMUTE_WAIT_STATUS if requested else 'idle')
-        if status == "pending_24h":
-            status = PENDING_FAST_UNMUTE_WAIT_STATUS
+        status = normalize_manual_unmute_status(
+            status_match.group(1) if status_match else "",
+            requested=requested,
+        )
         items[test_name] = {
             'requested': requested,
             'state': state_match.group(1) if state_match else 'active',
