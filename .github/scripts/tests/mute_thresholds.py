@@ -6,13 +6,13 @@ import os
 from functools import lru_cache
 
 
-_DEFAULTS = {
-    "mute_window_days": 4,
-    "default_unmute_window_days": 7,
-    "delete_window_days": 7,
-    "manual_fast_unmute_window_days": 1,
-    "control_comment_part_max_tests": 200,
-}
+_REQUIRED_KEYS = (
+    "mute_window_days",
+    "default_unmute_window_days",
+    "delete_window_days",
+    "manual_fast_unmute_window_days",
+    "control_comment_part_max_tests",
+)
 
 
 def _thresholds_path():
@@ -27,10 +27,12 @@ def load_thresholds():
         with open(path, "r", encoding="utf-8") as fp:
             payload = json.load(fp)
     except FileNotFoundError:
-        payload = {}
+        raise RuntimeError(f"Thresholds config not found: {path}")
 
-    thresholds = dict(_DEFAULTS)
-    raw = payload or {}
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Thresholds config must be JSON object: {path}")
+
+    raw = dict(payload)
 
     # Backward-compatible aliases for older key names.
     if "mute_days" in raw and "mute_window_days" not in raw:
@@ -44,14 +46,14 @@ def load_thresholds():
         wait_hours = int(raw["manual_fast_unmute_wait_hours"])
         raw["manual_fast_unmute_window_days"] = max(1, math.ceil(wait_hours / 24))
 
-    thresholds.update(raw)
+    missing = [key for key in _REQUIRED_KEYS if key not in raw]
+    if missing:
+        missing_text = ", ".join(sorted(missing))
+        raise RuntimeError(f"Missing threshold keys in {path}: {missing_text}")
 
-    # Normalize numeric fields.
-    thresholds["mute_window_days"] = int(thresholds["mute_window_days"])
-    thresholds["default_unmute_window_days"] = int(thresholds["default_unmute_window_days"])
-    thresholds["delete_window_days"] = int(thresholds["delete_window_days"])
-    thresholds["manual_fast_unmute_window_days"] = int(thresholds["manual_fast_unmute_window_days"])
-    thresholds["control_comment_part_max_tests"] = int(thresholds["control_comment_part_max_tests"])
+    thresholds = {}
+    for key in _REQUIRED_KEYS:
+        thresholds[key] = int(raw[key])
 
     # Derived value (single source of truth is manual_fast_unmute_window_days).
     thresholds["manual_fast_unmute_wait_hours"] = int(thresholds["manual_fast_unmute_window_days"]) * 24

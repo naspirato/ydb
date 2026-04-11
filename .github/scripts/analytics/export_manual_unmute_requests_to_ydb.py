@@ -270,11 +270,11 @@ def build_column_types():
 
 def load_thresholds():
     data = get_thresholds()
-    fast_window_days = int(data.get("manual_fast_unmute_window_days", 1))
+    fast_window_days = int(data["manual_fast_unmute_window_days"])
     return (
-        int(data.get("default_unmute_window_days", 7)),
+        int(data["default_unmute_window_days"]),
         fast_window_days,
-        fast_window_days * 24,
+        int(data["manual_fast_unmute_wait_hours"]),
     )
 
 
