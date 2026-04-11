@@ -24,6 +24,7 @@ REPO_NAME = "ydb"
 MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
 DEFAULT_BRANCH = "main"
 DEFAULT_BUILD_TYPE = "relwithdebinfo"
+PENDING_FAST_UNMUTE_WAIT_STATUS = "pending_fast_unmute_wait"
 
 
 def _parse_body_for_branches(body):
@@ -72,10 +73,14 @@ def _parse_control_items(comment_body):
         reason_match = re.search(r"reason:([a-z0-9_]+)", line)
         requested_at_match = re.search(r"requested_at:([0-9T:\\-+Z]+)", line)
         resolved_at_match = re.search(r"resolved_at:([0-9T:\\-+Z]+)", line)
+        status = status_match.group(1) if status_match else (PENDING_FAST_UNMUTE_WAIT_STATUS if requested else "idle")
+        if status == "pending_24h":
+            status = PENDING_FAST_UNMUTE_WAIT_STATUS
+
         items[test_name] = {
             "requested": requested,
             "state": state_match.group(1) if state_match else "active",
-            "status": status_match.group(1) if status_match else ("pending_24h" if requested else "idle"),
+            "status": status,
             "reason": reason_match.group(1) if reason_match else "",
             "requested_at": requested_at_match.group(1) if requested_at_match else "",
             "resolved_at": resolved_at_match.group(1) if resolved_at_match else "",
@@ -265,10 +270,11 @@ def build_column_types():
 
 def load_thresholds():
     data = get_thresholds()
+    fast_window_days = int(data.get("manual_fast_unmute_window_days", 1))
     return (
         int(data.get("default_unmute_window_days", 7)),
-        int(data.get("manual_fast_unmute_window_days", 1)),
-        int(data.get("manual_fast_unmute_wait_hours", 24)),
+        fast_window_days,
+        fast_window_days * 24,
     )
 
 
@@ -279,7 +285,7 @@ def main():
         "Thresholds:"
         f" default_unmute_window_days={default_window_days},"
         f" manual_fast_unmute_window_days={fast_window_days},"
-        f" manual_fast_unmute_wait_hours={wait_hours}"
+        f" manual_fast_unmute_wait_hours={wait_hours} (derived)"
     )
 
     with YDBWrapper() as ydb_wrapper:

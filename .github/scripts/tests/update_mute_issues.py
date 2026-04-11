@@ -31,11 +31,12 @@ FAST_UNMUTE_PENDING_COMMENT_MARKER = "<!--fast-unmute-pending:v1-->"
 UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
 UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
 MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
-MUTE_CONTROL_PART_MAX_TESTS = THRESHOLDS.get("control_comment_part_max_tests", 200)
 THRESHOLDS = get_mute_thresholds()
-MANUAL_FAST_UNMUTE_WAIT_HOURS = THRESHOLDS["manual_fast_unmute_wait_hours"]
 MANUAL_FAST_UNMUTE_WINDOW_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
+MANUAL_FAST_UNMUTE_WAIT_HOURS = MANUAL_FAST_UNMUTE_WINDOW_DAYS * 24
 DEFAULT_UNMUTE_WINDOW_DAYS = THRESHOLDS["default_unmute_window_days"]
+MUTE_CONTROL_PART_MAX_TESTS = THRESHOLDS.get("control_comment_part_max_tests", 200)
+PENDING_FAST_UNMUTE_WAIT_STATUS = "pending_fast_unmute_wait"
 REASON_NO_RUNS_DEFAULT_WINDOW = "no_runs_default_window"
 REASON_STABLE_MANUAL_FAST_WINDOW = "stable_manual_fast_window"
 REASON_STABLE_DEFAULT_WINDOW = "stable_default_window"
@@ -608,7 +609,7 @@ def _render_control_comment(issue_number, part_idx, part_total, items):
             "",
             "Legend:",
             "- active + [x] => manual fast-unmute requested",
-            "- pending_24h => waiting cooldown",
+            f"- {PENDING_FAST_UNMUTE_WAIT_STATUS} => waiting cooldown",
             f"- ready_for_fast_unmute => eligible for {MANUAL_FAST_UNMUTE_WINDOW_DAYS}-day stability check",
             "- strikethrough => historical (already unmuted/removed)",
             _control_part_end(),
@@ -640,10 +641,13 @@ def _parse_control_items(comment_body):
         reason_match = re.search(r'reason:([a-z0-9_]+)', line)
         requested_at_match = re.search(r'requested_at:([0-9T:\-+Z]+)', line)
         resolved_at_match = re.search(r'resolved_at:([0-9T:\-+Z]+)', line)
+        status = status_match.group(1) if status_match else (PENDING_FAST_UNMUTE_WAIT_STATUS if requested else 'idle')
+        if status == "pending_24h":
+            status = PENDING_FAST_UNMUTE_WAIT_STATUS
         items[test_name] = {
             'requested': requested,
             'state': state_match.group(1) if state_match else 'active',
-            'status': status_match.group(1) if status_match else ('pending_24h' if requested else 'idle'),
+            'status': status,
             'reason': reason_match.group(1) if reason_match else '',
             'requested_at': requested_at_match.group(1) if requested_at_match else '',
             'resolved_at': resolved_at_match.group(1) if resolved_at_match else '',
@@ -702,7 +706,7 @@ def _build_pending_status_comment(issue_number, new_requests):
             eta = _isoformat_z(requested_dt + datetime.timedelta(hours=MANUAL_FAST_UNMUTE_WAIT_HOURS))
         else:
             eta = f"in {MANUAL_FAST_UNMUTE_WAIT_HOURS}h"
-        lines.append(f"- `{test_name}` => pending_24h, eligible at `{eta}`")
+        lines.append(f"- `{test_name}` => {PENDING_FAST_UNMUTE_WAIT_STATUS}, eligible at `{eta}`")
     return (
         f"{FAST_UNMUTE_PENDING_COMMENT_MARKER}\n"
         f"Manual fast-unmute request registered for issue #{issue_number}.\n\n"
@@ -744,7 +748,7 @@ def collect_manual_unmute_request_rows(
         'issues_with_linked_pr': 0,
         'issues_branch_match': 0,
         'overrides_total': 0,
-        'pending_24h': 0,
+        'pending_fast_unmute_wait': 0,
         'new_requests': 0,
     }
 
@@ -831,8 +835,8 @@ def collect_manual_unmute_request_rows(
 
                 requested_dt = _parse_iso8601(item.get('requested_at'))
                 if requested_dt is None:
-                    item['status'] = 'pending_24h'
-                    stats['pending_24h'] += 1
+                    item['status'] = PENDING_FAST_UNMUTE_WAIT_STATUS
+                    stats['pending_fast_unmute_wait'] += 1
                     continue
 
                 ready_dt = requested_dt + datetime.timedelta(hours=MANUAL_FAST_UNMUTE_WAIT_HOURS)
@@ -853,10 +857,10 @@ def collect_manual_unmute_request_rows(
                     )
                     stats['overrides_total'] += 1
                 else:
-                    if item.get('status') != 'pending_24h':
-                        item['status'] = 'pending_24h'
+                    if item.get('status') != PENDING_FAST_UNMUTE_WAIT_STATUS:
+                        item['status'] = PENDING_FAST_UNMUTE_WAIT_STATUS
                         changed = True
-                    stats['pending_24h'] += 1
+                    stats['pending_fast_unmute_wait'] += 1
             else:
                 if item.get('status') != 'idle':
                     item['status'] = 'idle'
@@ -964,7 +968,7 @@ def collect_manual_unmute_request_rows(
         f"issues_non_bot_closed={stats['issues_non_bot_closed']}, "
         f"issues_with_linked_pr={stats['issues_with_linked_pr']}, "
         f"issues_branch_match={stats['issues_branch_match']}, "
-        f"pending_24h={stats['pending_24h']}, "
+        f"pending_fast_unmute_wait={stats['pending_fast_unmute_wait']}, "
         f"new_requests={stats['new_requests']}, "
         f"overrides_total={stats['overrides_total']}, "
         f"rows_total={len(request_rows)}"
@@ -1043,7 +1047,7 @@ def generate_github_issue_title_and_body(test_data):
         f"**Fast unmute ({MANUAL_FAST_UNMUTE_WINDOW_DAYS}-day window):**\n"
         "- Bot maintains control comments with checkbox list for muted tests.\n"
         "- Mark `[x]` near a test to request manual fast-unmute for this test.\n"
-        f"- Request enters `pending_24h`; fast-unmute starts only after full {MANUAL_FAST_UNMUTE_WAIT_HOURS}h cooldown.\n"
+        f"- Request enters `{PENDING_FAST_UNMUTE_WAIT_STATUS}`; fast-unmute starts only after full {MANUAL_FAST_UNMUTE_WAIT_HOURS}h cooldown.\n"
         "- If issue is closed manually (by human), all remaining active tests are auto-requested.\n\n"
         "**Read more in [mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**\n\n"
         f"**Summary history:** \n {summary_string}\n"
