@@ -151,7 +151,12 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
     
     return None
 
-def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME, since: Optional[datetime] = None) -> List[Dict[str, Any]]:
+def fetch_repository_issues(
+    org_name: str = ORG_NAME,
+    repo_name: str = REPO_NAME,
+    since: Optional[datetime] = None,
+    include_comment_bodies: bool = True,
+) -> List[Dict[str, Any]]:
     """Fetch all issues from GitHub repository with comprehensive information"""
     if since:
         print(f"Fetching issues updated since {since.isoformat()} from repository {org_name}/{repo_name}...")
@@ -169,6 +174,8 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
         since_str = since.strftime('%Y-%m-%dT%H:%M:%SZ')
         since_filter = f', filterBy: {{since: "{since_str}"}}'
     
+    comments_body_field = "body" if include_comment_bodies else "bodyText"
+
     repository_issues_query = """
     {
       organization(login: "%s") {
@@ -217,7 +224,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               comments(first: 100) {
                 totalCount
                 nodes {
-                  body
+                  %s
                 }
               }
               repository {
@@ -244,7 +251,13 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
     
     total_fetched = 0
     while has_next_page:
-        query = repository_issues_query % (org_name, repo_name, end_cursor, since_filter)
+        query = repository_issues_query % (
+            org_name,
+            repo_name,
+            end_cursor,
+            since_filter,
+            comments_body_field,
+        )
         result = run_query(query)
         
         if result and 'data' in result:

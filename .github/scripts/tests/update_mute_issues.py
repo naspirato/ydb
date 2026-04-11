@@ -8,7 +8,7 @@ import re
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import parse_body
-from mute_thresholds import get_mute_thresholds
+from mute_thresholds import get_thresholds
 
 
 ORG_NAME = 'ydb-platform'
@@ -31,11 +31,11 @@ FAST_UNMUTE_PENDING_COMMENT_MARKER = "<!--fast-unmute-pending:v1-->"
 UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
 UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
 MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
-THRESHOLDS = get_mute_thresholds()
+THRESHOLDS = get_thresholds()
 MANUAL_FAST_UNMUTE_WINDOW_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
 MANUAL_FAST_UNMUTE_WAIT_HOURS = MANUAL_FAST_UNMUTE_WINDOW_DAYS * 24
 DEFAULT_UNMUTE_WINDOW_DAYS = THRESHOLDS["default_unmute_window_days"]
-MUTE_CONTROL_PART_MAX_TESTS = THRESHOLDS.get("control_comment_part_max_tests", 200)
+MUTE_CONTROL_PART_MAX_TESTS = THRESHOLDS["control_comment_part_max_tests"]
 PENDING_FAST_UNMUTE_WAIT_STATUS = "pending_fast_unmute_wait"
 REASON_NO_RUNS_DEFAULT_WINDOW = "no_runs_default_window"
 REASON_STABLE_MANUAL_FAST_WINDOW = "stable_manual_fast_window"

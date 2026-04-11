@@ -134,7 +134,7 @@ def _effective_unmute_window(status, default_window_days, fast_window_days):
 
 
 def collect_rows(default_window_days, fast_window_days, wait_hours):
-    issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since=None, include_comment_bodies=True)
+    issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since=None)
     now = datetime.datetime.now(datetime.timezone.utc)
     rows = []
 
@@ -178,6 +178,8 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
                 ready_at = requested_at + datetime.timedelta(hours=wait_hours)
                 delta = ready_at - now
                 wait_hours_left = max(0, int(delta.total_seconds() // 3600))
+            manual_wait_hours_left = int(wait_hours_left if wait_hours_left is not None else 0)
+            manual_request_status = item.get("status", "idle")
 
             for branch in branches:
                 rows.append(
@@ -196,7 +198,18 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
                         "reason": item.get("reason", ""),
                         "requested_at": requested_at,
                         "resolved_at": resolved_at,
-                        "wait_hours_left": wait_hours_left if wait_hours_left is not None else 0,
+                        "wait_hours_left": manual_wait_hours_left,
+                        "manual_unmute_status": manual_request_status,
+                        "manual_request_status": manual_request_status,
+                        "manual_request_active": 1
+                        if (item.get("state") == "active" and item.get("requested"))
+                        else 0,
+                        "manual_requested_at": requested_at,
+                        "hours_until_ready": manual_wait_hours_left,
+                        "manual_wait_hours": int(wait_hours),
+                        "manual_wait_hours_total": int(wait_hours),
+                        "manual_wait_hours_left": manual_wait_hours_left,
+                        "manual_request_reason": item.get("reason", "") or None,
                         "effective_unmute_window_days": _effective_unmute_window(
                             item.get("status", "idle"), default_window_days, fast_window_days
                         ),
@@ -227,6 +240,15 @@ def create_table(ydb_wrapper, table_path):
             `requested_at` Timestamp,
             `resolved_at` Timestamp,
             `wait_hours_left` Uint32,
+            `manual_unmute_status` Utf8,
+            `manual_request_status` Utf8,
+            `manual_request_active` Uint8,
+            `manual_requested_at` Timestamp,
+            `hours_until_ready` Uint32,
+            `manual_wait_hours` Uint32,
+            `manual_wait_hours_total` Uint32,
+            `manual_wait_hours_left` Uint32,
+            `manual_request_reason` Utf8,
             `effective_unmute_window_days` Uint32,
             `default_unmute_window_days` Uint32,
             `manual_fast_unmute_window_days` Uint32,
@@ -260,6 +282,15 @@ def build_column_types():
         .add_column("requested_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
         .add_column("resolved_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
         .add_column("wait_hours_left", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("manual_unmute_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("manual_request_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("manual_request_active", ydb.OptionalType(ydb.PrimitiveType.Uint8))
+        .add_column("manual_requested_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("hours_until_ready", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("manual_wait_hours", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("manual_wait_hours_total", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("manual_wait_hours_left", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("manual_request_reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("effective_unmute_window_days", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         .add_column("default_unmute_window_days", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         .add_column("manual_fast_unmute_window_days", ydb.OptionalType(ydb.PrimitiveType.Uint32))
