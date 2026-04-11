@@ -1,7 +1,6 @@
 import os
 import sys
 import requests
-from github import Github #pip3 install PyGithub
 from urllib.parse import quote_plus
 import datetime
 import re
@@ -9,6 +8,7 @@ import re
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import parse_body
+from mute_thresholds import get_mute_thresholds
 
 
 ORG_NAME = 'ydb-platform'
@@ -31,8 +31,11 @@ FAST_UNMUTE_PENDING_COMMENT_MARKER = "<!--fast-unmute-pending:v1-->"
 UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
 UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
 MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
-MUTE_CONTROL_PART_MAX_TESTS = 200
-MANUAL_FAST_UNMUTE_WAIT_HOURS = 24
+MUTE_CONTROL_PART_MAX_TESTS = THRESHOLDS.get("control_comment_part_max_tests", 200)
+THRESHOLDS = get_mute_thresholds()
+MANUAL_FAST_UNMUTE_WAIT_HOURS = THRESHOLDS["manual_fast_unmute_wait_hours"]
+MANUAL_FAST_UNMUTE_WINDOW_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
+DEFAULT_UNMUTE_WINDOW_DAYS = THRESHOLDS["default_unmute_window_days"]
 REASON_NO_RUNS_DEFAULT_WINDOW = "no_runs_default_window"
 REASON_STABLE_MANUAL_FAST_WINDOW = "stable_manual_fast_window"
 REASON_STABLE_DEFAULT_WINDOW = "stable_default_window"
@@ -523,7 +526,7 @@ def _build_fast_unmute_comment(issue_number, closer_login, linked_prs):
         "Linked PRs:\n"
         f"{linked_pr_lines}\n\n"
         "Result:\n"
-        "- tests from this issue become eligible for 1-day unmute window in mute update flow"
+        f"- tests from this issue become eligible for {MANUAL_FAST_UNMUTE_WINDOW_DAYS}-day unmute window in mute update flow"
     )
 
 
@@ -606,7 +609,7 @@ def _render_control_comment(issue_number, part_idx, part_total, items):
             "Legend:",
             "- active + [x] => manual fast-unmute requested",
             "- pending_24h => waiting cooldown",
-            "- ready_for_fast_unmute => eligible for 1-day stability check",
+            f"- ready_for_fast_unmute => eligible for {MANUAL_FAST_UNMUTE_WINDOW_DAYS}-day stability check",
             "- strikethrough => historical (already unmuted/removed)",
             _control_part_end(),
         ]
@@ -705,7 +708,7 @@ def _build_pending_status_comment(issue_number, new_requests):
         f"Manual fast-unmute request registered for issue #{issue_number}.\n\n"
         "Selected tests:\n"
         f"{chr(10).join(lines)}\n\n"
-        f"Rule: full {MANUAL_FAST_UNMUTE_WAIT_HOURS}h cooldown + stable 1-day window "
+        f"Rule: full {MANUAL_FAST_UNMUTE_WAIT_HOURS}h cooldown + stable {MANUAL_FAST_UNMUTE_WINDOW_DAYS}-day window "
         "(>=4 runs, 0 fail/mute)."
     )
 
@@ -718,23 +721,21 @@ def _derive_resolution_reason(test_name, had_manual_request, stable_unmute_candi
     return REASON_STABLE_DEFAULT_WINDOW
 
 
-def collect_fast_unmute_overrides(
+def collect_manual_unmute_request_rows(
     branch='main',
     build_type='relwithdebinfo',
+    stable_unmute_candidates=None,
+    delete_candidates=None,
     require_non_bot_close_actor=True,
     require_linked_development_pr=True,
     add_auto_comment=True,
 ):
-    """Collect fast-unmute overrides from mute issues using control comments.
+    """Collect manual-unmute request rows and fast-unmute overrides from control comments."""
+    stable_unmute_candidates = stable_unmute_candidates or set()
+    delete_candidates = delete_candidates or set()
 
-    Behavior:
-      - create/update bot-managed control comments with checkbox rows;
-      - when user marks [x], row becomes pending_24h and gets requested_at;
-      - row is eligible for fast-unmute only after full 24h cooldown;
-      - for manually closed issues by human, all active rows are auto-requested.
-      - once a test is no longer muted, row is struck through with reason.
-    """
     overrides = []
+    request_rows = []
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
     stats = {
         'issues_total': 0,
@@ -797,7 +798,7 @@ def collect_fast_unmute_overrides(
         control_items = {}
         for comment in existing_control_comments:
             control_items.update(_parse_control_items(comment.get('body', '')))
-        for test_name in remaining_tests:
+        for test_name in sorted(set(tests)):
             control_items.setdefault(
                 test_name,
                 {
@@ -834,7 +835,7 @@ def collect_fast_unmute_overrides(
                     stats['pending_24h'] += 1
                     continue
 
-                ready_dt = requested_dt + datetime.timedelta(hours=FAST_UNMUTE_WAIT_HOURS)
+                ready_dt = requested_dt + datetime.timedelta(hours=MANUAL_FAST_UNMUTE_WAIT_HOURS)
                 if now >= ready_dt:
                     if item.get('status') != 'ready_for_fast_unmute':
                         item['status'] = 'ready_for_fast_unmute'
@@ -844,8 +845,8 @@ def collect_fast_unmute_overrides(
                             'full_name': test_name,
                             'branch': branch,
                             'build_type': build_type,
-                            'window_days': 1,
-                            'reason': 'manual_unmute_after_24h',
+                            'window_days': MANUAL_FAST_UNMUTE_WINDOW_DAYS,
+                            'reason': 'manual_unmute_after_wait',
                             'issue_number': issue_number,
                             'requested_at': item.get('requested_at'),
                         }
@@ -863,6 +864,24 @@ def collect_fast_unmute_overrides(
                 if item.get('requested_at'):
                     item['requested_at'] = ''
                     changed = True
+
+        for test_name in sorted(set(tests)):
+            item = control_items[test_name]
+            if item.get('state') == 'resolved':
+                continue
+            if test_name not in remaining_tests:
+                item['state'] = 'resolved'
+                item['status'] = 'resolved'
+                item['reason'] = _derive_resolution_reason(
+                    test_name,
+                    had_manual_request=bool(item.get('requested')),
+                    stable_unmute_candidates=stable_unmute_candidates,
+                    delete_candidates=delete_candidates,
+                )
+                item['resolved_at'] = item.get('resolved_at') or _isoformat_z(now)
+                item['requested'] = False
+                item['requested_at'] = ''
+                changed = True
 
         active_items = {name: control_items[name] for name in remaining_tests if control_items[name].get('state') != 'resolved'}
         active_chunks = _split_tests_into_chunks(active_items.keys())
@@ -892,14 +911,6 @@ def collect_fast_unmute_overrides(
         if new_requests:
             stats['new_requests'] += len(new_requests)
             add_issue_comment(issue_id, _build_pending_status_comment(issue_number, new_requests))
-        elif is_closed and closed_by_human:
-            ready_now = [
-                name
-                for name in remaining_tests
-                if (control_items.get(name) or {}).get('status') == 'ready_for_fast_unmute'
-            ]
-            if ready_now:
-                add_issue_comment(issue_id, _build_pending_status_comment(issue_number, [(name, (control_items.get(name) or {}).get('requested_at')) for name in ready_now]))
 
         if add_auto_comment and is_closed and linked_prs:
             comments = get_issue_comments(issue_id)
@@ -911,6 +922,41 @@ def collect_fast_unmute_overrides(
                 )
                 add_issue_comment(issue_id, comment)
 
+        for test_name in sorted(set(tests)):
+            item = control_items[test_name]
+            requested_at = item.get('requested_at') or ''
+            requested_dt = _parse_iso8601(requested_at)
+            hours_until_ready = 0
+            if item.get('state') == 'active' and item.get('requested') and requested_dt:
+                ready_dt = requested_dt + datetime.timedelta(hours=MANUAL_FAST_UNMUTE_WAIT_HOURS)
+                delta = int((ready_dt - now).total_seconds() // 3600)
+                hours_until_ready = max(delta, 0)
+
+            effective_window = (
+                MANUAL_FAST_UNMUTE_WINDOW_DAYS
+                if item.get('state') == 'active' and item.get('status') == 'ready_for_fast_unmute'
+                else DEFAULT_UNMUTE_WINDOW_DAYS
+            )
+
+            request_rows.append(
+                {
+                    'issue_number': int(issue_number or 0),
+                    'full_name': test_name,
+                    'branch': branch,
+                    'build_type': build_type,
+                    'manual_unmute_status': item.get('status') or 'idle',
+                    'manual_request_active': 1 if (item.get('state') == 'active' and item.get('requested')) else 0,
+                    'manual_requested_at': requested_dt if requested_dt else None,
+                    'hours_until_ready': max(hours_until_ready, 0),
+                    'manual_wait_hours': int(MANUAL_FAST_UNMUTE_WAIT_HOURS),
+                    'effective_unmute_window_days': int(effective_window),
+                    'default_unmute_window_days': int(DEFAULT_UNMUTE_WINDOW_DAYS),
+                    'manual_fast_unmute_window_days': int(MANUAL_FAST_UNMUTE_WINDOW_DAYS),
+                    'resolution_reason': item.get('reason') or None,
+                    'exported_at': now,
+                }
+            )
+
     print(
         "FAST_UNMUTE_OVERRIDE_COLLECT: "
         f"issues_total={stats['issues_total']}, "
@@ -920,7 +966,30 @@ def collect_fast_unmute_overrides(
         f"issues_branch_match={stats['issues_branch_match']}, "
         f"pending_24h={stats['pending_24h']}, "
         f"new_requests={stats['new_requests']}, "
-        f"overrides_total={stats['overrides_total']}"
+        f"overrides_total={stats['overrides_total']}, "
+        f"rows_total={len(request_rows)}"
+    )
+    return overrides, request_rows
+
+
+def collect_fast_unmute_overrides(
+    branch='main',
+    build_type='relwithdebinfo',
+    stable_unmute_candidates=None,
+    delete_candidates=None,
+    require_non_bot_close_actor=True,
+    require_linked_development_pr=True,
+    add_auto_comment=True,
+):
+    """Backward-compatible wrapper returning only overrides."""
+    overrides, _rows = collect_manual_unmute_request_rows(
+        branch=branch,
+        build_type=build_type,
+        stable_unmute_candidates=stable_unmute_candidates,
+        delete_candidates=delete_candidates,
+        require_non_bot_close_actor=require_non_bot_close_actor,
+        require_linked_development_pr=require_linked_development_pr,
+        add_auto_comment=add_auto_comment,
     )
     return overrides
 
@@ -971,7 +1040,7 @@ def generate_github_issue_title_and_body(test_data):
         f"{test_mute_strings_string}\n"
         "```\n\n"
         f"Owner: {owner}\n\n"
-        "**Fast unmute (1-day window):**\n"
+        f"**Fast unmute ({MANUAL_FAST_UNMUTE_WINDOW_DAYS}-day window):**\n"
         "- Bot maintains control comments with checkbox list for muted tests.\n"
         "- Mark `[x]` near a test to request manual fast-unmute for this test.\n"
         f"- Request enters `pending_24h`; fast-unmute starts only after full {MANUAL_FAST_UNMUTE_WAIT_HOURS}h cooldown.\n"

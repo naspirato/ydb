@@ -1,4 +1,6 @@
 $window_days = 365;
+$default_unmute_days = 7;
+$manual_fast_unmute_days = 1;
 
 SELECT
     tm.state_filtered AS state_filtered,
@@ -28,6 +30,14 @@ SELECT
     tm.days_in_state_filtered AS days_in_state_filtered,
     tm.owner_team_key AS owner_team,
     Coalesce(om.area, 'area/-') AS area,
+    Coalesce(mu.manual_request_status, 'none') AS manual_request_status,
+    mu.manual_request_reason AS manual_request_reason,
+    mu.manual_requested_at AS manual_requested_at,
+    Coalesce(mu.manual_wait_hours_total, 0u) AS manual_wait_hours_total,
+    Coalesce(mu.manual_wait_hours_left, 0u) AS manual_wait_hours_left,
+    Coalesce(mu.effective_unmute_window_days, $default_unmute_days) AS effective_unmute_window_days,
+    Coalesce(mu.default_unmute_window_days, $default_unmute_days) AS default_unmute_window_days,
+    Coalesce(mu.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS manual_fast_unmute_window_days,
     gim.github_issue_url AS github_issue_url,
     gim.github_issue_number AS github_issue_number,
     gim.github_issue_state AS github_issue_state,
@@ -51,6 +61,32 @@ LEFT JOIN (
     FROM `test_results/analytics/area_to_owner_mapping`
     GROUP BY owner_team
 ) AS om ON tm.owner_team_key = om.owner_team
+LEFT JOIN (
+    SELECT
+        full_name,
+        branch,
+        build_type,
+        manual_request_status,
+        manual_request_reason,
+        manual_requested_at,
+        manual_wait_hours_total,
+        manual_wait_hours_left,
+        effective_unmute_window_days,
+        default_unmute_window_days,
+        manual_fast_unmute_window_days
+    FROM (
+        SELECT
+            m.*,
+            ROW_NUMBER() OVER (
+                PARTITION BY m.full_name, m.branch, m.build_type
+                ORDER BY m.exported_at DESC, m.issue_number DESC
+            ) AS rn
+        FROM `test_results/analytics/manual_unmute_requests` AS m
+    )
+    WHERE rn = 1
+) AS mu ON tm.full_name = mu.full_name
+    AND tm.branch = mu.branch
+    AND tm.build_type = mu.build_type
 LEFT JOIN (
     SELECT
         full_name AS full_name,

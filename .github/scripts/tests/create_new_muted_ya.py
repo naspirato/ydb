@@ -18,8 +18,9 @@ from update_mute_issues import (
     generate_github_issue_title_and_body,
     get_muted_tests_from_issues,
     close_unmuted_issues,
-    collect_fast_unmute_overrides,
+    collect_manual_unmute_request_rows,
 )
+from mute_thresholds import get_thresholds
 
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
@@ -32,11 +33,12 @@ dir = os.path.dirname(__file__)
 repo_path = f"{dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
 
-# Constants for mute logic time windows
-MUTE_DAYS = 4
-UNMUTE_DAYS = 7
-DELETE_DAYS = 7
-FAST_UNMUTE_DAYS = 1
+# Constants for mute logic time windows (configurable)
+THRESHOLDS = get_thresholds()
+MUTE_DAYS = THRESHOLDS["mute_window_days"]
+UNMUTE_DAYS = THRESHOLDS["default_unmute_window_days"]
+DELETE_DAYS = THRESHOLDS["delete_window_days"]
+FAST_UNMUTE_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
 
 def is_chunk_test(test):
     # First, check the is_test_chunk field if it exists.
@@ -972,7 +974,7 @@ def mute_worker(args):
                 if test.get('full_name') and is_delete_candidate(test, aggregated_for_delete)
             }
 
-            overrides = collect_fast_unmute_overrides(
+            overrides, manual_rows = collect_manual_unmute_request_rows(
                 branch=args.branch,
                 build_type=build_type,
                 stable_unmute_candidates=stable_unmute_candidates,
@@ -988,6 +990,7 @@ def mute_worker(args):
                 "FAST_UNMUTE_OVERRIDES: "
                 f"raw_rows={len(overrides)}, unique_tests={len(fast_override_days_by_test)}"
             )
+            logging.info(f"MANUAL_UNMUTE_REQUEST_ROWS: {len(manual_rows)}")
 
             apply_and_add_mutes(
                 all_data,

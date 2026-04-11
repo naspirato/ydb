@@ -111,8 +111,11 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
             reactions {
               totalCount
             }
-            comments {
+            comments(first: 100) {
               totalCount
+              nodes {
+                body
+              }
             }
             repository {
               id
@@ -211,8 +214,11 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               reactions {
                 totalCount
               }
-              comments {
+              comments(first: 100) {
                 totalCount
+                nodes {
+                  body
+                }
               }
               repository {
                 id
