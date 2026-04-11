@@ -44,6 +44,11 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       continue-on-error: true
       run: python3 .github/scripts/analytics/export_issues_to_ydb.py
+    - name: Export manual unmute requests
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/export_manual_unmute_requests_to_ydb.py
     - name: Export GitHub pull_requests
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
