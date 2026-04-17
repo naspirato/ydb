@@ -1,259 +1,116 @@
-## 📖 Mute and Unmute Rules
+# Mute / Unmute automation runbook
 
----
+This document describes the **current** behavior of mute automation in this repository.
 
-### Mute a test if in the last 4 days:
-- **3 or more failures AND runs (pass + fail) more than 10**
-- **OR** 2 or more failures AND runs (pass + fail) not more than 10
+## Decision rules
 
-### Unmute a test if in the last 7 days:
-- **Runs (pass + fail + mute) >= 4**
-- **AND no failures (fail + mute = 0)**
+Rule thresholds are loaded from:
 
-### Remove from mute if in the last 7 days:
-- **No runs at all** (pass + fail + mute + skip = 0)
+- `.github/config/mute_coordinator_thresholds.json`
+- fallback defaults in `.github/scripts/mute_policy_rules.py`
 
----
+### Mute candidate
 
-### Notes
-- For all rules, only the last N days are considered (N=4 for mute, N=7 for unmute, N=7 for delete), including the current day.
-- A "run" is any test execution with result pass, fail, or mute.
-- A "failure" is a test execution with result fail or mute.
-- Statistics aggregation is done by key (test_name, suite_folder, full_name, build_type, branch).
+A test is added to `to_mute` when it is not currently muted and satisfies default mute predicate.
 
----
+Default threshold values:
 
-**Example:**
-- If a test ran 15 times in 3 days with 3 failures — the test will be muted.
-- If a test ran 5 times in 3 days with 2 failures — the test will be muted.
-- If a test ran 4 times in 7 days and all passed successfully — the test will be unmuted.
-- If a test didn't run at all in 7 days — it will be removed from mute.
+- window: `4` days
+- if `pass + fail > 10`, require at least `3` fails
+- otherwise require at least `2` fails
 
-## 🔄 Automated Workflow
+### Unmute candidate
 
-### Automatic muted_ya.txt Updates
-The `.github/workflows/update_muted_ya.yml` workflow automatically:
-- Runs every 2 hours from 6:00 to 20:00 UTC
-- Analyzes test data for the last 4-7 days
-- Creates a PR with updated `muted_ya.txt` based on the rules above
-- The PR should be approved to merge by CI Team @ydb-platform/ci
+A test is added to `to_unmute` when default unmute predicate passes.
 
-### Automatic Issue Creation
-The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
-- Triggers after approval of PRs with `mute-unmute` label
-- Creates GitHub issues for newly muted tests and close unmute
-- Assigns issues to appropriate teams based on test ownership
-- Links issues to the PR that introduced the mutes
+Default threshold values:
 
-## 📝 Manual mute/unmute management
+- window: `7` days
+- minimum runs `(pass + fail + mute) >= 4`
+- failures `(fail + mute) == 0`
 
-### How to mute a test manually
+### Delete-from-mute candidate (`to_delete`)
 
-- Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and add a test line.
-- Create a PR, copy the title and description from the issue.
-- Get confirmation from the test owner.
-- After merging, link the PR and issue, notify the team.
+A muted test is added to `to_delete` when:
 
-**You can also:**
-- Use the context menu in the PR report (see screenshot).
-- Use [Test history dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) to search and mute a test.
+- it has no runs in the delete window, or
+- it was muted and only skipped in the window.
 
-### How to unmute a test manually
+Default delete window: `7` days.
 
-- Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and remove the test line.
-- Create a PR with title "UnMute {testname}".
-- Get confirmation from the test owner.
-- After merging, move the issue to Unmuted status, link the PR and issue.
+## User-fixed quarantine
 
-## 📊 Dashboard for analyzing muted and flaky tests
+Quarantine logic lives in `.github/scripts/tests/mute_quarantine.py`.
 
-For analyzing test status, finding mute/unmute candidates, and tracking stability, use the interactive dashboard:
+Signal source: recently closed issues from YDB `issues` table where:
 
-- [YDB Test Analytics Dashboard](https://datalens.yandex/4un3zdm0zcnyr)
+- `closed_by_type == "User"`
+- closure reason is `COMPLETED` (non-completed user closures are rejected)
+- issue body maps to current branch/build profile
 
-**Dashboard capabilities:**
-- View all muted tests by owner, full_name, status
-- Quick search by test name or team (owner)
-- Filter by status (flaky, muted, stable, etc.)
-- History of runs and failures by day
-- Tables of mute/unmute candidates (see corresponding tabs)
-- Quick transition to creating mute-issues via link in the table
+Actions:
 
-**Usage examples:**
-- Find all muted tests for your team: select owner in the filter
-- Find flaky candidates for mute: Flaky tab, filter by fail_count/run_count
-- Find stable mutes for unmute: Stable tab, filter by success_rate
+- `hide`: test is hidden from generated muted output while quarantine window is active
+- `stable`: quarantine ended and unmute rule is still satisfied
+- `restore`: quarantine ended, unmute rule is not satisfied -> return to muted output
 
-## 📋 Files generated by create_new_muted_ya.py
+Fail-safe behavior:
 
-### 🔇 [to_mute.txt](mute_update/to_mute.txt)
-**Content:** Mute candidates by new rules  
-**Rules:** In 4 days (≥3 failures **AND** runs >10) **OR** (≥2 failures **AND** runs ≤10)  
-**Usage:** Main file for mute decisions
+- if issues table path/query fails, quarantine returns empty actions with explicit error code in stats
 
-### 🔊 [to_unmute.txt](mute_update/to_unmute.txt)
-**Content:** Unmute candidates by new rules  
-**Rules:** In 7 days ≥4 runs (pass+fail+mute), no failures (fail+mute=0)  
-**Usage:** Main file for unmute decisions
+## Workflows
 
-### 🗑️ [to_remove_from_mute.txt](mute_update/to_remove_from_mute.txt)
-**Content:** Tests to remove from mute  
-**Rules:** No runs in 7 days  
-**Usage:** Main file for removal from mute
+### 1) Update muted file
 
-## 📊 Additional analysis files
+Workflow: `.github/workflows/update_muted_ya.yml`
 
-### 🔍 [muted_ya-deleted.txt](mute_update/muted_ya-deleted.txt)
-**Content:** Tests from muted_ya minus deleted tests  
-**Formula:** `muted_ya` - `deleted`  
-**Usage:** Analysis of active tests in mute
+- schedule: hourly, from `04:00` to `21:00` UTC
+- also supports `workflow_dispatch`
+- generates `mute_update/new_muted_ya.txt`
+- if changed vs base branch file, opens/updates PR with `.github/config/muted_ya.txt`
 
-### 🔍 [muted_ya-stable.txt](mute_update/muted_ya-stable.txt)
-**Content:** Tests from muted_ya minus stable tests  
-**Formula:** `muted_ya` - `stable`  
-**Usage:** Analysis of unstable tests in mute
+### 2) Create issues for merged mute PR
 
-### 🔍 [muted_ya-stable-deleted.txt](mute_update/muted_ya-stable-deleted.txt)
-**Content:** Tests from muted_ya minus stable and deleted  
-**Formula:** `muted_ya` - `stable` - `deleted`  
-**Usage:** Analysis of active unstable tests
+Workflow: `.github/workflows/create_issues_for_muted_tests.yml`
 
-### 🔍 [muted_ya-stable-deleted+flaky.txt](mute_update/muted_ya-stable-deleted+flaky.txt)
-**Content:** Tests from muted_ya minus stable and deleted, plus flaky  
-**Formula:** `muted_ya` - `stable` - `deleted` + `flaky`  
-**Usage:** Creating GitHub issues
+- triggers when PR to `main` is merged
+- runs only for PRs with label `mute-unmute`
+- also supports `workflow_dispatch`
+- creates missing mute issues, comments PR, refreshes analytics tables
 
-## 📋 Debug files (with details)
+## Generated files (`mute_update/`)
 
-### 🔍 [muted_ya-deleted_debug.txt](mute_update/muted_ya-deleted_debug.txt)
-**Content:** Details for tests muted_ya - deleted  
-**Additional:** owner, success_rate, state, days_in_state
+### Core action files
 
-### 🔍 [muted_ya-stable_debug.txt](mute_update/muted_ya-stable_debug.txt)
-**Content:** Details for tests muted_ya - stable  
-**Additional:** owner, success_rate, state, days_in_state
+| File | Meaning |
+|---|---|
+| `to_mute.txt` | Candidates to add into mute |
+| `to_unmute.txt` | Candidates to unmute |
+| `to_delete.txt` | Candidates to remove from mute because they disappeared / only skipped |
+| `muted_ya.txt` | Current muted set reconstructed from monitor rows |
+| `new_muted_ya.txt` | Final output used to update `.github/config/muted_ya.txt` |
 
-### 🔍 [muted_ya-stable-deleted_debug.txt](mute_update/muted_ya-stable-deleted_debug.txt)
-**Content:** Details for tests muted_ya - stable - deleted  
-**Additional:** owner, success_rate, state, days_in_state
+### Intermediate snapshots
 
-### 🔍 [muted_ya-stable-deleted+flaky_debug.txt](mute_update/muted_ya-stable-deleted+flaky_debug.txt)
-**Content:** Details for tests muted_ya - stable - deleted + flaky  
-**Additional:** owner, success_rate, state, days_in_state, pass_count, fail_count
+| File | Meaning |
+|---|---|
+| `muted_ya+to_mute.txt` | current muted + new mute candidates |
+| `muted_ya-to_unmute.txt` | current muted minus unmute candidates |
+| `muted_ya-to_delete.txt` | current muted minus delete candidates |
+| `muted_ya-to-delete-to-unmute.txt` | current muted minus delete and unmute |
+| `muted_ya-to-delete-to-unmute+to_mute.txt` | pre-final merged set before copying to `new_muted_ya.txt` |
+| `muted_ya_changes.txt` | combined diff-like view (`+++`, `---`, `xxx`) |
 
----
+### Quarantine snapshots
 
-## 🔄 File lifecycle
+| File | Meaning |
+|---|---|
+| `quarantine_hidden.txt` | hidden during quarantine |
+| `quarantine_restored.txt` | restored after failed quarantine |
+| `quarantine_stable_unmuted.txt` | stayed unmuted after quarantine |
 
-1. **Data analysis** → Creation of main action files
-2. **Rule application** → Formation of three main files
-3. **Additional analysis** → Creation of files for analyzing various combinations
-4. **Issue creation** → Using `new_muted_ya.txt`
+For most `.txt` files, a corresponding `*_debug.txt` file is generated with decision context.
 
-**All files are created in the `mute_update/` directory when running the script. The final mute file for workflow is `new_muted_ya.txt`.**
+## Dashboards
 
-# Mute logic output files table
-
-This table shows all files created by the mute logic script, with descriptions of their content and purpose.
-
-## 📋 Main files
-
-| File | Description | Rules | Usage |
-|------|----------|---------|---------------|
-| `to_mute.txt` | Mute candidates | In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10) | Main file for mute decisions |
-| `to_unmute.txt` | Unmute candidates | In 7 days ≥4 runs (pass+fail+mute), no failures (fail+mute=0) | Main file for unmute decisions |
-| `to_remove_from_mute.txt` | Tests to remove from mute | No runs in 7 days | Main file for removal from mute |
-
-## 📊 Additional analysis files
-
-| File | Description | Formula | Usage |
-|------|----------|---------|---------------|
-| `muted_ya.txt` | All currently muted tests | aggregated over 4 days | Base for mute analysis |
-| `muted_ya+to_mute.txt` | muted_ya + to_mute | | Analysis of potential mutes |
-| `muted_ya-to_unmute.txt` | muted_ya - to_unmute | | Analysis of potential unmutes |
-| `muted_ya-to_delete.txt` | muted_ya - to_delete | | Analysis of potential deletions |
-| `muted_ya-to-delete-to-unmute.txt` | muted_ya - to_delete - to_unmute | | Analysis of active mutes |
-| `muted_ya-to-delete-to-unmute+to_mute.txt` | (muted_ya - to_delete - to_unmute) + to_mute | | For final mute file |
-| `new_muted_ya.txt` | Final mute file for workflow (duplicates muted_ya-to-delete-to-unmute+to_mute.txt) | copy of previous | Used for automatic update of .github/config/muted_ya.txt |
-
-## 📋 Debug files (with details)
-
-| File | Description | Additional information |
-|------|----------|---------------------------|
-| `muted_ya-deleted_debug.txt` | Details for tests muted_ya - deleted | owner, success_rate, state, days_in_state |
-| `muted_ya-stable_debug.txt` | Details for tests muted_ya - stable | owner, success_rate, state, days_in_state |
-| `muted_ya-stable-deleted_debug.txt` | Details for tests muted_ya - stable - deleted | owner, success_rate, state, days_in_state |
-| `muted_ya-stable-deleted+flaky_debug.txt` | Details for tests muted_ya - stable - deleted + flaky | owner, success_rate, state, days_in_state, pass_count, fail_count |
-
----
-## Muted Tests Workflow Diagram
-
-### Main Workflow: Update Muted YA → PR Merge → Notifications
-
-```mermaid
-graph TB
-    Start([Schedule: Every 2h<br/>or Manual]) --> UpdateAnalytics[📊 Update Analytics<br/>flaky_tests_history<br/>upload_muted_tests<br/>tests_monitor]
-    
-    UpdateAnalytics --> GenerateFile[📝 Generate new muted_ya.txt<br/>create_new_muted_ya.py]
-    
-    GenerateFile --> CheckChanges{Changes?}
-    CheckChanges -->|No| End1([End])
-    CheckChanges -->|Yes| CreatePR[📦 Create PR<br/>with changes]
-    
-    CreatePR --> CommentPR[💬 Comment PR<br/>Add labels & reviewers]
-    CommentPR --> AutoMerge[🔄 Enable auto-merge]
-    AutoMerge --> WaitMerge[⏳ Wait for PR merge]
-    
-    WaitMerge --> PRMerged[✅ PR Merged<br/>Trigger: create_issues_for_muted_tests.yml]
-    
-    PRMerged --> CreateIssues[📋 Create GitHub Issues<br/>for new muted tests]
-    CreateIssues --> CommentMergedPR[💬 Comment merged PR<br/>Add issues info]
-    
-    CommentMergedPR --> UpdateAnalyticsAfterMerge[📊 Update Analytics<br/>upload_muted_tests<br/>flaky_tests_history<br/>tests_monitor<br/>export_issues<br/>github_issue_mapping<br/>test_muted_monitor_mart]
-    
-    UpdateAnalyticsAfterMerge --> SendTelegram[📨 Send Telegram Messages<br/>with trend plots<br/>to team channels]
-    
-    SendTelegram --> End2([End])
-    
-    style Start fill:#e1f5ff
-    style UpdateAnalytics fill:#ffe1ff
-    style UpdateAnalyticsAfterMerge fill:#ffe1ff
-    style CommentPR fill:#fff4e1
-    style CommentMergedPR fill:#fff4e1
-    style SendTelegram fill:#e1ffe1
-    style End1 fill:#ffe1e1
-    style End2 fill:#e1ffe1
-    style CheckChanges fill:#fff4e1
-    style PRMerged fill:#e1e1ff
-```
-
-### Analytics Update Sequence
-
-```mermaid
-sequenceDiagram
-    participant W as Workflow
-    participant YDB as YDB Database
-    participant GH as GitHub
-    participant TG as Telegram
-    
-    Note over W: update_muted_ya.yml (Periodic)
-    W->>YDB: 1. flaky_tests_history.py<br/>Collect test history
-    W->>YDB: 2. upload_muted_tests<br/>Update muted status
-    W->>YDB: 3. tests_monitor.py<br/>Update monitoring
-    W->>W: Generate new muted_ya.txt
-    W->>GH: Create PR (if changes)
-    
-    Note over W: PR Merged → create_issues_for_muted_tests.yml
-    W->>GH: Create issues
-    W->>GH: Comment PR
-    
-    W->>YDB: 4. upload_muted_tests<br/>Update muted status
-    W->>YDB: 5. flaky_tests_history.py<br/>Collect test history
-    W->>YDB: 6. tests_monitor.py<br/>Update monitoring
-    W->>YDB: 7. export_issues_to_ydb.py<br/>Export GitHub issues
-    W->>YDB: 8. github_issue_mapping.py<br/>Create issue mapping
-    W->>YDB: 9. test_muted_monitor_mart<br/>Update data mart
-    
-    W->>TG: Send messages with plots
-```
-
+- Main test analytics dashboard: https://datalens.yandex/4un3zdm0zcnyr
