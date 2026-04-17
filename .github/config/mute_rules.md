@@ -1,101 +1,101 @@
-# 📖 Простые правила mute / unmute
+# Mute / Unmute rules (short guide)
 
-Этот файл — короткая памятка для людей: **что произойдет с тестом и почему**.
-
----
-
-## 1) Когда тест замьютится (`to_mute`)
-
-Смотрим последние **4 дня**:
-
-- если запусков (`pass + fail`) **больше 10** — нужно минимум **3 fail**
-- если запусков **10 или меньше** — нужно минимум **2 fail**
-
-Пример:
-- 15 запусков, 3 fail → попадет в mute
-- 6 запусков, 2 fail → попадет в mute
+This is a short human-readable guide that explains when tests are muted or unmuted.
 
 ---
 
-## 2) Когда тест размьютится (`to_unmute`)
+## MUTE when (`to_mute`)
 
-Смотрим последние **7 дней**:
+Look at the last **4 days**:
 
-- запусков (`pass + fail + mute`) не меньше **4**
-- ошибок (`fail + mute`) ровно **0**
+- if runs (`pass + fail`) are **more than 10** -> need at least **3 fails**
+- if runs are **10 or less** -> need at least **2 fails**
 
-Пример:
-- 5 запусков, все успешные → попадет в unmute
-
----
-
-## 3) Когда тест удаляется из mute (`to_delete`)
-
-Смотрим последние **7 дней**:
-
-- либо запусков нет вообще
-- либо тест был muted и все события были только `skip`
+Examples:
+- 15 runs, 3 fails -> goes to mute
+- 6 runs, 2 fails -> goes to mute
 
 ---
 
-## 4) Карантин для user-fixed тестов
+## UNMUTE when (`to_unmute`)
 
-Если issue по тесту закрыт **пользователем** и с причиной закрытия `COMPLETED`, тест может попасть в карантин:
+Look at the last **7 days**:
 
-- `hide` — временно скрываем из итогового muted-файла
-- `stable` — карантин закончился, условия unmute выполнены, остается размьюченным
-- `restore` — карантин закончился, условия unmute не выполнены, возвращаем в muted
+- runs (`pass + fail + mute`) are at least **4**
+- failures (`fail + mute`) are exactly **0**
 
-Важно:
-- закрытия с `NOT_PLANNED` / `DUPLICATE` и т.п. **не считаются user-fixed**
-- если чтение issues временно недоступно, карантин безопасно отключается для этого прогона
+Example:
+- 5 runs, all successful -> goes to unmute
 
 ---
 
-## 5) Что обновляется автоматически
+## REMOVE FROM MUTE when (`to_delete`)
 
-### Workflow обновления mute
+Look at the last **7 days**:
+
+- either there were no runs at all
+- or the test was muted and only had `skip` events
+
+---
+
+## User-fixed quarantine
+
+If a test issue was closed by a **User** with `state_reason == COMPLETED`, the test can enter quarantine:
+
+- `hide` - temporarily hide from final muted output
+- `stable` - quarantine ended and unmute conditions still pass
+- `restore` - quarantine ended but unmute conditions do not pass, return to muted
+
+Important:
+- `NOT_PLANNED`, `DUPLICATE`, and other non-completed closure reasons are **not** treated as user-fixed
+- if issues data is unavailable, quarantine is safely disabled for that run
+
+---
+
+## What is updated automatically
+
+### Mute update workflow
 `.github/workflows/update_muted_ya.yml`
 
-- запускается по расписанию (каждый час с 04:00 до 21:00 UTC) и вручную (`workflow_dispatch`)
-- считает кандидатов, строит `mute_update/new_muted_ya.txt`
-- если есть изменения, открывает/обновляет PR с `.github/config/muted_ya.txt`
+- runs on schedule (hourly from 04:00 to 21:00 UTC) and manually (`workflow_dispatch`)
+- calculates candidates and builds `mute_update/new_muted_ya.txt`
+- opens/updates PR with `.github/config/muted_ya.txt` if changes exist
 
-### Workflow создания issues
+### Issue sync workflow
 `.github/workflows/create_issues_for_muted_tests.yml`
 
-- срабатывает после merge PR в `main` (для PR с label `mute-unmute`) или вручную
-- создает/обновляет mute issues и обновляет аналитические таблицы
+- runs after merge to `main` (for PRs with `mute-unmute` label) or manually
+- creates/updates mute issues and refreshes analytics tables
 
 ---
 
-## 6) Главные выходные файлы (`mute_update/`)
+## Main output files (`mute_update/`)
 
-- `to_mute.txt` — что добавить в mute
-- `to_unmute.txt` — что убрать из mute как стабильное
-- `to_delete.txt` — что удалить из mute как неактуальное
-- `new_muted_ya.txt` — итоговый файл, который идет в `.github/config/muted_ya.txt`
-- `muted_ya_changes.txt` — изменения с префиксами:
-  - `+++` добавили в mute
-  - `---` убрали из mute
-  - `xxx` удалили как неактуальное
+- `to_mute.txt` - tests to add to mute
+- `to_unmute.txt` - tests to unmute as stable
+- `to_delete.txt` - tests to remove from mute as stale
+- `new_muted_ya.txt` - final file used to update `.github/config/muted_ya.txt`
+- `muted_ya_changes.txt` - change list with prefixes:
+  - `+++` added to mute
+  - `---` removed from mute
+  - `xxx` removed as stale
 
-Карантинные снапшоты:
+Quarantine snapshots:
 - `quarantine_hidden.txt`
 - `quarantine_restored.txt`
 - `quarantine_stable_unmuted.txt`
 
-Для большинства файлов есть `*_debug.txt` с объяснениями.
+Most files also have `*_debug.txt` with explanation details.
 
 ---
 
-## 7) Где менять пороги
+## Where to change thresholds
 
-- `.github/config/mute_coordinator_thresholds.json` — основные числа (окна, минимумы)
-- `.github/scripts/mute_policy_rules.py` — fallback-значения и предикаты
+- `.github/config/mute_coordinator_thresholds.json` - primary thresholds
+- `.github/scripts/mute_policy_rules.py` - fallback values and predicates
 
 ---
 
-## 8) Дашборд
+## Dashboard
 
 - https://datalens.yandex/4un3zdm0zcnyr
