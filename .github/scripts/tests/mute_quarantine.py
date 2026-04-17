@@ -372,36 +372,3 @@ def finalize_new_muted_ya(
         quarantine_hide=quarantine_hide_set,
         quarantine_restore=quarantine_restore_set,
     )
-
-
-# Backward-compatible aliases for callers that imported the old names during
-# intermediate refactors.
-def latest_user_closed_at_by_test(
-    rows: List[dict],
-    branch: str,
-    build_type: str,
-    parse_body_fn=parse_body,
-    default_build_type: str = DEFAULT_BUILD_TYPE,
-    normalize_utc_datetime_fn=normalize_utc_datetime,
-) -> Dict[str, datetime.datetime]:
-    _ = parse_body_fn
-    _ = default_build_type
-    _ = normalize_utc_datetime_fn
-    latest, _stats = extract_latest_user_closed_tests(rows, branch, build_type)
-    return latest
-
-
-def classify_quarantine_actions_for_closed_tests(
-    latest_close_by_test: Dict[str, datetime.datetime],
-    unmute_candidates: Set[str],
-    full_name_to_mute_strings: Dict[str, Set[str]],
-    quarantine_days: int,
-    fallback_mute_string_fn=fallback_mute_string_from_full_name,
-) -> Dict[str, object]:
-    _ = fallback_mute_string_fn
-    return compute_user_fixed_quarantine_actions(
-        latest_close_by_test=latest_close_by_test,
-        full_name_to_mute_strings=full_name_to_mute_strings,
-        unmute_candidates=unmute_candidates,
-        quarantine_days=quarantine_days,
-    )
