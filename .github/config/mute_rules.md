@@ -4,6 +4,18 @@ This is a short human-readable guide that explains when tests are muted or unmut
 
 ---
 
+## Time windows (at a glance)
+
+- **Mute window:** last **4 days**
+- **Unmute window:** last **7 days**
+- **Delete-from-mute window:** last **7 days**
+- **User-fixed quarantine window:** configured by `quarantine_user_fixed_window_days` (default: **7 days**)
+
+All windows are configurable in:
+- `.github/config/mute_coordinator_thresholds.json`
+
+---
+
 ## MUTE when (`to_mute`)
 
 Look at the last **4 days**:
