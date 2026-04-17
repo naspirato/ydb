@@ -33,6 +33,10 @@ from mute_policy_rules import (
     passes_default_mute,
     passes_default_unmute,
 )
+from mute_quarantine import (
+    classify_quarantine_actions_for_closed_tests,
+    latest_user_closed_at_by_test,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -561,13 +565,12 @@ def resolve_user_fixed_quarantine_actions(
         issues_table = ydb_wrapper.get_table_path("issues")
     except Exception as exc:
         logging.warning(f"Quarantine disabled: cannot resolve issues table path: {exc}")
-        return {"hide": set(), "restore": set(), "stable": set(), "hide_debug": [], "restore_debug": [], "stable_debug": []}
+        return _empty_quarantine_actions()
 
     query = f"""
-    SELECT issue_number, body, closed_at
+    SELECT issue_number, body, closed_at, closed_by_type
     FROM `{issues_table}`
     WHERE state = 'CLOSED'
-      AND closed_by_type = 'User'
       AND closed_at IS NOT NULL
       AND closed_at >= CurrentUtcTimestamp() - {lookback_days} * Interval("P1D")
     """
@@ -579,79 +582,30 @@ def resolve_user_fixed_quarantine_actions(
         )
     except Exception as exc:
         logging.warning(f"Quarantine disabled: cannot query user-fixed closed issues: {exc}")
-        return {"hide": set(), "restore": set(), "stable": set(), "hide_debug": [], "restore_debug": [], "stable_debug": []}
+        return _empty_quarantine_actions()
 
-    latest_close_by_test: Dict[str, datetime.datetime] = {}
-    for row in rows:
-        body = str(row.get("body") or "")
-        if not body:
-            continue
-        closed_at = _normalize_utc_datetime(row.get("closed_at"))
-        if closed_at is None:
-            continue
-        parsed = parse_body(body)
-        issue_build_type = parsed.build_type or DEFAULT_BUILD_TYPE
-        issue_branches = parsed.branches or ["main"]
-        if issue_build_type != build_type or branch not in issue_branches:
-            continue
-
-        for full_name in parsed.tests:
-            if not full_name:
-                continue
-            prev_closed_at = latest_close_by_test.get(full_name)
-            if prev_closed_at is None or closed_at > prev_closed_at:
-                latest_close_by_test[full_name] = closed_at
-
+    latest_close_by_test = latest_user_closed_at_by_test(
+        rows=rows,
+        branch=branch,
+        build_type=build_type,
+        parse_body_fn=parse_body,
+        default_build_type=DEFAULT_BUILD_TYPE,
+        normalize_utc_datetime_fn=_normalize_utc_datetime,
+    )
     full_name_to_mute_strings = _build_full_name_to_mute_strings(all_data)
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
-    hide: Set[str] = set()
-    restore: Set[str] = set()
-    stable: Set[str] = set()
-    hide_debug: List[str] = []
-    restore_debug: List[str] = []
-    stable_debug: List[str] = []
-
-    for full_name, closed_at in latest_close_by_test.items():
-        mute_strings = set(full_name_to_mute_strings.get(full_name) or set())
-        if not mute_strings:
-            fallback = _fallback_mute_string_from_full_name(full_name)
-            if fallback:
-                mute_strings.add(fallback)
-        if not mute_strings:
-            continue
-
-        age_days = max(0, (now_utc.date() - closed_at.date()).days)
-        if age_days < quarantine_days:
-            hide.update(mute_strings)
-            for mute_str in sorted(mute_strings):
-                hide_debug.append(
-                    f"{mute_str} # quarantine_user_fixed active: closed {age_days}d ago, window={quarantine_days}d"
-                )
-        elif full_name in unmute_candidates:
-            stable.update(mute_strings)
-            for mute_str in sorted(mute_strings):
-                stable_debug.append(
-                    f"{mute_str} # quarantine_user_fixed passed: window ended and default unmute rule passed"
-                )
-        else:
-            restore.update(mute_strings)
-            for mute_str in sorted(mute_strings):
-                restore_debug.append(
-                    f"{mute_str} # quarantine_user_fixed expired without unmute conditions, restoring to muted"
-                )
-
+    actions = classify_quarantine_actions_for_closed_tests(
+        latest_close_by_test=latest_close_by_test,
+        unmute_candidates=unmute_candidates,
+        full_name_to_mute_strings=full_name_to_mute_strings,
+        quarantine_days=quarantine_days,
+        fallback_mute_string_fn=_fallback_mute_string_from_full_name,
+    )
     logging.info(
         "Resolved user-fixed quarantine actions: "
-        f"hide={len(hide)}, restore={len(restore)}, stable={len(stable)}, candidates={len(latest_close_by_test)}"
+        f"hide={len(actions['hide'])}, restore={len(actions['restore'])}, "
+        f"stable={len(actions['stable'])}, candidates={len(latest_close_by_test)}"
     )
-    return {
-        "hide": hide,
-        "restore": restore,
-        "stable": stable,
-        "hide_debug": sorted(hide_debug),
-        "restore_debug": sorted(restore_debug),
-        "stable_debug": sorted(stable_debug),
-    }
+    return actions
 
 
 def apply_and_add_mutes(
