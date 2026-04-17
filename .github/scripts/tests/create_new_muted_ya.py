@@ -476,6 +476,37 @@ def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=F
         add_lines_to_file(debug_path, [line + '\n' for line in sorted_debug_list])
     logging.info(f"Created {os.path.basename(file_path)} with {len(sorted_test_set)} tests")
 
+
+def _extract_test_name_from_debug_line(debug_line: str) -> str:
+    return str(debug_line).split(" #", 1)[0]
+
+
+def _filter_debug_lines_by_tests(debug_lines: List[str], allowed_tests: Set[str]) -> List[str]:
+    return [line for line in debug_lines if _extract_test_name_from_debug_line(line) in allowed_tests]
+
+
+def _build_debug_list_for_tests(
+    tests: List[str],
+    test_debug_dict: Dict[str, str],
+    quarantine_debug_map: Optional[Dict[str, str]] = None,
+) -> List[str]:
+    quarantine_debug_map = quarantine_debug_map or {}
+    return [
+        quarantine_debug_map.get(test_name) or test_debug_dict.get(test_name, "NO DEBUG INFO")
+        for test_name in tests
+    ]
+
+
+def _write_snapshot_file(
+    output_path: str,
+    filename: str,
+    tests: Set[str],
+    debug_lines: List[str],
+):
+    sorted_tests = sorted(tests)
+    write_file_set(os.path.join(output_path, filename), sorted_tests, debug_lines)
+
+
 def _normalize_utc_datetime(value) -> Optional[datetime.datetime]:
     if value is None:
         return None
@@ -727,19 +758,22 @@ def apply_and_add_mutes(
             to_delete = sorted(to_delete_set)
             write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
             write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
-            write_file_set(
-                os.path.join(output_path, 'quarantine_hidden.txt'),
-                sorted(quarantine_hide_set),
+            _write_snapshot_file(
+                output_path,
+                "quarantine_hidden.txt",
+                quarantine_hide_set,
                 list(quarantine_actions.get("hide_debug") or []),
             )
-            write_file_set(
-                os.path.join(output_path, 'quarantine_restored.txt'),
-                sorted(quarantine_restore_set),
+            _write_snapshot_file(
+                output_path,
+                "quarantine_restored.txt",
+                quarantine_restore_set,
                 list(quarantine_actions.get("restore_debug") or []),
             )
-            write_file_set(
-                os.path.join(output_path, 'quarantine_stable_unmuted.txt'),
-                sorted(quarantine_stable_set),
+            _write_snapshot_file(
+                output_path,
+                "quarantine_stable_unmuted.txt",
+                quarantine_stable_set,
                 list(quarantine_actions.get("stable_debug") or []),
             )
 
@@ -781,34 +815,38 @@ def apply_and_add_mutes(
 
         # 5. muted_ya+to_mute
         muted_ya_plus_to_mute = list(all_muted_ya) + [t for t in to_mute if t not in all_muted_ya]
-        muted_ya_plus_to_mute_debug = []
-        for test in muted_ya_plus_to_mute:
-            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
-            muted_ya_plus_to_mute_debug.append(debug_val)
+        muted_ya_plus_to_mute_debug = _build_debug_list_for_tests(
+            muted_ya_plus_to_mute,
+            test_debug_dict=test_debug_dict,
+            quarantine_debug_map=quarantine_debug_map,
+        )
         write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug)
 
         # 6. muted_ya-to_unmute
         muted_ya_minus_to_unmute = [t for t in all_muted_ya if t not in to_unmute]
-        muted_ya_minus_to_unmute_debug = []
-        for test in muted_ya_minus_to_unmute:
-            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
-            muted_ya_minus_to_unmute_debug.append(debug_val)
+        muted_ya_minus_to_unmute_debug = _build_debug_list_for_tests(
+            muted_ya_minus_to_unmute,
+            test_debug_dict=test_debug_dict,
+            quarantine_debug_map=quarantine_debug_map,
+        )
         write_file_set(os.path.join(output_path, 'muted_ya-to_unmute.txt'), muted_ya_minus_to_unmute, muted_ya_minus_to_unmute_debug)
 
         # 7. muted_ya-to_delete
         muted_ya_minus_to_delete = [t for t in all_muted_ya if t not in to_delete]
-        muted_ya_minus_to_delete_debug = []
-        for test in muted_ya_minus_to_delete:
-            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
-            muted_ya_minus_to_delete_debug.append(debug_val)
+        muted_ya_minus_to_delete_debug = _build_debug_list_for_tests(
+            muted_ya_minus_to_delete,
+            test_debug_dict=test_debug_dict,
+            quarantine_debug_map=quarantine_debug_map,
+        )
         write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug)
 
         # 8. muted_ya-to-delete-to-unmute
         muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete and t not in to_unmute]
-        muted_ya_minus_to_delete_to_unmute_debug = []
-        for test in muted_ya_minus_to_delete_to_unmute:
-            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
-            muted_ya_minus_to_delete_to_unmute_debug.append(debug_val)
+        muted_ya_minus_to_delete_to_unmute_debug = _build_debug_list_for_tests(
+            muted_ya_minus_to_delete_to_unmute,
+            test_debug_dict=test_debug_dict,
+            quarantine_debug_map=quarantine_debug_map,
+        )
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug)
 
         # 9. muted_ya-to-delete-to-unmute+to_mute
@@ -824,10 +862,11 @@ def apply_and_add_mutes(
                 if test_name not in current_set:
                     muted_ya_minus_to_delete_to_unmute_plus_to_mute.append(test_name)
                     current_set.add(test_name)
-        muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug = []
-        for test in muted_ya_minus_to_delete_to_unmute_plus_to_mute:
-            debug_val = quarantine_debug_map.get(test) or test_debug_dict.get(test, "NO DEBUG INFO")
-            muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(debug_val)
+        muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug = _build_debug_list_for_tests(
+            muted_ya_minus_to_delete_to_unmute_plus_to_mute,
+            test_debug_dict=test_debug_dict,
+            quarantine_debug_map=quarantine_debug_map,
+        )
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         # Save the same content as new_muted_ya.txt for workflow compatibility.
         write_file_set(os.path.join(output_path, 'new_muted_ya.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
