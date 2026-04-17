@@ -110,6 +110,7 @@ class TestMuteQuarantine(unittest.TestCase):
         self.assertEqual(actions["hide"], set())
         self.assertEqual(actions["restore"], set())
         self.assertEqual(actions["stable"], set())
+        self.assertEqual(actions.get("stats", {}).get("error"), "issues_table_path_unavailable")
 
     def test_returns_empty_actions_on_query_error(self):
         wrapper = _StubYdbWrapper(query_error=RuntimeError("query failed"))
@@ -124,7 +125,37 @@ class TestMuteQuarantine(unittest.TestCase):
         self.assertEqual(actions["hide"], set())
         self.assertEqual(actions["restore"], set())
         self.assertEqual(actions["stable"], set())
-        self.assertIn("error", actions.get("stats", {}))
+        self.assertEqual(actions.get("stats", {}).get("error"), "issues_query_failed")
+
+    def test_rejects_user_closed_not_planned_for_quarantine(self):
+        rows = [
+            {
+                "body": (
+                    "Mute:<!--mute_list_start-->\n"
+                    "ydb/tests/suite/test_a\n"
+                    "<!--mute_list_end-->\n\n"
+                    "Branch:<!--branch_list_start-->\nmain\n<!--branch_list_end-->\n\n"
+                    "Build type:<!--build_type_list_start-->\nrelwithdebinfo\n<!--build_type_list_end-->\n"
+                ),
+                "closed_by_type": "User",
+                "state_reason": "NOT_PLANNED",
+                "closed_at": self.base_now - datetime.timedelta(days=2),
+            }
+        ]
+        wrapper = _StubYdbWrapper(rows=rows)
+        actions = mq.resolve_user_fixed_quarantine_actions(
+            ydb_wrapper=wrapper,
+            branch="main",
+            build_type="relwithdebinfo",
+            all_data=self.all_data,
+            aggregated_for_unmute=self.aggregated_for_unmute,
+            thresholds=self.thresholds,
+            now_utc=self.base_now,
+        )
+        self.assertEqual(actions["hide"], set())
+        self.assertEqual(actions["restore"], set())
+        self.assertEqual(actions["stable"], set())
+        self.assertEqual(actions.get("stats", {}).get("rows_state_reason_rejected"), 1)
 
     def test_apply_quarantine_actions_updates_sets_and_debug(self):
         to_unmute = ["a", "b", "c"]

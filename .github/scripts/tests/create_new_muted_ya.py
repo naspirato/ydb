@@ -26,7 +26,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 from ydb_wrapper import YDBWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id, parse_body
+from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 from mute_policy_rules import (
     is_delete_candidate_counts,
     load_mute_coordinator_thresholds,
@@ -34,8 +34,9 @@ from mute_policy_rules import (
     passes_default_unmute,
 )
 from mute_quarantine import (
-    classify_quarantine_actions_for_closed_tests,
-    latest_user_closed_at_by_test,
+    apply_quarantine_actions,
+    finalize_new_muted_ya,
+    resolve_user_fixed_quarantine_actions as resolve_user_fixed_quarantine_actions_core,
 )
 
 # Configure logging
@@ -481,14 +482,6 @@ def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=F
     logging.info(f"Created {os.path.basename(file_path)} with {len(sorted_test_set)} tests")
 
 
-def _extract_test_name_from_debug_line(debug_line: str) -> str:
-    return str(debug_line).split(" #", 1)[0]
-
-
-def _filter_debug_lines_by_tests(debug_lines: List[str], allowed_tests: Set[str]) -> List[str]:
-    return [line for line in debug_lines if _extract_test_name_from_debug_line(line) in allowed_tests]
-
-
 def _build_debug_list_for_tests(
     tests: List[str],
     test_debug_dict: Dict[str, str],
@@ -511,41 +504,6 @@ def _write_snapshot_file(
     write_file_set(os.path.join(output_path, filename), sorted_tests, debug_lines)
 
 
-def _normalize_utc_datetime(value) -> Optional[datetime.datetime]:
-    if value is None:
-        return None
-    if isinstance(value, datetime.datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=datetime.timezone.utc)
-        return value.astimezone(datetime.timezone.utc)
-    if isinstance(value, int):
-        # YDB scan values can be seconds or microseconds.
-        if value > 10_000_000_000:
-            value = value / 1_000_000
-        return datetime.datetime.fromtimestamp(value, tz=datetime.timezone.utc)
-    return None
-
-
-def _fallback_mute_string_from_full_name(full_name: str) -> Optional[str]:
-    if not full_name or "/" not in full_name:
-        return None
-    testsuite, testcase = full_name.rsplit("/", 1)
-    if not testsuite or not testcase:
-        return None
-    return f"{testsuite} {testcase}"
-
-
-def _build_full_name_to_mute_strings(rows: List[dict]) -> Dict[str, Set[str]]:
-    result: Dict[str, Set[str]] = defaultdict(set)
-    for row in rows:
-        full_name = row.get("full_name")
-        testsuite = row.get("suite_folder")
-        testcase = row.get("test_name")
-        if full_name and testsuite and testcase:
-            result[str(full_name)].add(f"{testsuite} {testcase}")
-    return result
-
-
 def resolve_user_fixed_quarantine_actions(
     ydb_wrapper: YDBWrapper,
     branch: str,
@@ -553,57 +511,21 @@ def resolve_user_fixed_quarantine_actions(
     all_data: List[dict],
     aggregated_for_unmute: List[dict],
 ) -> Dict[str, object]:
-    quarantine_days = int(_THRESHOLDS["quarantine_user_fixed_window_days"])
-    lookback_days = max(quarantine_days * 3, 30)
-    unmute_candidates = {
-        str(test["full_name"])
-        for test in aggregated_for_unmute
-        if test.get("full_name") and is_unmute_candidate(test)
-    }
-
-    try:
-        issues_table = ydb_wrapper.get_table_path("issues")
-    except Exception as exc:
-        logging.warning(f"Quarantine disabled: cannot resolve issues table path: {exc}")
-        return _empty_quarantine_actions()
-
-    query = f"""
-    SELECT issue_number, body, closed_at, closed_by_type
-    FROM `{issues_table}`
-    WHERE state = 'CLOSED'
-      AND closed_at IS NOT NULL
-      AND closed_at >= CurrentUtcTimestamp() - {lookback_days} * Interval("P1D")
-    """
-
-    try:
-        rows = ydb_wrapper.execute_scan_query(
-            query,
-            query_name=f"user_fixed_quarantine_candidates_{branch}_{build_type}",
-        )
-    except Exception as exc:
-        logging.warning(f"Quarantine disabled: cannot query user-fixed closed issues: {exc}")
-        return _empty_quarantine_actions()
-
-    latest_close_by_test = latest_user_closed_at_by_test(
-        rows=rows,
+    actions = resolve_user_fixed_quarantine_actions_core(
+        ydb_wrapper=ydb_wrapper,
         branch=branch,
         build_type=build_type,
-        parse_body_fn=parse_body,
-        default_build_type=DEFAULT_BUILD_TYPE,
-        normalize_utc_datetime_fn=_normalize_utc_datetime,
+        all_data=all_data,
+        aggregated_for_unmute=aggregated_for_unmute,
+        thresholds=_THRESHOLDS,
     )
-    full_name_to_mute_strings = _build_full_name_to_mute_strings(all_data)
-    actions = classify_quarantine_actions_for_closed_tests(
-        latest_close_by_test=latest_close_by_test,
-        unmute_candidates=unmute_candidates,
-        full_name_to_mute_strings=full_name_to_mute_strings,
-        quarantine_days=quarantine_days,
-        fallback_mute_string_fn=_fallback_mute_string_from_full_name,
-    )
+    stats = actions.get("stats") or {}
     logging.info(
         "Resolved user-fixed quarantine actions: "
         f"hide={len(actions['hide'])}, restore={len(actions['restore'])}, "
-        f"stable={len(actions['stable'])}, candidates={len(latest_close_by_test)}"
+        f"stable={len(actions['stable'])}, linked_tests={stats.get('linked_tests', 0)}, "
+        f"rows={stats.get('rows_total', 0)}, state_reason_rejected={stats.get('rows_state_reason_rejected', 0)}, "
+        f"error={stats.get('error', 'none')}"
     )
     return actions
 
@@ -687,31 +609,27 @@ def apply_and_add_mutes(
         )
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)
+        all_muted_ya_set = set(all_muted_ya)
+        quarantine_update = apply_quarantine_actions(
+            to_unmute=to_unmute,
+            to_delete=to_delete,
+            to_unmute_debug=to_unmute_debug,
+            to_delete_debug=to_delete_debug,
+            quarantine_actions=quarantine_actions,
+        )
+        to_unmute = list(quarantine_update["to_unmute"])
+        to_delete = list(quarantine_update["to_delete"])
+        to_unmute_debug = list(quarantine_update["to_unmute_debug"])
+        to_delete_debug = list(quarantine_update["to_delete_debug"])
+        quarantine_hide_set = set(quarantine_update["quarantine_hide_set"])
+        quarantine_restore_set = set(quarantine_update["quarantine_restore_set"])
+        quarantine_stable_set = set(quarantine_update["quarantine_stable_set"])
+        quarantine_debug_map = dict(quarantine_update["quarantine_debug_map"])
         to_unmute_set = set(to_unmute)
         to_delete_set = set(to_delete)
-        all_muted_ya_set = set(all_muted_ya)
-        quarantine_hide_set: Set[str] = set()
-        quarantine_restore_set: Set[str] = set()
-        quarantine_stable_set: Set[str] = set()
-        quarantine_debug_map: Dict[str, str] = {}
-        if quarantine_actions:
-            quarantine_hide_set = set(quarantine_actions.get("hide") or set())
-            quarantine_restore_set = set(quarantine_actions.get("restore") or set())
-            quarantine_stable_set = set(quarantine_actions.get("stable") or set())
-            for debug_line in (
-                list(quarantine_actions.get("hide_debug") or [])
-                + list(quarantine_actions.get("restore_debug") or [])
-                + list(quarantine_actions.get("stable_debug") or [])
-            ):
-                test_name = str(debug_line).split(" #", 1)[0]
-                quarantine_debug_map[test_name] = str(debug_line)
-
-            to_unmute_set -= quarantine_hide_set
-            to_delete_set -= quarantine_hide_set
-            to_unmute = sorted(to_unmute_set)
-            to_delete = sorted(to_delete_set)
-            write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
-            write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
+        write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
+        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
+        if quarantine_actions is not None:
             _write_snapshot_file(
                 output_path,
                 "quarantine_hidden.txt",
@@ -805,17 +723,14 @@ def apply_and_add_mutes(
 
         # 9. muted_ya-to-delete-to-unmute+to_mute
         # Use list instead of set to preserve full ordering/compatibility.
-        muted_ya_minus_to_delete_to_unmute_plus_to_mute = list(muted_ya_minus_to_delete_to_unmute) + [t for t in to_mute if t not in muted_ya_minus_to_delete_to_unmute]
-        if quarantine_hide_set:
-            muted_ya_minus_to_delete_to_unmute_plus_to_mute = [
-                t for t in muted_ya_minus_to_delete_to_unmute_plus_to_mute if t not in quarantine_hide_set
-            ]
-        if quarantine_restore_set:
-            current_set = set(muted_ya_minus_to_delete_to_unmute_plus_to_mute)
-            for test_name in sorted(quarantine_restore_set):
-                if test_name not in current_set:
-                    muted_ya_minus_to_delete_to_unmute_plus_to_mute.append(test_name)
-                    current_set.add(test_name)
+        muted_ya_minus_to_delete_to_unmute_plus_to_mute = finalize_new_muted_ya(
+            all_muted_ya=all_muted_ya,
+            to_delete=to_delete,
+            to_unmute=to_unmute,
+            to_mute=to_mute,
+            quarantine_hide_set=quarantine_hide_set,
+            quarantine_restore_set=quarantine_restore_set,
+        )
         muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug = _build_debug_list_for_tests(
             muted_ya_minus_to_delete_to_unmute_plus_to_mute,
             test_debug_dict=test_debug_dict,
