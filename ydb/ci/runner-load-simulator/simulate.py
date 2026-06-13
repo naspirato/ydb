@@ -9,7 +9,7 @@ import statistics
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pool import PoolConfig, PoolSimulator
 from pr_check_model import PrCheckRun, build_pr_check_runs, parse_ts, sharded_rwdi_timeline
@@ -81,8 +81,15 @@ def build_work_items(
     pr_runs: list[PrCheckRun],
     *,
     parallel: bool,
+    shard_eligible: Callable[[PrCheckRun], bool] | None = None,
 ) -> list[WorkItem]:
-    sharded_run_ids = {run.run_id for run in pr_runs if parallel and run.mode == "sharded"}
+    sharded_run_ids = {
+        run.run_id
+        for run in pr_runs
+        if parallel
+        and run.mode == "sharded"
+        and (shard_eligible is None or shard_eligible(run))
+    }
     pr_by_run = {run.run_id: run for run in pr_runs}
     items: list[WorkItem] = []
 
@@ -105,6 +112,8 @@ def build_work_items(
     if parallel:
         for run in pr_runs:
             if run.mode != "sharded":
+                continue
+            if shard_eligible is not None and not shard_eligible(run):
                 continue
             start = job_start_epoch(run.rwdi_job)
             mono = float(run.rwdi_job["duration_sec"])

@@ -10,7 +10,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pool import PoolConfig
 from pr_check_model import (
@@ -160,7 +160,60 @@ def workday_coverage(rows: list[RunMetrics], pr_runs: list[PrCheckRun]) -> dict[
     }
 
 
-def fmt_delta(a: float | None, b: float | None) -> str:
+def is_main_target(run: PrCheckRun) -> bool:
+    return (run.rwdi_job.get("base_ref") or "") == "main"
+
+
+def sharding_coverage(pr_runs: list[PrCheckRun], shard_eligible: Callable[[PrCheckRun], bool] | None) -> dict[str, Any]:
+    workday_runs = []
+    eligible_sharded = 0
+    for run in pr_runs:
+        started = parse_ts(run.rwdi_job["started_at"])
+        if started.weekday() >= 5:
+            continue
+        workday_runs.append(run)
+        if (
+            run.mode == "sharded"
+            and (shard_eligible is None or shard_eligible(run))
+        ):
+            eligible_sharded += 1
+    main_target = sum(1 for r in workday_runs if is_main_target(r))
+    return {
+        "workday_runs": len(workday_runs),
+        "main_target_runs": main_target,
+        "sharded_runs_applied": eligible_sharded,
+    }
+
+
+def run_simulation(
+    jobs: list[dict[str, Any]],
+    pr_runs: list[PrCheckRun],
+    config: PoolConfig,
+    *,
+    shard_eligible: Callable[[PrCheckRun], bool] | None = None,
+) -> tuple[list[RunMetrics], list[RunMetrics]]:
+    job_id_to_run: dict[str, int] = {}
+    for run in pr_runs:
+        job_id_to_run[str(run.rwdi_job["job_id"])] = run.run_id
+
+    baseline = replay(
+        build_work_items(jobs, pr_runs, parallel=False),
+        config,
+        name="baseline",
+        pr_runs=pr_runs,
+        parallel=False,
+    )
+    parallel = replay(
+        build_work_items(jobs, pr_runs, parallel=True, shard_eligible=shard_eligible),
+        config,
+        name="parallel",
+        pr_runs=pr_runs,
+        parallel=True,
+    )
+    return (
+        metrics_from_events(baseline.alloc_events, pr_runs, job_id_to_run),
+        metrics_from_events(parallel.alloc_events, pr_runs, job_id_to_run),
+    )
     if a is None or b is None:
         return ""
     return f"{b - a:+.1f}"
@@ -170,13 +223,24 @@ def build_markdown(
     base: dict[tuple[int, str], dict[str, Any]],
     par: dict[tuple[int, str], dict[str, Any]],
     coverage: dict[str, Any],
+    *,
+    title: str,
+    scenario_note: str,
 ) -> str:
     lines = [
-        "# P90 по часам UTC (рабочие дни, агрегировано за 14 дней)",
+        title,
         "",
         f"**Рабочих дней в выборке:** {coverage['workdays_count']} "
         f"({', '.join(coverage['workdays'])})",
         f"**PR-check runs (пн–пт):** {coverage['runs_workdays']}",
+    ]
+    if "main_target_runs" in coverage:
+        lines.append(f"**PR в main (base=main):** {coverage['main_target_runs']}")
+    if "sharded_runs_applied" in coverage:
+        lines.append(f"**Runs с применённым шардингом:** {coverage['sharded_runs_applied']}")
+    lines.extend([
+        "",
+        scenario_note,
         "",
         "Агрегация: все рабочие дни интервала свёрнуты по часу суток (UTC); "
         "p90 считается по объединённой выборке runs.",
@@ -187,7 +251,7 @@ def build_markdown(
         "- **Итого** — p90 по сумме ожидание+выполнение на каждый run (не сумма двух p90)",
         "- **D** — оценка длительности монолита (`choose_shard_count`)",
         "",
-    ]
+    ])
 
     for d_key, d_label in D_GROUPS:
         lines.append(f"## {d_label}")
@@ -266,8 +330,21 @@ def build_full_markdown(
     base: dict[tuple[int, str], dict[str, Any]],
     par: dict[tuple[int, str], dict[str, Any]],
     coverage: dict[str, Any],
+    *,
+    title: str,
+    scenario_note: str,
 ) -> str:
-    return build_markdown(base, par, coverage) + "\n" + build_summary_section(base_rows, par_rows)
+    return (
+        build_markdown(base, par, coverage, title=title, scenario_note=scenario_note)
+        + "\n"
+        + build_summary_section(base_rows, par_rows)
+    )
+
+
+def fmt_delta(a: float | None, b: float | None) -> str:
+    if a is None or b is None:
+        return ""
+    return f"{b - a:+.1f}"
 
 
 def main() -> int:
@@ -276,48 +353,75 @@ def main() -> int:
     parser.add_argument("--capacity", type=Path, default=DEFAULT_CAPACITY)
     parser.add_argument("--output", type=Path, default=ROOT / "data" / "hourly_p90_table.md")
     parser.add_argument("--json-output", type=Path, default=ROOT / "data" / "hourly_p90_table.json")
+    parser.add_argument(
+        "--main-only-output",
+        type=Path,
+        default=ROOT / "data" / "hourly_p90_table_main_only.md",
+    )
+    parser.add_argument(
+        "--main-only-json",
+        type=Path,
+        default=ROOT / "data" / "hourly_p90_table_main_only.json",
+    )
+    parser.add_argument("--skip-classify", action="store_true")
     args = parser.parse_args()
 
     payload = json.loads(args.data.read_text(encoding="utf-8"))
     jobs = payload["jobs"]
     config = PoolConfig.load(args.capacity)
-    pr_runs = build_pr_check_runs(jobs, classify=True)
+    pr_runs = build_pr_check_runs(jobs, classify=not args.skip_classify)
 
-    job_id_to_run: dict[str, int] = {}
-    for run in pr_runs:
-        job_id_to_run[str(run.rwdi_job["job_id"])] = run.run_id
-
-    baseline = replay(
-        build_work_items(jobs, pr_runs, parallel=False),
-        config,
-        name="baseline",
-        pr_runs=pr_runs,
-        parallel=False,
+    scenarios = (
+        {
+            "key": "all",
+            "title": "# P90 по часам UTC (рабочие дни, sharding для всех eligible PR)",
+            "note": "Сценарий: **sharding** для всех PR с `mode=sharded` (классификатор путей).",
+            "shard_eligible": None,
+            "md_out": args.output,
+            "json_out": args.json_output,
+        },
+        {
+            "key": "main_only",
+            "title": "# P90 по часам UTC (рабочие дни, sharding только для PR → main)",
+            "note": (
+                "Сценарий: **sharding** только если `base_ref=main` и `mode=sharded`; "
+                "PR в stable/* и остальные остаются монолитом."
+            ),
+            "shard_eligible": is_main_target,
+            "md_out": args.main_only_output,
+            "json_out": args.main_only_json,
+        },
     )
-    parallel = replay(
-        build_work_items(jobs, pr_runs, parallel=True),
-        config,
-        name="parallel",
-        pr_runs=pr_runs,
-        parallel=True,
-    )
 
-    base_rows = metrics_from_events(baseline.alloc_events, pr_runs, job_id_to_run)
-    par_rows = metrics_from_events(parallel.alloc_events, pr_runs, job_id_to_run)
-    coverage = workday_coverage(base_rows, pr_runs)
-    base_agg = aggregate_p90(base_rows)
-    par_agg = aggregate_p90(par_rows)
+    for scenario in scenarios:
+        base_rows, par_rows = run_simulation(
+            jobs, pr_runs, config, shard_eligible=scenario["shard_eligible"]
+        )
+        coverage = workday_coverage(base_rows, pr_runs)
+        coverage.update(sharding_coverage(pr_runs, scenario["shard_eligible"]))
+        base_agg = aggregate_p90(base_rows)
+        par_agg = aggregate_p90(par_rows)
 
-    md = build_full_markdown(base_rows, par_rows, base_agg, par_agg, coverage)
-    args.output.write_text(md, encoding="utf-8")
+        md = build_full_markdown(
+            base_rows,
+            par_rows,
+            base_agg,
+            par_agg,
+            coverage,
+            title=scenario["title"],
+            scenario_note=scenario["note"],
+        )
+        scenario["md_out"].write_text(md, encoding="utf-8")
+        json_payload = {
+            "scenario": scenario["key"],
+            "coverage": coverage,
+            "baseline": {f"{h:02d}_{d}": v for (h, d), v in base_agg.items()},
+            "sharding": {f"{h:02d}_{d}": v for (h, d), v in par_agg.items()},
+        }
+        scenario["json_out"].write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
+        print(md)
+        print("\n" + "=" * 80 + "\n")
 
-    json_payload = {
-        "coverage": coverage,
-        "baseline": {f"{h:02d}_{d}": v for (h, d), v in base_agg.items()},
-        "sharding": {f"{h:02d}_{d}": v for (h, d), v in par_agg.items()},
-    }
-    args.json_output.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
-    print(md)
     return 0
 
 

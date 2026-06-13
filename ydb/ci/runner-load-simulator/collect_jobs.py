@@ -173,6 +173,9 @@ def normalize_job(
     if created and started > created:
         queue_wait_sec = (started - created).total_seconds()
     pr_numbers = [pr["number"] for pr in run.get("pull_requests") or []]
+    base_ref = ""
+    if run.get("pull_requests"):
+        base_ref = (run["pull_requests"][0].get("base") or {}).get("ref") or ""
     return {
         "job_id": job["id"],
         "run_id": run["id"],
@@ -188,6 +191,7 @@ def normalize_job(
         "queue_wait_sec": queue_wait_sec,
         "runner_name": job.get("runner_name") or "",
         "pr_number": pr_numbers[0] if pr_numbers else None,
+        "base_ref": base_ref,
         "run_conclusion": run.get("conclusion"),
         "head_branch": run.get("head_branch") or "",
     }
