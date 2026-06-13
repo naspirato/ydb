@@ -84,21 +84,57 @@ def is_auto_provisioned(labels: list[str]) -> bool:
     return "self-hosted" in lowered and "auto-provisioned" in lowered
 
 
-def iter_runs(workflow_id: int, since_iso: str):
-    page = 1
-    while True:
-        data = gh_api(
-            f"repos/{REPO}/actions/workflows/{workflow_id}/runs"
-            f"?created=>={since_iso}&per_page=100&page={page}"
+def iter_runs(
+    workflow_id: int,
+    since: datetime,
+    until: datetime | None = None,
+):
+    """Yield workflow runs in [since, until), bisecting ranges that hit the 1k API cap."""
+    until = until or datetime.now(timezone.utc)
+    chunks: list[tuple[datetime, datetime]] = [(since, until)]
+    seen_run_ids: set[int] = set()
+
+    while chunks:
+        chunk_start, chunk_end = chunks.pop(0)
+        if chunk_end <= chunk_start:
+            continue
+        created_param = (
+            f"{chunk_start.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            f"..{chunk_end.strftime('%Y-%m-%dT%H:%M:%SZ')}"
         )
-        runs = data.get("workflow_runs", [])
-        if not runs:
-            break
-        for run in runs:
-            yield run
-        if len(runs) < 100:
-            break
-        page += 1
+        page = 1
+        hit_page_cap = False
+        while page <= 10:
+            data = gh_api(
+                f"repos/{REPO}/actions/workflows/{workflow_id}/runs"
+                f"?created={created_param}&per_page=100&page={page}"
+            )
+            runs = data.get("workflow_runs", [])
+            if not runs:
+                break
+            for run in runs:
+                rid = run["id"]
+                if rid in seen_run_ids:
+                    continue
+                seen_run_ids.add(rid)
+                yield run
+            if len(runs) < 100:
+                break
+            if page == 10:
+                hit_page_cap = True
+            page += 1
+
+        if hit_page_cap:
+            span = chunk_end - chunk_start
+            if span <= timedelta(minutes=30):
+                print(
+                    f"warning: workflow {workflow_id} chunk {created_param} still hits 1k cap",
+                    file=sys.stderr,
+                )
+                continue
+            mid = chunk_start + span / 2
+            chunks.insert(0, (mid, chunk_end))
+            chunks.insert(0, (chunk_start, mid))
 
 
 def fetch_jobs(run: dict[str, Any]) -> list[dict[str, Any]]:
@@ -157,10 +193,22 @@ def normalize_job(
     }
 
 
-def collect(days: int, output: Path) -> dict[str, Any]:
+def collect(
+    days: int,
+    output: Path,
+    *,
+    workflows: list[str] | None = None,
+    merge_into: Path | None = None,
+) -> dict[str, Any]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     workflow_ids = load_workflow_ids()
+    if workflows:
+        missing = [name for name in workflows if name not in workflow_ids]
+        if missing:
+            print(f"error: workflows not found: {missing}", file=sys.stderr)
+            return {}
+        workflow_ids = {name: workflow_ids[name] for name in workflows}
 
     jobs: list[dict[str, Any]] = []
     stats = Counter()
@@ -168,7 +216,7 @@ def collect(days: int, output: Path) -> dict[str, Any]:
 
     for workflow_name, workflow_id in workflow_ids.items():
         print(f"listing runs: {workflow_name}", flush=True)
-        for run in iter_runs(workflow_id, since_iso):
+        for run in iter_runs(workflow_id, since):
             stats["runs_seen"] += 1
             if run.get("status") != "completed":
                 stats["runs_skipped_incomplete"] += 1
@@ -199,6 +247,13 @@ def collect(days: int, output: Path) -> dict[str, Any]:
             if idx % 200 == 0:
                 print(f"  processed {idx}/{len(pending_runs)} runs, jobs={len(jobs)}", flush=True)
 
+    if merge_into and merge_into.exists():
+        existing = json.loads(merge_into.read_text(encoding="utf-8"))
+        replace_names = set(workflow_ids)
+        kept = [j for j in existing.get("jobs", []) if j.get("workflow_name") not in replace_names]
+        jobs = kept + jobs
+        stats["jobs_merged_from_existing"] = len(kept)
+
     payload = {
         "repo": REPO,
         "since": since_iso,
@@ -222,8 +277,23 @@ def main() -> int:
         type=Path,
         default=Path(__file__).resolve().parent / "data" / "jobs_14d.json",
     )
+    parser.add_argument(
+        "--workflows",
+        nargs="+",
+        help="Collect only these workflow names (default: all)",
+    )
+    parser.add_argument(
+        "--merge-into",
+        type=Path,
+        help="Merge collected workflows into an existing jobs JSON (replaces same workflows)",
+    )
     args = parser.parse_args()
-    collect(args.days, args.output)
+    collect(
+        args.days,
+        args.output,
+        workflows=args.workflows,
+        merge_into=args.merge_into,
+    )
     return 0
 
 

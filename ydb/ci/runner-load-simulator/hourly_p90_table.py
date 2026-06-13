@@ -142,6 +142,24 @@ def fmt(v: float | None) -> str:
     return "—" if v is None else f"{v:.1f}"
 
 
+def workday_coverage(rows: list[RunMetrics], pr_runs: list[PrCheckRun]) -> dict[str, Any]:
+    """Summarize which workdays contributed to the hourly aggregation."""
+    run_by_id = {r.run_id: r for r in pr_runs}
+    dates: set[str] = set()
+    for row in rows:
+        run = run_by_id.get(row.run_id)
+        if not run:
+            continue
+        started = parse_ts(run.rwdi_job["started_at"])
+        if started.weekday() < 5:
+            dates.add(started.date().isoformat())
+    return {
+        "workdays_count": len(dates),
+        "workdays": sorted(dates),
+        "runs_workdays": len(rows),
+    }
+
+
 def fmt_delta(a: float | None, b: float | None) -> str:
     if a is None or b is None:
         return ""
@@ -151,9 +169,17 @@ def fmt_delta(a: float | None, b: float | None) -> str:
 def build_markdown(
     base: dict[tuple[int, str], dict[str, Any]],
     par: dict[tuple[int, str], dict[str, Any]],
+    coverage: dict[str, Any],
 ) -> str:
     lines = [
         "# P90 по часам UTC (рабочие дни, агрегировано за 14 дней)",
+        "",
+        f"**Рабочих дней в выборке:** {coverage['workdays_count']} "
+        f"({', '.join(coverage['workdays'])})",
+        f"**PR-check runs (пн–пт):** {coverage['runs_workdays']}",
+        "",
+        "Агрегация: все рабочие дни интервала свёрнуты по часу суток (UTC); "
+        "p90 считается по объединённой выборке runs.",
         "",
         "Метрики на PR-check **relwithdebinfo** (симуляция пула).",
         "- **Ожидание** — суммарный queue wait до старта работы (мин)",
@@ -239,8 +265,9 @@ def build_full_markdown(
     par_rows: list[RunMetrics],
     base: dict[tuple[int, str], dict[str, Any]],
     par: dict[tuple[int, str], dict[str, Any]],
+    coverage: dict[str, Any],
 ) -> str:
-    return build_markdown(base, par) + "\n" + build_summary_section(base_rows, par_rows)
+    return build_markdown(base, par, coverage) + "\n" + build_summary_section(base_rows, par_rows)
 
 
 def main() -> int:
@@ -277,13 +304,15 @@ def main() -> int:
 
     base_rows = metrics_from_events(baseline.alloc_events, pr_runs, job_id_to_run)
     par_rows = metrics_from_events(parallel.alloc_events, pr_runs, job_id_to_run)
+    coverage = workday_coverage(base_rows, pr_runs)
     base_agg = aggregate_p90(base_rows)
     par_agg = aggregate_p90(par_rows)
 
-    md = build_full_markdown(base_rows, par_rows, base_agg, par_agg)
+    md = build_full_markdown(base_rows, par_rows, base_agg, par_agg, coverage)
     args.output.write_text(md, encoding="utf-8")
 
     json_payload = {
+        "coverage": coverage,
         "baseline": {f"{h:02d}_{d}": v for (h, d), v in base_agg.items()},
         "sharding": {f"{h:02d}_{d}": v for (h, d), v in par_agg.items()},
     }
