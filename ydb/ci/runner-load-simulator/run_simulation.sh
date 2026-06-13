@@ -12,3 +12,11 @@ fi
 
 echo "Running pool simulation (baseline vs pr_check_parallel)..."
 python3 "${ROOT}/simulate.py" --data "$DATA" --capacity "$CAPACITY" --output "$REPORT"
+
+echo "Analyzing PR push→result cycles..."
+python3 "${ROOT}/analyze_cycles.py" --data "$DATA"
+
+echo "Generating charts and team report..."
+python3 "${ROOT}/generate_charts.py" --data "$DATA" --report "$REPORT"
+
+echo "Done. Open ${ROOT}/data/TEAM_REPORT.md and ${ROOT}/data/charts/"

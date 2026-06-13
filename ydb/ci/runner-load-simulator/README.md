@@ -30,6 +30,28 @@ python3 ydb/ci/runner-load-simulator/simulate.py
 
 Output: `data/simulation_report.json`
 
+Charts and team report (after full pipeline):
+
+```bash
+./ydb/ci/runner-load-simulator/run_simulation.sh
+# → data/charts/*.png
+# → data/TEAM_REPORT.md   (готовый отчёт для команды)
+```
+
+### Charts (`data/charts/`)
+
+| # | Файл | Зачем |
+|---|------|-------|
+| 01 | `01_push_to_result_by_scenario.png` | Push→результат по типам PR (median + p90) |
+| 02 | `02_speedup_distribution.png` | Распределение % ускорения (N>1) |
+| 03 | `03_cost_benefit.png` | Цена (runner-min) vs выигрыш (wall-min) |
+| 04 | `04_shard_count_distribution.png` | Сколько прогонов с каким N |
+| 05 | `05_shard_tiers_explainer.png` | Почему N=1/4/8/12 |
+| 06 | `06_classifier_funnel.png` | Воронка classifier → N>1 |
+| 07 | `07_pool_utilization_timeline.png` | Загрузка пула за 14 дней |
+| 08 | `08_waterfall_heavy_pr.png` | Разбор тяжёлого PR (prepare + shards) |
+| 09 | `09_summary_dashboard.png` | KPI-дашборд |
+
 ## Latest run (2026-06-13, 14 days, 9336 jobs)
 
 | Metric | Baseline | PR-check parallel | Δ |
