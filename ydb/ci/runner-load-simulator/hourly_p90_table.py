@@ -235,7 +235,9 @@ def build_markdown(
         f"**PR-check runs (пн–пт):** {coverage['runs_workdays']}",
     ]
     if "main_target_runs" in coverage:
-        lines.append(f"**PR в main (base=main):** {coverage['main_target_runs']}")
+        lines.append(
+            f"**PR → main (base_ref, целевая ветка):** {coverage['main_target_runs']}"
+        )
     if "sharded_runs_applied" in coverage:
         lines.append(f"**Runs с применённым шардингом:** {coverage['sharded_runs_applied']}")
     lines.extend([
@@ -384,8 +386,8 @@ def main() -> int:
             "key": "main_only",
             "title": "# P90 по часам UTC (рабочие дни, sharding только для PR → main)",
             "note": (
-                "Сценарий: **sharding** только если `base_ref=main` и `mode=sharded`; "
-                "PR в stable/* и остальные остаются монолитом."
+                "Сценарий: **sharding** только если `base_ref=main` (куда мержится PR, "
+                "не `head_branch`) и `mode=sharded`; PR в stable/* остаются монолитом."
             ),
             "shard_eligible": is_main_target,
             "md_out": args.main_only_output,
