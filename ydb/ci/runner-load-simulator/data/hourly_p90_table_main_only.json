@@ -17,6 +17,7 @@
     "runs_workdays": 2217,
     "workday_runs": 2217,
     "main_target_runs": 494,
+    "main_or_stable_target_runs": 1207,
     "sharded_runs_applied": 260
   },
   "baseline": {

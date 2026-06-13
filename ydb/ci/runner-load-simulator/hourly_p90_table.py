@@ -164,7 +164,15 @@ def is_main_target(run: PrCheckRun) -> bool:
     return (run.rwdi_job.get("base_ref") or "") == "main"
 
 
-def sharding_coverage(pr_runs: list[PrCheckRun], shard_eligible: Callable[[PrCheckRun], bool] | None) -> dict[str, Any]:
+def is_main_or_stable_target(run: PrCheckRun) -> bool:
+    base = run.rwdi_job.get("base_ref") or ""
+    return base == "main" or base.startswith("stable-")
+
+
+def sharding_coverage(
+    pr_runs: list[PrCheckRun],
+    shard_eligible: Callable[[PrCheckRun], bool] | None,
+) -> dict[str, Any]:
     workday_runs = []
     eligible_sharded = 0
     for run in pr_runs:
@@ -172,15 +180,16 @@ def sharding_coverage(pr_runs: list[PrCheckRun], shard_eligible: Callable[[PrChe
         if started.weekday() >= 5:
             continue
         workday_runs.append(run)
-        if (
-            run.mode == "sharded"
-            and (shard_eligible is None or shard_eligible(run))
+        if run.mode == "sharded" and (
+            shard_eligible is None or shard_eligible(run)
         ):
             eligible_sharded += 1
-    main_target = sum(1 for r in workday_runs if is_main_target(r))
     return {
         "workday_runs": len(workday_runs),
-        "main_target_runs": main_target,
+        "main_target_runs": sum(1 for r in workday_runs if is_main_target(r)),
+        "main_or_stable_target_runs": sum(
+            1 for r in workday_runs if is_main_or_stable_target(r)
+        ),
         "sharded_runs_applied": eligible_sharded,
     }
 
@@ -214,9 +223,6 @@ def run_simulation(
         metrics_from_events(baseline.alloc_events, pr_runs, job_id_to_run),
         metrics_from_events(parallel.alloc_events, pr_runs, job_id_to_run),
     )
-    if a is None or b is None:
-        return ""
-    return f"{b - a:+.1f}"
 
 
 def build_markdown(
@@ -237,6 +243,10 @@ def build_markdown(
     if "main_target_runs" in coverage:
         lines.append(
             f"**PR → main (base_ref, целевая ветка):** {coverage['main_target_runs']}"
+        )
+    if "main_or_stable_target_runs" in coverage:
+        lines.append(
+            f"**PR → main или stable/* (base_ref):** {coverage['main_or_stable_target_runs']}"
         )
     if "sharded_runs_applied" in coverage:
         lines.append(f"**Runs с применённым шардингом:** {coverage['sharded_runs_applied']}")
@@ -365,6 +375,16 @@ def main() -> int:
         type=Path,
         default=ROOT / "data" / "hourly_p90_table_main_only.json",
     )
+    parser.add_argument(
+        "--main-stable-output",
+        type=Path,
+        default=ROOT / "data" / "hourly_p90_table_main_stable.md",
+    )
+    parser.add_argument(
+        "--main-stable-json",
+        type=Path,
+        default=ROOT / "data" / "hourly_p90_table_main_stable.json",
+    )
     parser.add_argument("--skip-classify", action="store_true")
     args = parser.parse_args()
 
@@ -392,6 +412,19 @@ def main() -> int:
             "shard_eligible": is_main_target,
             "md_out": args.main_only_output,
             "json_out": args.main_only_json,
+        },
+        {
+            "key": "main_stable",
+            "title": (
+                "# P90 по часам UTC (рабочие дни, sharding для PR → main и stable/*)"
+            ),
+            "note": (
+                "Сценарий: **sharding** если `base_ref=main` или `base_ref` начинается с "
+                "`stable-`, и `mode=sharded`; прочие target-ветки остаются монолитом."
+            ),
+            "shard_eligible": is_main_or_stable_target,
+            "md_out": args.main_stable_output,
+            "json_out": args.main_stable_json,
         },
     )
 
