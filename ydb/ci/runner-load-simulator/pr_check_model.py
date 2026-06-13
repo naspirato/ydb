@@ -150,6 +150,9 @@ def build_pr_check_runs(
                 else:
                     pr_mode_cache[pr_number] = "sharded"
             mode = pr_mode_cache[pr_number]
+        elif classify:
+            # No PR metadata: cannot run path classifier; stay on monolith.
+            mode = "single"
         else:
             mode = "sharded"
         mono = float(rwdi["duration_sec"])
