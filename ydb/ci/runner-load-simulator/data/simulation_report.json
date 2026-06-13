@@ -1,0 +1,78 @@
+{
+  "data_source": "/workspace/ydb/ci/runner-load-simulator/data/jobs_14d.json",
+  "capacity_config": "/workspace/ydb/ci/runner-load-simulator/vendor/runner_capacity.yml",
+  "collection_stats": {
+    "runs_seen": 3854,
+    "runs_skipped_incomplete": 5,
+    "runs_skipped_conclusion": 587,
+    "runs_with_jobs": 3262,
+    "jobs_dropped": 1704,
+    "jobs_kept": 9336
+  },
+  "jobs_in_replay": 9336,
+  "pr_check_runs": 417,
+  "pr_check_classifier": {
+    "single": 139,
+    "sharded": 278
+  },
+  "pr_check_sharded_with_n1": 156,
+  "pool_budget_instances": 79.2,
+  "heavy_run_breakdown": {
+    "heavy_pr_checks_monolith_gte_60min": {
+      "baseline": {
+        "count": 127,
+        "median_min": 170.1,
+        "p90_min": 210.4
+      },
+      "parallel": {
+        "count": 127,
+        "median_min": 98.7,
+        "p90_min": 165.0
+      }
+    }
+  },
+  "baseline": {
+    "scenario": "baseline",
+    "pr_checks_total": 417,
+    "pr_single": 417,
+    "pr_sharded": 0,
+    "pr_rwdi_runner_hours": 389.4,
+    "pool_runner_hours": 11845.8,
+    "peak_concurrent_runners": 65,
+    "total_queue_wait_hours": 276.9,
+    "queued_allocation_events": 1227,
+    "pool_saturated_pct": 0.0,
+    "pr_rwdi_wall_median_min": 12.7,
+    "pr_rwdi_wall_p90_min": 197.9,
+    "pr_queue_wait_p90_min": 25.7,
+    "avg_pool_utilization": 0.446,
+    "mean_concurrent_runners": 35.3
+  },
+  "parallel": {
+    "scenario": "pr_check_parallel",
+    "pr_checks_total": 417,
+    "pr_single": 295,
+    "pr_sharded": 122,
+    "pr_rwdi_runner_hours": 413.7,
+    "pool_runner_hours": 12570.8,
+    "peak_concurrent_runners": 66,
+    "total_queue_wait_hours": 269.27,
+    "queued_allocation_events": 1322,
+    "pool_saturated_pct": 0.0,
+    "pr_rwdi_wall_median_min": 11.5,
+    "pr_rwdi_wall_p90_min": 130.9,
+    "pr_queue_wait_p90_min": 31.3,
+    "avg_pool_utilization": 0.473,
+    "mean_concurrent_runners": 37.4
+  },
+  "delta_parallel_vs_baseline": {
+    "pool_runner_hours_delta": 725.0,
+    "pool_runner_hours_delta_pct": 6.1,
+    "pr_rwdi_runner_hours_delta": 24.3,
+    "pr_rwdi_wall_median_delta_min": -1.2,
+    "pr_rwdi_wall_p90_delta_min": -67.0,
+    "queue_wait_hours_delta": -7.63,
+    "peak_runners_delta": 1,
+    "saturation_pct_delta": 0.0
+  }
+}
