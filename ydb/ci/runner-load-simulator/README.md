@@ -51,6 +51,13 @@ Charts and team report (after full pipeline):
 | 07 | `07_pool_utilization_timeline.png` | Загрузка пула за 14 дней |
 | 08 | `08_waterfall_heavy_pr.png` | Разбор тяжёлого PR (prepare + shards) |
 | 09 | `09_summary_dashboard.png` | KPI-дашборд |
+| 10 | `10_workday_queue_10min.png` | **Очередь по 10-мин слотам (пн–пт)** |
+| 11 | `11_workday_duration_10min.png` | Длительность по слотам |
+| 12 | `12_queue_depth_10min.png` | Глубина очереди PR-check |
+| 13 | `13_queue_delta_heatmap.png` | Δ очереди sharding − baseline |
+| 14 | `14_peak_day_*.png` | Зум на пиковые дни |
+
+См. также **`data/QUEUE_REPORT.md`** — отчёт по очередям с интерпретацией для пиков 09–16 UTC.
 
 ## Latest run (2026-06-13, 14 days, 9336 jobs)
 

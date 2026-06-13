@@ -129,9 +129,13 @@ def normalize_job(
     if not preset:
         return None
     started = parse_ts(job.get("started_at"))
+    created = parse_ts(job.get("created_at"))
     completed = parse_ts(job.get("completed_at"))
     if not started or not completed or completed <= started:
         return None
+    queue_wait_sec = None
+    if created and started > created:
+        queue_wait_sec = (started - created).total_seconds()
     pr_numbers = [pr["number"] for pr in run.get("pull_requests") or []]
     return {
         "job_id": job["id"],
@@ -141,9 +145,11 @@ def normalize_job(
         "preset": preset,
         "status": job.get("status"),
         "conclusion": job.get("conclusion"),
+        "created_at": created.isoformat() if created else None,
         "started_at": started.isoformat(),
         "completed_at": completed.isoformat(),
         "duration_sec": (completed - started).total_seconds(),
+        "queue_wait_sec": queue_wait_sec,
         "runner_name": job.get("runner_name") or "",
         "pr_number": pr_numbers[0] if pr_numbers else None,
         "run_conclusion": run.get("conclusion"),

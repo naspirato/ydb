@@ -26,8 +26,22 @@ class WorkItem:
     key: str
     duration_sec: float
     parallel_count: int = 1
-  # metadata for PR-check stats
     is_pr_rwdi: bool = False
+    is_pr_check: bool = False
+
+
+@dataclass
+class AllocEvent:
+    requested_at: float
+    started_at: float
+    ended_at: float
+    wait_sec: float
+    work_sec: float
+    preset: str
+    parallel_count: int
+    is_pr_rwdi: bool
+    is_pr_check: bool
+    key: str
 
 
 @dataclass
@@ -41,6 +55,7 @@ class ScenarioResult:
     pr_runner_seconds: float
     window_start: float
     window_end: float
+    alloc_events: list[AllocEvent]
 
     @property
     def horizon_sec(self) -> float:
@@ -49,6 +64,12 @@ class ScenarioResult:
 
 def job_start_epoch(job: dict[str, Any]) -> float:
     return parse_ts(job["started_at"]).timestamp()
+
+
+def is_pr_check_job(job: dict[str, Any]) -> bool:
+    return job["workflow_name"] == "PR-check" and (
+        "relwithdebinfo" in job["job_name"] or "asan" in job["job_name"]
+    )
 
 
 def is_pr_check_rwdi(job: dict[str, Any]) -> bool:
@@ -77,6 +98,7 @@ def build_work_items(
                 key=str(job["job_id"]),
                 duration_sec=duration,
                 is_pr_rwdi=is_pr_check_rwdi(job),
+                is_pr_check=is_pr_check_job(job),
             )
         )
 
@@ -102,6 +124,7 @@ def build_work_items(
                         key=str(run.rwdi_job["job_id"]),
                         duration_sec=mono,
                         is_pr_rwdi=True,
+                        is_pr_check=True,
                     )
                 )
                 continue
@@ -112,6 +135,7 @@ def build_work_items(
                     key=f"prepare:{run.run_id}",
                     duration_sec=prepare_sec,
                     is_pr_rwdi=True,
+                    is_pr_check=True,
                 )
             )
             items.append(
@@ -122,6 +146,7 @@ def build_work_items(
                     duration_sec=shard_sec,
                     parallel_count=shard_count,
                     is_pr_rwdi=True,
+                    is_pr_check=True,
                 )
             )
 
@@ -141,6 +166,7 @@ def replay(
     pr_waits: list[float] = []
     pr_runner_seconds = 0.0
     sharded = single = 0
+    alloc_events: list[AllocEvent] = []
     window_start = items[0].start if items else 0.0
     window_end = window_start
 
@@ -180,6 +206,21 @@ def replay(
                 item.key,
             )
             end = item.start + wait + item.duration_sec
+
+        alloc_events.append(
+            AllocEvent(
+                requested_at=item.start,
+                started_at=item.start + wait,
+                ended_at=end,
+                wait_sec=wait,
+                work_sec=item.duration_sec,
+                preset=item.preset,
+                parallel_count=item.parallel_count,
+                is_pr_rwdi=item.is_pr_rwdi,
+                is_pr_check=item.is_pr_check,
+                key=item.key,
+            )
+        )
 
         window_end = max(window_end, end)
         if not item.is_pr_rwdi:
@@ -223,6 +264,7 @@ def replay(
         pr_runner_seconds=pr_runner_seconds,
         window_start=window_start,
         window_end=window_end,
+        alloc_events=alloc_events,
     )
 
 
