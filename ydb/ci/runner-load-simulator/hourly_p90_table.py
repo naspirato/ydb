@@ -125,18 +125,27 @@ def aggregate_p90(rows: list[RunMetrics]) -> dict[tuple[int, str], dict[str, Any
     for key, items in cells.items():
         waits = [x.wait_min for x in items]
         works = [x.work_min for x in items]
+        totals = [x.wait_min + x.work_min for x in items]
         result[key] = {
             "n": len(items),
             "wait_p90": percentile(waits, 90),
             "work_p90": percentile(works, 90),
+            "total_p90": percentile(totals, 90),
             "wait_median": statistics.median(waits),
             "work_median": statistics.median(works),
+            "total_median": statistics.median(totals),
         }
     return result
 
 
 def fmt(v: float | None) -> str:
     return "—" if v is None else f"{v:.1f}"
+
+
+def fmt_delta(a: float | None, b: float | None) -> str:
+    if a is None or b is None:
+        return ""
+    return f"{b - a:+.1f}"
 
 
 def build_markdown(
@@ -149,6 +158,7 @@ def build_markdown(
         "Метрики на PR-check **relwithdebinfo** (симуляция пула).",
         "- **Ожидание** — суммарный queue wait до старта работы (мин)",
         "- **Выполнение** — время работы на раннере (мин); для sharding: prepare + shard phase",
+        "- **Итого** — p90 по сумме ожидание+выполнение на каждый run (не сумма двух p90)",
         "- **D** — оценка длительности монолита (`choose_shard_count`)",
         "",
     ]
@@ -158,11 +168,13 @@ def build_markdown(
         lines.append("")
         lines.append(
             "| Час UTC | n | baseline wait p90 | sharding wait p90 | "
-            "Δ wait | baseline work p90 | sharding work p90 | Δ work |"
+            "Δ wait | baseline work p90 | sharding work p90 | Δ work | "
+            "baseline итого p90 | sharding итого p90 | Δ итого |"
         )
         lines.append(
             "|--------:|--:|------------------:|------------------:|"
             "------:|------------------:|------------------:|-------:|"
+            "------------------:|-------------------:|--------:|"
         )
         for hour in range(24):
             key = (hour, d_key)
@@ -173,11 +185,11 @@ def build_markdown(
             n = max((b or {}).get("n", 0), (p or {}).get("n", 0))
             bw, pw = (b or {}).get("wait_p90"), (p or {}).get("wait_p90")
             bwk, pwk = (b or {}).get("work_p90"), (p or {}).get("work_p90")
-            dw = "" if bw is None or pw is None else f"{pw - bw:+.1f}"
-            dwk = "" if bwk is None or pwk is None else f"{pwk - bwk:+.1f}"
+            bt, pt = (b or {}).get("total_p90"), (p or {}).get("total_p90")
             lines.append(
-                f"| {hour:02d}:00 | {n} | {fmt(bw)} | {fmt(pw)} | {dw} | "
-                f"{fmt(bwk)} | {fmt(pwk)} | {dwk} |"
+                f"| {hour:02d}:00 | {n} | {fmt(bw)} | {fmt(pw)} | {fmt_delta(bw, pw)} | "
+                f"{fmt(bwk)} | {fmt(pwk)} | {fmt_delta(bwk, pwk)} | "
+                f"{fmt(bt)} | {fmt(pt)} | {fmt_delta(bt, pt)} |"
             )
         lines.append("")
 
@@ -192,8 +204,11 @@ def build_summary_section(
         "## Все группы D (сводка по часу)",
         "",
         "| Час UTC | n | baseline wait p90 | sharding wait p90 | "
-        "baseline work p90 | sharding work p90 |",
-        "|--------:|--:|------------------:|------------------:|------------------:|------------------:|",
+        "baseline work p90 | sharding work p90 | "
+        "baseline итого p90 | sharding итого p90 | Δ итого |",
+        "|--------:|--:|------------------:|------------------:|"
+        "------------------:|------------------:|"
+        "------------------:|-------------------:|--------:|",
     ]
     bh: dict[int, list[RunMetrics]] = defaultdict(list)
     ph: dict[int, list[RunMetrics]] = defaultdict(list)
@@ -205,11 +220,16 @@ def build_summary_section(
         if hour not in bh:
             continue
         n = len(bh[hour])
+        bw = percentile([x.wait_min for x in bh[hour]], 90)
+        pw = percentile([x.wait_min for x in ph.get(hour, [])], 90)
+        bwk = percentile([x.work_min for x in bh[hour]], 90)
+        pwk = percentile([x.work_min for x in ph.get(hour, [])], 90)
+        bt = percentile([x.wait_min + x.work_min for x in bh[hour]], 90)
+        pt = percentile([x.wait_min + x.work_min for x in ph.get(hour, [])], 90)
         lines.append(
-            f"| {hour:02d}:00 | {n} | {fmt(percentile([x.wait_min for x in bh[hour]], 90))} | "
-            f"{fmt(percentile([x.wait_min for x in ph.get(hour, [])], 90))} | "
-            f"{fmt(percentile([x.work_min for x in bh[hour]], 90))} | "
-            f"{fmt(percentile([x.work_min for x in ph.get(hour, [])], 90))} |"
+            f"| {hour:02d}:00 | {n} | {fmt(bw)} | {fmt(pw)} | "
+            f"{fmt(bwk)} | {fmt(pwk)} | "
+            f"{fmt(bt)} | {fmt(pt)} | {fmt_delta(bt, pt)} |"
         )
     return "\n".join(lines)
 
