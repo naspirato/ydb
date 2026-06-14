@@ -57,6 +57,19 @@ def fmt_delta(a: float | None, b: float | None) -> str:
     return f"{d:+.1f}"
 
 
+def delta_pct(a: float | None, b: float | None) -> float | None:
+    if a is None or b is None or a == 0:
+        return None
+    return (b - a) / a * 100.0
+
+
+def fmt_delta_pct(a: float | None, b: float | None) -> str:
+    p = delta_pct(a, b)
+    if p is None:
+        return "—"
+    return f"{p:+.1f}%"
+
+
 def load_scenario(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -151,8 +164,10 @@ def build_table(
         f"- **main + stable/\\*** — sharded runs: {sharded.get('main_stable', 0)}",
         f"- **main only** — sharded runs: {sharded.get('main_only', 0)}",
         "",
-        "| Час | D | Rollout | n | wait B | wait S | Δ wait | work B | work S | Δ work | total B | total S | Δ total |",
-        "|----:|---|---------|--:|-------:|-------:|-------:|-------:|-------:|-------:|--------:|--------:|--------:|",
+        "| Час | D | Rollout | n | wait B | wait S | Δ wait | work B | work S | Δ work | "
+        "total B | total S | Δ total | Δ total % |",
+        "|----:|---|---------|--:|-------:|-------:|-------:|-------:|-------:|-------:|"
+        "--------:|--------:|--------:|----------:|",
     ]
 
     for hour in hours:
@@ -167,7 +182,9 @@ def build_table(
                     f"| {hour:02d}:00 | {d_label} | {rollout_label} | {m['n']} | "
                     f"{fmt(m['wait_b'])} | {fmt(m['wait_s'])} | {fmt_delta(m['wait_b'], m['wait_s'])} | "
                     f"{fmt(m['work_b'])} | {fmt(m['work_s'])} | {fmt_delta(m['work_b'], m['work_s'])} | "
-                    f"{fmt(m['total_b'])} | {fmt(m['total_s'])} | {fmt_delta(m['total_b'], m['total_s'])} |"
+                    f"{fmt(m['total_b'])} | {fmt(m['total_s'])} | "
+                    f"{fmt_delta(m['total_b'], m['total_s'])} | "
+                    f"{fmt_delta_pct(m['total_b'], m['total_s'])} |"
                 )
     return "\n".join(lines) + "\n"
 
@@ -182,7 +199,7 @@ def build_peak_wide(
     header = (
         "| Час | D | "
         + " | ".join(
-            f"{label} wait B/S/Δ | {label} work B/S/Δ | {label} total B/S/Δ"
+            f"{label} wait B/S/Δ | {label} work B/S/Δ | {label} total B/S/Δ/%"
             for label in rollout_labels
         )
         + " |"
@@ -213,9 +230,11 @@ def build_peak_wide(
 
     def total_triplet(m: dict[str, float | int] | None) -> str:
         if not m:
-            return "— / — / —"
+            return "— / — / — / —"
         return (
-            f"{fmt(m['total_b'])} / {fmt(m['total_s'])} / {fmt_delta(m['total_b'], m['total_s'])}"
+            f"{fmt(m['total_b'])} / {fmt(m['total_s'])} / "
+            f"{fmt_delta(m['total_b'], m['total_s'])} / "
+            f"{fmt_delta_pct(m['total_b'], m['total_s'])}"
         )
 
     for hour in hours:
@@ -235,10 +254,10 @@ def build_peak_pivot(
     summaries: dict[str, dict[int, dict[str, float | int]]],
 ) -> str:
     lines = [
-        "## Пик 09–15 UTC — только Δ итого (мин) по rollout",
+        "## Пик 09–15 UTC — Δ итого по rollout (мин и %)",
         "",
         "| Час | D | all eligible | main + stable/* | main only |",
-        "|----:|---|-------------:|----------------:|----------:|",
+        "|----:|---|:-------------|:----------------|:----------|",
     ]
     for hour in hours:
         for d_key, d_label in D_GROUPS:
@@ -248,7 +267,10 @@ def build_peak_pivot(
                 if not m:
                     deltas.append("—")
                 else:
-                    deltas.append(fmt_delta(m["total_b"], m["total_s"]))
+                    deltas.append(
+                        f"{fmt_delta(m['total_b'], m['total_s'])} "
+                        f"({fmt_delta_pct(m['total_b'], m['total_s'])})"
+                    )
             lines.append(f"| {hour:02d}:00 | {d_label} | {deltas[0]} | {deltas[1]} | {deltas[2]} |")
     return "\n".join(lines) + "\n"
 
