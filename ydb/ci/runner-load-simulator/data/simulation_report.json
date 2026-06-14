@@ -1,6 +1,6 @@
 {
-  "data_source": "/workspace/ydb/ci/runner-load-simulator/data/jobs_14d.json",
-  "capacity_config": "/workspace/ydb/ci/runner-load-simulator/vendor/runner_capacity.yml",
+  "data_source": "data/jobs_14d.json",
+  "capacity_config": "vendor/runner_capacity.yml",
   "collection_stats": {
     "runs_seen": 6299,
     "runs_skipped_incomplete": 5,
@@ -13,10 +13,10 @@
   "jobs_in_replay": 13664,
   "pr_check_runs": 2581,
   "pr_check_classifier": {
-    "single": 2200,
-    "sharded": 381
+    "single": 1293,
+    "sharded": 1288
   },
-  "pr_check_sharded_with_n1": 136,
+  "pr_check_sharded_with_n1": 312,
   "pool_budget_instances": 79.2,
   "heavy_run_breakdown": {
     "heavy_pr_checks_monolith_gte_60min": {
@@ -27,8 +27,8 @@
       },
       "parallel": {
         "count": 1004,
-        "median_min": 177.2,
-        "p90_min": 230.3
+        "median_min": 131.2,
+        "p90_min": 199.2
       }
     }
   },
@@ -52,27 +52,27 @@
   "parallel": {
     "scenario": "pr_check_parallel",
     "pr_checks_total": 2581,
-    "pr_single": 2336,
-    "pr_sharded": 245,
-    "pr_rwdi_runner_hours": 3108.9,
-    "pool_runner_hours": 35107.3,
+    "pr_single": 1605,
+    "pr_sharded": 976,
+    "pr_rwdi_runner_hours": 3258.2,
+    "pool_runner_hours": 40387.7,
     "peak_concurrent_runners": 66,
-    "total_queue_wait_hours": 2395.02,
-    "queued_allocation_events": 6616,
+    "total_queue_wait_hours": 2443.62,
+    "queued_allocation_events": 7053,
     "pool_saturated_pct": 0.0,
-    "pr_rwdi_wall_median_min": 34.8,
-    "pr_rwdi_wall_p90_min": 207.4,
-    "pr_queue_wait_p90_min": 46.3,
-    "avg_pool_utilization": 1.313,
-    "mean_concurrent_runners": 104.0
+    "pr_rwdi_wall_median_min": 32.8,
+    "pr_rwdi_wall_p90_min": 166.9,
+    "pr_queue_wait_p90_min": 61.3,
+    "avg_pool_utilization": 1.511,
+    "mean_concurrent_runners": 119.6
   },
   "delta_parallel_vs_baseline": {
-    "pool_runner_hours_delta": 2300.8,
-    "pool_runner_hours_delta_pct": 7.0,
-    "pr_rwdi_runner_hours_delta": 46.2,
-    "pr_rwdi_wall_median_delta_min": -2.2,
-    "pr_rwdi_wall_p90_delta_min": -3.9,
-    "queue_wait_hours_delta": 42.4,
+    "pool_runner_hours_delta": 7581.2,
+    "pool_runner_hours_delta_pct": 23.1,
+    "pr_rwdi_runner_hours_delta": 195.5,
+    "pr_rwdi_wall_median_delta_min": -4.2,
+    "pr_rwdi_wall_p90_delta_min": -44.4,
+    "queue_wait_hours_delta": 91.0,
     "peak_runners_delta": 0,
     "saturation_pct_delta": 0.0
   }
