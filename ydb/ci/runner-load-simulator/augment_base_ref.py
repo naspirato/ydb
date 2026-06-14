@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill PR target branch (base ref) into collected jobs JSON."""
+"""Resolve PR target branch (base_ref) from GitHub Pull Request API, not workflow runs."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import argparse
 import json
 import re
 import subprocess
-import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO = "ydb-platform/ydb"
@@ -23,38 +23,56 @@ MERGE_STABLE_RE = re.compile(r"^(stable-[\w-]+)-merge-[0-9a-f]+$")
 CHERRY_STABLE_RE = re.compile(r"^cherry-pick-(stable-[\w-]+)-")
 
 
-def fetch_base_ref_by_pr(pr_number: int) -> str:
+@dataclass
+class PrMeta:
+    pr_number: int | None
+    base_ref: str
+    source: str
+
+
+def gh_json(path: str) -> object:
+    out = subprocess.check_output(
+        ["gh", "api", path],
+        text=True,
+        stderr=subprocess.DEVNULL,
+    )
+    return json.loads(out)
+
+
+def fetch_pr_by_number(pr_number: int) -> PrMeta:
     try:
-        return subprocess.check_output(
-            ["gh", "api", f"repos/{REPO}/pulls/{pr_number}", "--jq", ".base.ref"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-    except subprocess.CalledProcessError:
-        return ""
+        data = gh_json(f"repos/{REPO}/pulls/{pr_number}")
+        return PrMeta(
+            pr_number=int(data["number"]),
+            base_ref=str(data["base"]["ref"]),
+            source="pr_number",
+        )
+    except (subprocess.CalledProcessError, KeyError, TypeError, ValueError):
+        return PrMeta(None, "", "missing")
 
 
-def fetch_base_ref_by_head(head_branch: str) -> str:
+def fetch_pr_by_head(head_branch: str) -> PrMeta:
     if not head_branch:
-        return ""
+        return PrMeta(None, "", "missing")
     try:
-        return subprocess.check_output(
-            [
-                "gh",
-                "api",
-                f"repos/{REPO}/pulls?head=ydb-platform:{head_branch}&state=all&per_page=1",
-                "--jq",
-                ".[0].base.ref // empty",
-            ],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-    except subprocess.CalledProcessError:
-        return ""
+        data = gh_json(
+            f"repos/{REPO}/pulls"
+            f"?head=ydb-platform:{head_branch}&state=all&per_page=1"
+        )
+        if not data:
+            return PrMeta(None, "", "missing")
+        pr = data[0]
+        return PrMeta(
+            pr_number=int(pr["number"]),
+            base_ref=str(pr["base"]["ref"]),
+            source="head_lookup",
+        )
+    except (subprocess.CalledProcessError, KeyError, TypeError, ValueError, IndexError):
+        return PrMeta(None, "", "missing")
 
 
 def infer_base_ref(head_branch: str) -> str:
-    """Best-effort target branch from head name when PR metadata is missing."""
+    """Fallback when no PR exists in GitHub (bots, muted updates, merge branches)."""
     head = head_branch or ""
     if not head:
         return ""
@@ -74,10 +92,7 @@ def infer_base_ref(head_branch: str) -> str:
     if head in {"main", "master"}:
         return "main"
 
-    if head.startswith("merge-main-"):
-        return "main"
-
-    if head.startswith("merge-rightlib-"):
+    if head.startswith(("merge-main-", "merge-rightlib-")):
         return "main"
 
     if head.startswith("stable-") and "-merge-" not in head:
@@ -86,84 +101,94 @@ def infer_base_ref(head_branch: str) -> str:
     return ""
 
 
-def resolve_base_ref(
-    job: dict,
+def resolve_run_meta(
     *,
-    pr_cache: dict[int, str],
-    head_cache: dict[str, str],
-    use_head_lookup: bool,
-) -> str:
-    existing = job.get("base_ref") or ""
-    if existing:
-        return existing
-
-    pr_number = job.get("pr_number")
+    pr_number: int | None,
+    head_branch: str,
+    pr_cache: dict[int, PrMeta],
+    head_cache: dict[str, PrMeta],
+) -> PrMeta:
     if pr_number:
         if pr_number not in pr_cache:
-            pr_cache[pr_number] = fetch_base_ref_by_pr(pr_number)
+            pr_cache[pr_number] = fetch_pr_by_number(pr_number)
             time.sleep(0.03)
-        if pr_cache[pr_number]:
-            return pr_cache[pr_number]
+        meta = pr_cache[pr_number]
+        if meta.base_ref:
+            return meta
 
-    head = job.get("head_branch") or ""
+    head = head_branch or ""
+    if head:
+        if head not in head_cache:
+            head_cache[head] = fetch_pr_by_head(head)
+            time.sleep(0.04)
+        meta = head_cache[head]
+        if meta.base_ref:
+            return meta
+
     inferred = infer_base_ref(head)
     if inferred:
-        return inferred
+        return PrMeta(pr_number, inferred, "inferred")
 
-    if not use_head_lookup or not head:
-        return ""
-
-    if head not in head_cache:
-        head_cache[head] = fetch_base_ref_by_head(head)
-        time.sleep(0.04)
-    return head_cache[head]
+    return PrMeta(pr_number, "", "missing")
 
 
-def augment(path: Path, *, use_head_lookup: bool = True) -> dict[str, int]:
+def augment(path: Path) -> dict[str, int]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    pr_cache: dict[int, str] = {}
-    head_cache: dict[str, str] = {}
-    updated = 0
-    sources = {"kept": 0, "pr": 0, "infer": 0, "head_lookup": 0, "empty": 0}
+    jobs = payload.get("jobs", [])
 
-    for job in payload.get("jobs", []):
-        before = job.get("base_ref") or ""
-        if before:
-            sources["kept"] += 1
+    run_info: dict[int, dict[str, object]] = {}
+    for job in jobs:
+        if job.get("workflow_name") != "PR-check":
             continue
+        rid = int(job["run_id"])
+        info = run_info.setdefault(
+            rid,
+            {"head_branch": job.get("head_branch") or "", "pr_number": job.get("pr_number")},
+        )
+        if job.get("pr_number") and not info.get("pr_number"):
+            info["pr_number"] = job["pr_number"]
+        if job.get("head_branch") and not info.get("head_branch"):
+            info["head_branch"] = job["head_branch"]
 
-        head = job.get("head_branch") or ""
-        inferred = infer_base_ref(head)
-        if job.get("pr_number"):
-            resolved = resolve_base_ref(
-                job, pr_cache=pr_cache, head_cache=head_cache, use_head_lookup=False
-            )
-            source = "pr"
-        elif inferred:
-            resolved = inferred
-            source = "infer"
-        elif use_head_lookup:
-            resolved = resolve_base_ref(
-                job, pr_cache=pr_cache, head_cache=head_cache, use_head_lookup=True
-            )
-            source = "head_lookup" if resolved else "empty"
-        else:
-            resolved = ""
-            source = "empty"
+    pr_cache: dict[int, PrMeta] = {}
+    head_cache: dict[str, PrMeta] = {}
+    run_meta: dict[int, PrMeta] = {}
+    sources: dict[str, int] = {}
 
-        if resolved:
-            job["base_ref"] = resolved
-            if resolved != before:
-                updated += 1
-            sources[source] += 1
-        else:
-            sources["empty"] += 1
+    for rid, info in run_info.items():
+        meta = resolve_run_meta(
+            pr_number=info.get("pr_number"),  # type: ignore[arg-type]
+            head_branch=str(info.get("head_branch") or ""),
+            pr_cache=pr_cache,
+            head_cache=head_cache,
+        )
+        run_meta[rid] = meta
+        sources[meta.source] = sources.get(meta.source, 0) + 1
+
+    updated_jobs = 0
+    for job in jobs:
+        rid = int(job["run_id"])
+        meta = run_meta.get(rid)
+        if not meta:
+            continue
+        changed = False
+        if meta.pr_number and job.get("pr_number") != meta.pr_number:
+            job["pr_number"] = meta.pr_number
+            changed = True
+        if meta.base_ref and job.get("base_ref") != meta.base_ref:
+            job["base_ref"] = meta.base_ref
+            changed = True
+        if meta.base_ref:
+            job["base_ref_source"] = meta.source
+        if changed:
+            updated_jobs += 1
 
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return {
+        "pr_check_runs": len(run_info),
         "prs_cached": len(pr_cache),
         "heads_cached": len(head_cache),
-        "jobs_updated": updated,
+        "jobs_updated": updated_jobs,
         **sources,
     }
 
@@ -171,13 +196,8 @@ def augment(path: Path, *, use_head_lookup: bool = True) -> dict[str, int]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA)
-    parser.add_argument(
-        "--no-head-lookup",
-        action="store_true",
-        help="Skip GitHub pulls?head= lookup for unknown feature branches",
-    )
     args = parser.parse_args()
-    stats = augment(args.data, use_head_lookup=not args.no_head_lookup)
+    stats = augment(args.data)
     print(json.dumps(stats, indent=2), flush=True)
     return 0
 
