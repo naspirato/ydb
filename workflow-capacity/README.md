@@ -82,3 +82,12 @@ python -m workflow_capacity.augment --data data/cache/jobs_test.json
 Вынесено из `ydb/ci/runner-load-simulator` (без промежуточных отчётов и графиков).
 
 Репозиторий: https://github.com/naspirato/workflow-capacity
+
+### Первый push (если репозиторий пустой)
+
+```bash
+git clone https://github.com/naspirato/workflow-capacity.git && cd workflow-capacity
+git clone --depth 1 --branch cursor/runner-load-simulator-1a26 https://github.com/naspirato/ydb.git /tmp/ydb-wc
+cp -r /tmp/ydb-wc/workflow-capacity/* . && rm -rf /tmp/ydb-wc
+git add -A && git commit -m "Initial workflow-capacity import" && git push -u origin main
+```
