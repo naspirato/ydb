@@ -247,6 +247,16 @@ def build_peak_wide(
     return "\n".join(lines) + "\n"
 
 
+def fmt_total_summary(m: dict[str, float | int] | None) -> str:
+    if not m:
+        return "—"
+    return (
+        f"{fmt(m['total_b'])}→{fmt(m['total_s'])} "
+        f"({fmt_delta(m['total_b'], m['total_s'])}, "
+        f"{fmt_delta_pct(m['total_b'], m['total_s'])})"
+    )
+
+
 def build_peak_pivot(
     *,
     hours: list[int],
@@ -254,24 +264,20 @@ def build_peak_pivot(
     summaries: dict[str, dict[int, dict[str, float | int]]],
 ) -> str:
     lines = [
-        "## Пик 09–15 UTC — Δ итого по rollout (мин и %)",
+        "## Пик 09–15 UTC — итого total: baseline→sharding (Δ мин, Δ %)",
+        "",
+        "Формат ячейки: **B→S (Δ, %)**.",
         "",
         "| Час | D | all eligible | main + stable/* | main only |",
         "|----:|---|:-------------|:----------------|:----------|",
     ]
     for hour in hours:
         for d_key, d_label in D_GROUPS:
-            deltas: list[str] = []
+            cells: list[str] = []
             for scenario_key, _, _ in SCENARIOS:
                 m = metrics_for(hour, d_key, scenario_key, payloads[scenario_key], summaries)
-                if not m:
-                    deltas.append("—")
-                else:
-                    deltas.append(
-                        f"{fmt_delta(m['total_b'], m['total_s'])} "
-                        f"({fmt_delta_pct(m['total_b'], m['total_s'])})"
-                    )
-            lines.append(f"| {hour:02d}:00 | {d_label} | {deltas[0]} | {deltas[1]} | {deltas[2]} |")
+                cells.append(fmt_total_summary(m))
+            lines.append(f"| {hour:02d}:00 | {d_label} | {cells[0]} | {cells[1]} | {cells[2]} |")
     return "\n".join(lines) + "\n"
 
 
