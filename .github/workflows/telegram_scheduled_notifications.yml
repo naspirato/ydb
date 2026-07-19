@@ -1,7 +1,8 @@
 name: Telegram scheduled notifications
 
 # Scheduled Telegram output: (1) mute-issue digests from YDB digest_queue via send_digest.py,
-# (2) stuck GitHub Actions queue alerts via alert_queued_jobs.py. Same cron; separate jobs.
+# (2) stuck GitHub Actions queue alerts via alert_queued_jobs.py,
+# (3) CI analytics health checks after PR-check/postcommit unification (#45533).
 
 # Digest: new mute issues are written to YDB digest_queue by mute/create_new_muted_ya.py (not sent from mute PR workflows).
 # Job send-digest runs send_digest.py which dequeues unsent rows and sends Telegram, then sets sent_at.
@@ -25,6 +26,14 @@ on:
         description: "Print messages without sending"
         type: boolean
         default: false
+      analytics_health_dry_run:
+        description: "CI analytics health: print only, do not Telegram"
+        type: boolean
+        default: false
+      analytics_branches:
+        description: "CI analytics health: comma-separated branches (default main,prestable-26-3)"
+        type: string
+        default: "main,prestable-26-3"
 
 concurrency:
   group: telegram-scheduled-notifications
@@ -59,6 +68,34 @@ jobs:
             --send-when-all-good \
             --notify-on-api-errors \
             --blacklist "${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"
+
+  ci-analytics-health:
+    name: CI analytics health (#45533)
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup YDB access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Install dependencies
+        run: python3 -m pip install "ydb[yc]"
+
+      - name: Run CI analytics health check
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.YDBOT_TELEGRAM_BOT_TOKEN }}
+          GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
+        run: |
+          ARGS="--send-telegram --branches ${{ github.event.inputs.analytics_branches || 'main,prestable-26-3' }}"
+          if [ "${{ github.event.inputs.analytics_health_dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python3 .github/scripts/analytics/ci_analytics_health_check.py $ARGS
 
   send-digest:
     name: Mute digest to Telegram
