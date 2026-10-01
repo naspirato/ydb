@@ -131,7 +131,7 @@ def github_env_defaults() -> Dict[str, Any]:
         if run_id is not None and repository
         else None
     )
-    job_name = os.environ.get("CI_JOB_TITLE") or os.environ.get("GITHUB_JOB") or None
+    job_name = os.environ.get("GITHUB_JOB_NAME") or os.environ.get("GITHUB_JOB") or None
     return {
         "run_id": run_id,
         "github_job_id": _as_uint(os.environ.get("GITHUB_NUMERIC_JOB_ID")),
@@ -222,12 +222,9 @@ def apply_job_defaults(
     target = os.environ.get("CI_BUILD_TARGET")
     if target:
         properties.setdefault("build_target", target)
-    build_span = os.environ.get("CI_BUILD_SPAN")
-    if name and build_span and name == build_span:
+    if name and name.startswith("ya_make_try_"):
         if command == "start":
             fields.setdefault("runner", True)
-            if not fields.get("source"):
-                fields["source"] = os.environ.get("CI_BUILD_SPAN_SOURCE") or "ya_phase"
         elif command == "end":
             fields.setdefault("usage", True)
     if command in ("start", "track") and not fields.get("source") and not properties.get("source"):
@@ -269,14 +266,7 @@ def enrich(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Opti
     props, extras = _bound(props, file, fields)
     extras.pop("attach", None)
     extras.pop("enrich", None)
-    ya_attempt = extras.get("ya_attempt")
-    extra_labels = extras.get("labels")
-    if ya_attempt in (None, "") and isinstance(extra_labels, dict):
-        ya_attempt = extra_labels.get("ya_attempt")
-    if ya_attempt in (None, "") and isinstance(props.get("labels"), dict):
-        ya_attempt = props["labels"].get("ya_attempt")
-    if ya_attempt in (None, ""):
-        ya_attempt = props.get("ya_attempt")
+    ya_attempt = props.get("ya_attempt")
     if ya_attempt not in (None, ""):
         extras["match_labels"] = {"ya_attempt": ya_attempt}
     return collector_enrich(name, props, **extras)

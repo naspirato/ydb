@@ -92,7 +92,7 @@ WHERE run_id = 123 AND name = "compile";
 | `github_job_id` | `$GITHUB_NUMERIC_JOB_ID` | `456` |
 | `run_attempt` | `$GITHUB_RUN_ATTEMPT` | `1` |
 | `workflow` | `$GITHUB_WORKFLOW` | `PR-check` |
-| `job_name` | `$CI_JOB_TITLE` или `$GITHUB_JOB` | `build-relwithdebinfo` |
+| `job_name` | `$GITHUB_JOB_NAME` (`job.name` из GitHub API в `test_ya`), иначе `$GITHUB_JOB` | `Build and test relwithdebinfo` |
 | `event_name` | `$GITHUB_EVENT_NAME` | `pull_request` |
 | `branch` | `$BRANCH_NAME` / `$GITHUB_BASE_REF` / event | `main` |
 | `commit` | `$ORIGINAL_HEAD` / `$GITHUB_SHA` | `abc…` |
@@ -126,12 +126,10 @@ analytics end my_new_phase --rc "$RC"
 (`$CI_YA_ATTEMPT`) и цель сборки (`$CI_BUILD_TARGET`). Их не нужно
 передавать в каждую команду.
 
-`$CI_BUILD_SPAN` — имя строки, которая измеряет **сам вызов** `./ya make`
-(от запуска команды до её exit code). По умолчанию это `ya_make_try_1`,
-`ya_make_try_2`, … по номеру ретрая. Если workflow задаст другое имя в
-`$CI_BUILD_SPAN`, `test_ya` пишет start/end с ним. Только для этой строки
-Python сам запишет железо: на старте сколько ядер и RAM, в конце сколько
-занято. На `init` и `checkout` это не нужно.
+Строка `ya_make_try_1`, `ya_make_try_2`, … — сам вызов `./ya make`
+(от запуска команды до её exit code). Только для неё Python пишет железо:
+на старте сколько ядер и RAM, в конце сколько занято. На `init` и
+`checkout` это не нужно.
 
 В шаге стоит `set -e`: любая упавшая команда сразу выходит из скрипта.
 Тогда `analytics start` уже вызван, а до `analytics end` дело не дойдёт —

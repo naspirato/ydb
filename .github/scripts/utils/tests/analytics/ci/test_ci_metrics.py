@@ -306,17 +306,39 @@ class WorkflowRunMetricsTest(unittest.TestCase):
 
 
 class GithubEnvDefaultsTest(unittest.TestCase):
-    def test_prefers_ci_job_title(self):
+    def test_job_name_from_github_job_name(self):
         old = {
-            "CI_JOB_TITLE": os.environ.get("CI_JOB_TITLE"),
+            "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
+            "GITHUB_JOB_NAME": os.environ.get("GITHUB_JOB_NAME"),
+            "GITHUB_JOB": os.environ.get("GITHUB_JOB"),
             "GITHUB_RUN_ID": os.environ.get("GITHUB_RUN_ID"),
         }
         try:
-            os.environ["CI_JOB_TITLE"] = "Build and test relwithdebinfo"
+            os.environ["ANALYTICS_JOB_NAME"] = "PR-check"
+            os.environ["GITHUB_JOB"] = "build_and_test"
+            os.environ["GITHUB_JOB_NAME"] = "Build and test relwithdebinfo on main"
             os.environ["GITHUB_RUN_ID"] = "12345"
             defaults = github_env_defaults()
-            self.assertEqual(defaults["job_name"], "Build and test relwithdebinfo")
+            self.assertEqual(defaults["job_name"], "Build and test relwithdebinfo on main")
             self.assertEqual(defaults["run_id"], 12345)
+        finally:
+            for key, value in old.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_falls_back_to_yaml_job_id(self):
+        old = {
+            "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
+            "GITHUB_JOB_NAME": os.environ.get("GITHUB_JOB_NAME"),
+            "GITHUB_JOB": os.environ.get("GITHUB_JOB"),
+        }
+        try:
+            os.environ["ANALYTICS_JOB_NAME"] = "PR-check"
+            os.environ.pop("GITHUB_JOB_NAME", None)
+            os.environ["GITHUB_JOB"] = "build_and_test"
+            self.assertEqual(github_env_defaults()["job_name"], "build_and_test")
         finally:
             for key, value in old.items():
                 if value is None:
@@ -334,7 +356,8 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             "GITHUB_BASE_REF",
             "GITHUB_REF_NAME",
             "BUILD_PRESET",
-            "CI_JOB_TITLE",
+            "ANALYTICS_JOB_NAME",
+            "GITHUB_JOB_NAME",
             "GITHUB_JOB",
         )}
         try:
@@ -355,7 +378,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                         handle,
                     )
                 os.environ["GITHUB_EVENT_PATH"] = path
-                os.environ["CI_JOB_TITLE"] = "Build and test relwithdebinfo"
+                os.environ["ANALYTICS_JOB_NAME"] = "Build and test relwithdebinfo"
                 os.environ["BUILD_PRESET"] = "relwithdebinfo"
                 defaults = github_env_defaults()
             self.assertEqual(defaults["pr_number"], 53660)
@@ -379,7 +402,9 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             "PR_NUMBER",
             "ORIGINAL_HEAD",
             "BRANCH_NAME",
-            "CI_JOB_TITLE",
+            "ANALYTICS_JOB_NAME",
+            "GITHUB_JOB_NAME",
+            "GITHUB_JOB",
             "GITHUB_TOKEN",
             "GITHUB_REPOSITORY",
             "GITHUB_NUMERIC_JOB_ID",
@@ -405,7 +430,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                 os.environ["GITHUB_EVENT_NAME"] = "pull_request_target"
                 os.environ["GITHUB_WORKFLOW"] = "PR-check"
                 os.environ["GITHUB_RUN_ID"] = "99"
-                os.environ["CI_JOB_TITLE"] = "build_and_test"
+                os.environ["ANALYTICS_JOB_NAME"] = "build_and_test"
                 record = attach_context({"name": "ya_make_try_1", "source": "ya_phase"})
             self.assertEqual(record["pr_number"], 53660)
             self.assertEqual(record["event_name"], "pull_request_target")
@@ -804,7 +829,7 @@ class JobDefaultsTest(unittest.TestCase):
     def setUp(self):
         self._saved = {
             key: os.environ.get(key)
-            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET", "CI_BUILD_SPAN", "CI_BUILD_SPAN_SOURCE")
+            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET")
         }
         for key in self._saved:
             os.environ.pop(key, None)
@@ -827,15 +852,13 @@ class JobDefaultsTest(unittest.TestCase):
         self.assertEqual(fields["source"], "ya_phase")
         self.assertNotIn("runner", fields)
 
-    def test_build_span_gets_runner_and_usage(self):
-        os.environ["CI_BUILD_SPAN"] = "build_wall"
-        os.environ["CI_BUILD_SPAN_SOURCE"] = "custom_src"
+    def test_ya_make_try_gets_runner_and_usage(self):
         start_fields: dict = {}
-        apply_job_defaults("build_wall", {}, start_fields, command="start")
+        apply_job_defaults("ya_make_try_1", {}, start_fields, command="start")
         self.assertTrue(start_fields["runner"])
-        self.assertEqual(start_fields["source"], "custom_src")
+        self.assertEqual(start_fields["source"], "ya_phase")
         end_fields: dict = {}
-        apply_job_defaults("build_wall", {}, end_fields, command="end")
+        apply_job_defaults("ya_make_try_1", {}, end_fields, command="end")
         self.assertTrue(end_fields["usage"])
 
     def test_rc_sets_conclusion_and_error(self):
@@ -858,6 +881,20 @@ class JobDefaultsTest(unittest.TestCase):
             self.assertEqual(pending[0]["source"], "ya_phase")
             self.assertEqual(pending[0]["labels"]["ya_attempt"], "3")
             self.assertNotIn("cache_mode", pending[0]["labels"])
+
+    def test_enrich_matches_props_ya_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            start("ya_make_try_1", {"ya_attempt": "1"}, file=path)
+            end("ya_make_try_1", file=path, conclusion="success")
+            start("ya_make_try_1", {"ya_attempt": "2"}, file=path)
+            end("ya_make_try_1", file=path, conclusion="success")
+            enrich("ya_make_try_1", {"ya_attempt": "1", "report_url": "try1"}, file=path)
+            with open(path, encoding="utf-8") as handle:
+                rows = [json.loads(line) for line in handle if line.strip()]
+            by_attempt = {row["labels"]["ya_attempt"]: row for row in rows}
+            self.assertEqual(by_attempt["1"]["labels"]["report_url"], "try1")
+            self.assertNotIn("report_url", by_attempt["2"]["labels"])
 
     def test_cli_end_rc(self):
         with tempfile.TemporaryDirectory() as tmp:
