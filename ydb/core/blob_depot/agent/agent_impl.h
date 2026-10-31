@@ -341,6 +341,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
+            bool done = false;
             if (const auto& info = ev->Get()->Info) {
                 Y_ABORT_UNLESS(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
@@ -350,14 +351,18 @@ namespace NKikimr::NBlobDepot {
                         ConnectToBlobDepot();
                     }
                 }
-                if (!info->GetTotalVDisksNum()) {
-                    // proxy finishes serving user requests
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
-                    ProxyId = {};
-                }
+                // decommitted group has lost its physical part, the proxy has nothing to serve anymore; group's VDisk
+                // count can't tell this, as bridge proxy group has no VDisks of its own even before decommission ends
+                done = info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE;
             }
             if (ProxyId) {
+                // the proxy gets the configuration even when it is going to be stopped, to pass us requests it has queued
+                // while being unconfigured
                 TActivationContext::Send(ev->Forward(ProxyId));
+                if (done) {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, std::exchange(ProxyId, {}), {},
+                        nullptr, 0));
+                }
             }
         }
 
@@ -486,7 +491,7 @@ namespace NKikimr::NBlobDepot {
 
             virtual void OnUpdateBlock() {}
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
-            virtual void OnIdAllocated(bool /*success*/) {}
+            virtual void OnIdAllocated(bool /*success*/, const TString& /*errorReason*/) {}
             virtual void OnDestroy(bool /*success*/) {}
             virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
@@ -517,9 +522,14 @@ namespace NKikimr::NBlobDepot {
             bool IssueRead(TReadArg&& arg, TString& error);
             void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
             void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
+            void HandleResolveDisconnected(const TRequestContext::TPtr& context);
 
             void IssueCheckIntegrity(TReadArg&& arg);
             void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);
+            void HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key, ui32 len,
+                std::optional<TString> data, const char *error);
+            void OnCheckIntegrityPartDone(TCheckContext& checkContext);
+            void HandleCheckIntegrityResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
 
         public:
             struct TDeleter {
@@ -571,7 +581,11 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         void HandleQueryWatchdog();
 
-        void Invoke(std::function<void()> callback) { callback(); }
+        // called by helper actors through InvokeOtherActor, so no query is on the stack and the ended ones can go
+        void Invoke(std::function<void()> callback) {
+            callback();
+            DeletePendingQueries.Clear();
+        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -602,7 +616,7 @@ namespace NKikimr::NBlobDepot {
             void RebuildHeap();
 
             void EnqueueQueryWaitingForId(TQuery *query);
-            void ProcessQueriesWaitingForId(bool success);
+            void ProcessQueriesWaitingForId(bool success, const TString& errorReason = {});
         };
 
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;

@@ -3,6 +3,8 @@
 #include "mkql_type_ops.h"
 #include "mkql_alloc.h"
 
+#include <yql/essentials/minikql/datetime/datetime.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/type_info/tz/tz.h>
@@ -16,6 +18,7 @@ extern "C" {
 }
 
 using namespace NYql;
+using namespace NYql::NDateTime;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
@@ -203,6 +206,20 @@ void TestSplitMakeTzDatetime32vs64(ui16 tzId, ui32 beginDatetime, size_t step) {
 Y_UNIT_TEST(SplitMakeTzDatetime32vs64) {
     constexpr size_t datetimeStep = 100 * 86400;
     RunTestForAllTimezones(TestSplitMakeTzDatetime32vs64, datetimeStep);
+}
+
+Y_UNIT_TEST(MakeTzDateRejectsInvalidDate) {
+    ui16 value = 123;
+    UNIT_ASSERT(!MakeTzDate(1970, 0, 1, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 123);
+    UNIT_ASSERT(!MakeTzDate(1970, 1, 0, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 123);
+}
+
+Y_UNIT_TEST(MakeTzDateAcceptsEpoch) {
+    ui16 value = 123;
+    UNIT_ASSERT(MakeTzDate(1970, 1, 1, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 0);
 }
 
 Y_UNIT_TEST(SplitMakeTzDateSingle) {

@@ -1510,6 +1510,8 @@ private:
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
         } else if (auto maybeBlockHashJoin = TMaybeNode<TDqBlockHashJoinCore>(node)) {
             operatorId = Visit(maybeBlockHashJoin.Cast(), planNode);
+        } else if (auto maybeScalarHashJoin = TMaybeNode<TDqScalarHashJoinCore>(node)) {
+            operatorId = Visit(maybeScalarHashJoin.Cast(), planNode);
         } else if (auto lookupJoin = TMaybeNode<TKqpIndexLookupJoin>(node)) {
             operatorId = Visit(lookupJoin.Cast(), planNode);
         } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
@@ -1998,6 +2000,18 @@ private:
 
     std::variant<ui32, TArgContext> Visit(const TDqBlockHashJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (BlockHash)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
+
+        AddOptimizerEstimates(op, join);
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqScalarHashJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (ScalarHash)";
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -3240,6 +3254,11 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     }
 
     auto setPlan = [&serializerCtx](auto txId, const auto& tx, auto& txProto) {
+        // Unsafe truncate runs in a separate executer and has no DQ execution plan.
+        if (GetTableTruncateSettings(tx)) {
+            return;
+        }
+
         NJsonWriter::TBuf txWriter;
         txWriter.SetIndentSpaces(2);
         TxPlanSerializer txPlanSerializer(serializerCtx, txId, tx, txProto);

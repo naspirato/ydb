@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 PEERDIR(
@@ -20,6 +20,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     console_ut_tenants.cpp
     console_ut_configs.cpp
+    console_handshake_ut.cpp
     feature_flags_configurator_ut.cpp
     immediate_controls_configurator_ut.cpp
     log_settings_configurator_ut.cpp

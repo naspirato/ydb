@@ -9,10 +9,10 @@ SPLIT_FACTOR(50)
 
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:4)
+    REQUIREMENTS(cpu:1)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 SRCS(
@@ -23,6 +23,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/library/query_actor
     ydb/services/workload_manager/ut/common
     yql/essentials/sql/pg_dummy
     library/cpp/json

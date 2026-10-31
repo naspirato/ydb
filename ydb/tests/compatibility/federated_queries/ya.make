@@ -1,4 +1,7 @@
 PY3TEST()
+
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_TEST_FILES()
@@ -13,7 +16,7 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:1)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)

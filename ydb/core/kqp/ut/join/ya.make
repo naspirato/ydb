@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(200)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -16,12 +16,14 @@ IF(SANITIZER_TYPE == "memory")
     # Just double default memory requirements since we run MSan without origin tracking by default.
     REQUIREMENTS(
         ram:16
+        cpu:1
     )
 ENDIF()
 
 SRCS(
     kqp_block_hash_join_ut.cpp
     kqp_join_order_ut.cpp
+    kqp_scalar_hash_join_ut.cpp
     kqp_benches_ut.cpp
 )
 

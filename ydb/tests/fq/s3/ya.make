@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 
@@ -34,6 +36,7 @@ TEST_SRCS(
     test_inflight.py
     test_insert.py
     test_public_metrics.py
+    test_parquet_pushdown.py
     test_push_down.py
     test_s3_0.py
     test_s3_1.py
@@ -56,17 +59,17 @@ DATA(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(ram:16 cpu:1)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 END()

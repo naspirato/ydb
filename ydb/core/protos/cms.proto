@@ -445,6 +445,9 @@ message TCmsConfig {
             optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
             optional uint32 NodeBadStateLimit = 4 [default = 10];
             optional uint32 WaitForConfigStep = 5 [default = 60000000];
+            // Timeout for retrying a Sentinel state request, in microseconds.
+            // Read by distconf from the node's startup configuration.
+            optional uint32 SelfHealStateRequestTimeout = 11 [default = 5000000];
             optional uint32 RelaxTime = 6 [default = 600000000];
             optional bool PileupReplicas = 7 [default = false];
             optional uint32 OverrideReplicasInRingCount = 8 [default = 0];
@@ -691,6 +694,7 @@ message TPDiskInfo {
         RATIO_BY_RACK = 5;
         TOO_MANY_FAULTY_PER_NODE = 6;
         RATIO_BY_PILE = 7;
+        PILE_CUT_OFF = 8; // the node belongs to the pile that is not allowed to connect to the cluster
     }
 
     optional uint32 State = 1; // EPDiskState
@@ -809,6 +813,7 @@ message TDDiskTabletListResponse {
         // Maximum underlying DDisk owner occupancy across all assigned DDisks.
         // Absent if any assigned DDisk has no valid, available monitoring sample.
         optional double DiskUsage = 8;
+        optional string DiskId = 9; // NBS volume identifier; absent for older/unavailable reporters
     }
 
     reserved 2;
@@ -858,6 +863,9 @@ message TDDiskDiskListResponse {
         optional double PersistentBufferOccupancy = 7; // relative to MaxChunks
         optional uint32 DDiskTabletCount = 8;
         optional uint32 PersistentBufferTabletCount = 9;
+        optional string StoragePoolName = 10;
+        optional string DDiskPath = 11; // node-relative actor monitoring path
+        optional string PersistentBufferId = 12; // stable service actor ID
 
     }
 

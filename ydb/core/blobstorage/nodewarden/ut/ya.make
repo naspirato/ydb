@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/blobstorage/nodewarden)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -19,6 +19,7 @@ SRCS(
     blobstorage_executor_pool_mapping_ut.cpp
     blobstorage_node_warden_ut.cpp
     bind_queue_ut.cpp
+    distconf_selfheal_ut.cpp
     distconf_ut.cpp
     node_warden_cache_ut.cpp
 )

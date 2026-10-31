@@ -3,6 +3,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -27,6 +28,22 @@ using namespace NYql::NNodes;
 using TStatus = IGraphTransformer::TStatus;
 
 namespace {
+
+bool ValidateReadSampling(const TCoNameValueTupleList& settingsNode, bool index, TExprContext& ctx) {
+    const bool sampling = HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingRateSettingName)
+        || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingSeedSettingName)
+        || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::SamplingMemtableStrideSettingName);
+    if (!sampling) {
+        return true;
+    }
+    if (index || HasSetting(settingsNode.Ref(), TKqpReadTableSettings::ReverseSettingName)) {
+        ctx.AddError(TIssue(ctx.GetPosition(settingsNode.Pos()), index
+            ? "Sampling is not supported for index reads"
+            : "Sampling is not supported for reverse reads"));
+        return false;
+    }
+    return true;
+}
 
 bool RightJoinSideAllowed(const TStringBuf& joinType) {
     return joinType != "LeftOnly" && joinType != "LeftSemi";
@@ -246,6 +263,10 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
         return TStatus::Error;
     }
 
+    if (!ValidateReadSampling(TCoNameValueTupleList(node->ChildPtr(TKqlReadTableBase::idx_Settings)), readIndex, ctx)) {
+        return TStatus::Error;
+    }
+
     auto table = ResolveTable(node->Child(TKqlReadTableBase::idx_Table), ctx, cluster, tablesData);
     if (!table.second) {
         return TStatus::Error;
@@ -401,6 +422,10 @@ TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node
 TStatus AnnotateKqpSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
+    if (!ValidateReadSampling(TCoNameValueTupleList(node->ChildPtr(TKqpReadRangesSourceSettings::idx_Settings)), false, ctx)) {
+        return TStatus::Error;
+    }
+
     auto table = ResolveTable(node->Child(TKqpReadRangesSourceSettings::idx_Table), ctx, cluster, tablesData);
     if (!table.second) {
         return TStatus::Error;
@@ -488,6 +513,10 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     // prefix
     if (!EnsureMinArgsCount(*node, argCount, ctx) && EnsureMaxArgsCount(*node, argCount + 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!ValidateReadSampling(TCoNameValueTupleList(node->ChildPtr(TKqlReadTableRangesBase::idx_Settings)), index, ctx)) {
         return TStatus::Error;
     }
 
@@ -1463,8 +1492,20 @@ TStatus AnnotateOlapApplyColumnArg(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 3U, ctx)) {
+    if (!EnsureMinArgsCount(*node, 3U, ctx) || !EnsureMaxArgsCount(*node, 4U, ctx)) {
         return TStatus::Error;
+    }
+    if (node->ChildrenSize() == 4U) {
+        const auto& hint = *node->Child(3);
+        if (!hint.IsList() || hint.ChildrenSize() != 4U) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "KqpOlapApply LikeHint must be a list of four atoms"));
+            return TStatus::Error;
+        }
+        for (const auto& atom : hint.Children()) {
+            if (!EnsureAtom(*atom, ctx)) {
+                return TStatus::Error;
+            }
+        }
     }
 
     TExprList args = TExprList(node->Child(TKqpOlapApply::idx_Args));
@@ -2021,7 +2062,7 @@ TStatus AnnotateKqpPredicateClosure(const TExprNode::TPtr& node, TExprContext& c
 }
 
 TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 2, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 2, 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -2050,6 +2091,15 @@ TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto& lambda = node->ChildRef(TKqpProgram::idx_Lambda);
     if (!EnsureLambda(*lambda, ctx)) {
         return TStatus::Error;
+    }
+
+    if (node->ChildrenSize() > TKqpProgram::idx_ArgsConstraints) {
+        auto* argsConstraints = node->Child(TKqpProgram::idx_ArgsConstraints);
+        if (!EnsureTupleOfAtoms(*argsConstraints, ctx) ||
+            !EnsureTupleSize(*argsConstraints, argTypes.size(), ctx))
+        {
+            return TStatus::Error;
+        }
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, argTypes, ctx)) {
@@ -2776,6 +2826,28 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
     return TStatus::Ok;
 }
 
+TStatus AnnotateUnsafeTruncate(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqlUnsafeTruncate::idx_TablePath), ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(MakeKqpEffectType(ctx)));
+    return TStatus::Ok;
+}
+
+TStatus AnnotateTableTruncateSettings(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)
+        || !EnsureAtom(*node->Child(TKqpTableTruncateSettings::idx_TablePath), ctx)) {
+        return TStatus::Error;
+    }
+    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateExternalEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 1, ctx)) {
         return TStatus::Error;
@@ -3421,6 +3493,7 @@ TStatus AnnotateOpWindow(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto opWindow = TKqpOpWindow(input);
     auto pos = input->Pos();
+    const bool frameNeverEmpty = WindowFrameFromNode(opWindow.Frame()).IsNeverEmpty();
 
     TVector<const TItemExprType*> newItemTypes(structType->GetItems().begin(), structType->GetItems().end());
 
@@ -3447,7 +3520,7 @@ TStatus AnnotateOpWindow(const TExprNode::TPtr& input, TExprContext& ctx) {
             } else {
                 resultType = argType;
             }
-            if (!resultType->IsOptionalOrNull()) {
+            if (!frameNeverEmpty && !resultType->IsOptionalOrNull()) {
                 resultType = ctx.MakeType<TOptionalExprType>(resultType);
             }
         }
@@ -3473,13 +3546,10 @@ TStatus AnnotateOpTableEffect(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 bool IsStreamingAggregationOutputTableKeyType(const TTypeAnnotationNode& type) {
-    // Keys must support both ExportTypeToProto and SDK FormatType for DECLARE.
     switch (type.GetKind()) {
         case ETypeAnnotationKind::Data: {
             const auto slot = type.Cast<TDataExprType>()->GetSlot();
-            return IsDataTypeNumeric(slot) || IsDataTypeDate(slot) || IsDataTypeInterval(slot)
-                || (IsDataTypeTzDate(slot) && !IsDataTypeBigDate(slot))
-                || IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Uuid, EDataSlot::DyNumber, EDataSlot::Decimal}, slot);
+            return !(IsDataTypeTzDate(slot) && IsDataTypeBigDate(slot));
         }
         case ETypeAnnotationKind::Optional:
             return IsStreamingAggregationOutputTableKeyType(*type.Cast<TOptionalExprType>()->GetItemType());
@@ -3508,14 +3578,7 @@ bool IsStreamingAggregationOutputTableKeyType(const TTypeAnnotationNode& type) {
 }
 
 bool IsStreamingAggregationOutputTableStateType(const TTypeAnnotationNode& type) {
-    // Saved values only need ExportTypeToProto; their types are not formatted as SQL.
     switch (type.GetKind()) {
-        case ETypeAnnotationKind::Data: {
-            const auto slot = type.Cast<TDataExprType>()->GetSlot();
-            return IsDataTypeNumeric(slot) || IsDataTypeDateOrTzDateOrInterval(slot)
-                || IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Yson, EDataSlot::Json,
-                    EDataSlot::JsonDocument, EDataSlot::Uuid, EDataSlot::DyNumber, EDataSlot::Decimal}, slot);
-        }
         case ETypeAnnotationKind::Pg:
             return NKikimr::NPg::TypeDescFromPgTypeId(type.Cast<TPgExprType>()->GetId()) != nullptr;
         case ETypeAnnotationKind::Optional:
@@ -3543,11 +3606,9 @@ bool IsStreamingAggregationOutputTableStateType(const TTypeAnnotationNode& type)
         }
         case ETypeAnnotationKind::Tagged:
             return IsStreamingAggregationOutputTableStateType(*type.Cast<TTaggedExprType>()->GetBaseType());
-        case ETypeAnnotationKind::Variant: {
-            const auto* const underlying = type.Cast<TVariantExprType>()->GetUnderlyingType();
-            return IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::Struct}, underlying->GetKind())
-                && IsStreamingAggregationOutputTableStateType(*underlying);
-        }
+        case ETypeAnnotationKind::Variant:
+            return IsStreamingAggregationOutputTableStateType(*type.Cast<TVariantExprType>()->GetUnderlyingType());
+        case ETypeAnnotationKind::Data:
         case ETypeAnnotationKind::Void:
         case ETypeAnnotationKind::Null:
         case ETypeAnnotationKind::EmptyList:
@@ -3888,6 +3949,13 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
                 const auto& finish = *trait.Child(TCoAggregationTraits::idx_FinishHandler);
                 const auto& save = *trait.Child(TCoAggregationTraits::idx_SaveHandler);
                 const auto& load = *trait.Child(TCoAggregationTraits::idx_LoadHandler);
+                const auto& merge = *trait.Child(TCoAggregationTraits::idx_MergeHandler);
+
+                if (merge.Tail().IsCallable("Void")) {
+                    ctx.AddError(TIssue(ctx.GetPosition(merge.Pos()), "Merge handler must be specified for streaming aggregation tied to an output state table"));
+                    return TStatus::Error;
+                }
+
                 if (IsIdentityLambda(finish)) {
                     if (!IsIdentityLambda(save) || !IsIdentityLambda(load)) {
                         auto children = trait.ChildrenList();
@@ -3912,16 +3980,6 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
             if (!normalizedHandlers.empty()) {
                 output = ctx.ChangeChild(*input, TKqpStreamingAggregation::idx_Handlers, ctx.NewList(handlers->Pos(), std::move(normalizedHandlers)));
                 return TStatus::Repeat;
-            }
-
-            for (const auto& handler : handlers->Children()) {
-                const auto& save = *handler->Child(TCoAggregateTuple::idx_Trait)->Child(TCoAggregationTraits::idx_SaveHandler);
-                if (!IsStreamingAggregationOutputTableStateType(*save.GetTypeAnn())) {
-                    ctx.AddError(TIssue(ctx.GetPosition(save.Pos()), TStringBuilder()
-                        << "Unsupported saved state type for streaming aggregation output state table, column: "
-                        << handler->Head().Content() << ", type: " << *save.GetTypeAnn()));
-                    return TStatus::Error;
-                }
             }
         } else if (name == "output_columns") {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
@@ -3950,10 +4008,18 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
     }
 
     const auto stateTablePath = GetSetting(*settings, "state_table_path");
-    if ((stateTablePath && !stateTablePath->Tail().Content().empty()) || !config.DisableCheckpoints.Get().GetOrElse(false)) {
+    const auto outputStateTable = GetSetting(*settings, "output_state_table");
+    if (outputStateTable || (stateTablePath && !stateTablePath->Tail().Content().empty()) || !config.DisableCheckpoints.Get().GetOrElse(false)) {
         for (const auto& handler : handlers->Children()) {
             const auto& save = *handler->Child(TCoAggregateTuple::idx_Trait)->Child(TCoAggregationTraits::idx_SaveHandler);
             if (!EnsurePersistableType(save.Pos(), *save.GetTypeAnn(), ctx)) {
+                return TStatus::Error;
+            }
+
+            if (outputStateTable && !IsStreamingAggregationOutputTableStateType(*save.GetTypeAnn())) {
+                ctx.AddError(TIssue(ctx.GetPosition(save.Pos()), TStringBuilder()
+                    << "Unsupported saved state type for streaming aggregation output state table, column: "
+                    << handler->Head().Content() << ", type: " << *save.GetTypeAnn()));
                 return TStatus::Error;
             }
         }
@@ -4074,6 +4140,8 @@ public:
         AddHandler({TKqpReadRangesSourceSettings::CallableName()}, HndlInt(&AnnotateKqpSourceSettings));
         AddHandler({TKqpReadSysViewSourceSettings::CallableName()}, HndlInt(&AnnotateSysViewSourceSettings));
         AddHandler({TKqlExternalEffect::CallableName()}, Hndl(&AnnotateExternalEffect));
+        AddHandler({TKqlUnsafeTruncate::CallableName()}, Hndl(&AnnotateUnsafeTruncate));
+        AddHandler({TKqpTableTruncateSettings::CallableName()}, Hndl(&AnnotateTableTruncateSettings));
         AddHandler({TKqpSinkEffect::CallableName()}, Hndl(&AnnotateKqpSinkEffect));
         AddHandler({TKqlReturningList::CallableName()}, HndlInt(&AnnotateReturningList));
         AddHandler({TKqpTableSinkSettings::CallableName()}, Hndl(&AnnotateTableSinkSettings));

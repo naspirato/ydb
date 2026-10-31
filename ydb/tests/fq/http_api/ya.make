@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 PEERDIR(
@@ -19,7 +21,7 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 END()

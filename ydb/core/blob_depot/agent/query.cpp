@@ -37,6 +37,14 @@ namespace NKikimr::NBlobDepot {
                 break;
         }
 
+        // the request with forced generation is addressed to the physical group at that very generation (subrequests of
+        // the bridge proxy, its syncers, interpile puts, phantom checks); only the DS proxy of that group may serve it, so
+        // it goes there, through the bridge proxy if the group is an inline pile
+        if (const auto *common = dynamic_cast<const TEvBlobStorage::TEvRequestCommon*>(ev->GetBase());
+                common && common->ForceGroupGeneration) {
+            doForward = true;
+        }
+
         if (doForward) {
             if (ProxyId) {
                 TActivationContext::Forward(ev, ProxyId);
@@ -83,7 +91,16 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::HandleAssimilate(TAutoPtr<IEventHandle> ev) {
-        TActivationContext::Forward(ev, ProxyId);
+        if (ProxyId) {
+            TActivationContext::Forward(ev, ProxyId);
+        } else {
+            // there is no physical group behind the agent (the virtual group has none, or its decommission is done), so
+            // the request has nothing to enumerate and would be lost if forwarded
+            auto& msg = *ev->Get<TEvBlobStorage::TEvAssimilate>();
+            auto response = msg.MakeErrorResponse(NKikimrProto::ERROR, "no physical group to assimilate",
+                TGroupId::FromValue(VirtualGroupId));
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
     }
 
     void TBlobDepotAgent::HandlePendingEvent() {

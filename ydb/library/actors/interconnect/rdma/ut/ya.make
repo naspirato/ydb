@@ -1,7 +1,7 @@
 GTEST()
 
 IF (OS_LINUX AND SANITIZER_TYPE != "memory")
-    REQUIREMENTS(cpu:4)
+    REQUIREMENTS(cpu:2)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
@@ -13,6 +13,7 @@ ENDIF()
 SRCS(
     allocator_ut.cpp
     ibv_ut.cpp
+    qp_cache_ut.cpp
     utils.cpp
     rdma_low_ut.cpp
 )

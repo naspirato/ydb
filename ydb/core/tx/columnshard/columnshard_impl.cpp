@@ -43,9 +43,12 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
+#include <ydb/core/tx/columnshard/tracing/startup_probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
@@ -59,7 +62,10 @@
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/services/metadata/service.h>
 
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <util/generic/object_counter.h>
+
+#include <mutex>
 
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
@@ -82,6 +88,17 @@ NTabletPipe::TClientConfig GetPipeClientConfig() {
     return config;
 }
 
+void RegisterProbes() {
+    static std::once_flag registered;
+    std::call_once(registered, [] {
+        using namespace NOlap::NReader;
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_SCAN));
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_DATA_SOURCE));
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_STARTUP));
+    });
+}
+
 }   // namespace
 
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
@@ -90,6 +107,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Counters(*TabletCountersHolder)
+    , StartupTimeline(TabletID(), Counters.GetCSCounters().Initialization)
     , WriteTasksQueue(std::make_unique<TWriteTasksQueue>(this))
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
@@ -109,6 +127,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>()))
 {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
+    RegisterProbes();
 }
 
 TColumnShard::~TColumnShard() = default;
@@ -516,7 +535,8 @@ void TColumnShard::RunAlterStore(
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()});
     YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, periodic",
         {"event", "EnqueueBackgroundActivities"},
         {"periodic", periodic});
@@ -646,8 +666,9 @@ private:
     }
 
     virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
-        NActors::TLogContextGuard g(
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletId},
+            {"parentId", ParentActorId});
         if (NeedBlobs) {
             AFL_VERIFY(context.GetResourceGuards().size() == 3);
         } else {
@@ -902,15 +923,18 @@ void TColumnShard::SetupMetadata() {
         return;
     }
     std::vector<NOlap::TCSMetadataRequest> requests = TablesManager.MutablePrimaryIndex().CollectMetadataRequests();
-    for (auto&& i : requests) {
-        const ui64 accessorsMemory =
-            i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(),
-                                        TTLTaskSubscription, std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
-                                        std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()),
-                                        DataAccessorsManager.GetObjectPtrVerified(), nullptr));
+    for (const auto& request : requests) {
+        SubmitMetadataRequest(request);
     }
+}
+
+void TColumnShard::SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request) {
+    const ui64 memory = request.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
+    auto task = std::make_shared<TAccessorsMemorySubscriber>(memory, request.GetRequest()->GetTaskId(), TTLTaskSubscription,
+        std::shared_ptr<NOlap::TDataAccessorsRequest>(request.GetRequest()),
+        std::make_shared<TCSMetadataSubscriber>(SelfId(), request.GetProcessor(), Generation()), DataAccessorsManager.GetObjectPtrVerified(),
+        nullptr);
+    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor, task);
 }
 
 bool TColumnShard::SetupTtl() {
@@ -1010,8 +1034,14 @@ void TColumnShard::SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHol
     for (const auto& [dropSnapshot, pathIds] : TablesManager.GetPathsToDrop()) {
         for (const TInternalPathId pathId : pathIds) {
             if (snapshotHolders.CouldUseTable(pathId, dropSnapshot)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
-                ("event", "CleanupTableMetadataDeferredByActiveScan")("path_id", pathId)("drop_snapshot", dropSnapshot.DebugString());
+                YDB_LOG_DEBUG("",
+                    {"event", "CleanupTableMetadataDeferredByActiveScan"},
+                    {"pathId", pathId},
+                    {"dropSnapshot", dropSnapshot.DebugString()});
+                continue;
+            }
+            if (OperationsManager->HasWriteOperations(pathId)) {
+                YDB_LOG_DEBUG("", {"event", "CleanupTableMetadataDeferredByWriteOperations"}, {"path_id", pathId});
                 continue;
             }
             pathIdsToCleanup.insert(pathId);
@@ -1669,7 +1699,9 @@ public:
         for (auto&& i : PortionsByPath) {
             const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
             for (auto&& c : i.second.GetConsumers()) {
-                NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
+                YDB_LOG_CREATE_CONTEXT(
+                    {"consumer", c.first},
+                    {"pathId", i.first});
                 YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
                     {"size", c.second.GetPortionsCount()});
                 for (auto&& portion : c.second.GetPortions(granule)) {
@@ -1857,6 +1889,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiato
 };
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx) {
+    SharingSessionsManager->OnSharingAdmission();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"process", "BlobsSharing"},
         {"event", "TEvApplyLinksModification"},
@@ -1951,8 +1984,10 @@ void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<
 }
 
 STFUNC(TColumnShard::StateWork) {
-    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-        "self_id", SelfId())("ev", ev->GetTypeName());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()},
+        {"selfId", SelfId()},
+        {"ev", ev->GetTypeName()});
     TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTxProcessing::TEvReadSet, Handle);
@@ -1973,6 +2008,8 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
+        HFunc(TEvPrivate::TEvContinueFindEmptyHistoryIntervals, Handle);
+        HFunc(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
@@ -1983,6 +2020,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
         HFunc(NActors::TEvents::TEvWakeup, Handle);
         HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
+        hFunc(TEvPrivate::TEvPrefetchPortionsMetadata, Handle);
         hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
         hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
         HFunc(NEvents::TDataEvents::TEvWrite, Handle);
@@ -2032,8 +2070,11 @@ STFUNC(TColumnShard::StateWork) {
 }
 
 void TColumnShard::Enqueue(STFUNC_SIG) {
-    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-        "self_id", SelfId())("process", "Enqueue")("ev", ev->GetTypeName());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()},
+        {"selfId", SelfId()},
+        {"process", "Enqueue"},
+        {"ev", ev->GetTypeName()});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, HandleInit);
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);

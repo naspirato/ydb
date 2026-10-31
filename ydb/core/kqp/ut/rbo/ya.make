@@ -4,13 +4,17 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(16)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 SRCS(
+    kqp_rbo_compatibility_ut.cpp
+    kqp_rbo_copy_ut.cpp
     kqp_rbo_decorrelation_ut.cpp
     kqp_rbo_global_ut.cpp
     kqp_rbo_lowering_ut.cpp
     kqp_rbo_yql_ut.cpp
+    kqp_rbo_lookup_join_ut.cpp
+    kqp_rbo_olap_distinct_ut.cpp
     kqp_rbo_olap_ut.cpp
 )
 
@@ -59,3 +63,8 @@ NO_COMPILER_WARNINGS()
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    join_order
+    effects
+)
