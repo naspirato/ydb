@@ -303,6 +303,7 @@
   </style>
 </head>
 <body>
+  <div id="dashboardLoading" style="margin:16px;padding:12px 16px;border:1px solid #d0d7de;background:#f6f8fa;border-radius:8px;color:#24292f;font-size:14px;">Loading dashboard data… (demo set is slimmed for preview)</div>
   <div id="dashboardLoadError" style="display:none;margin:16px;padding:12px 16px;border:1px solid #fca5a5;background:#fef2f2;border-radius:8px;color:#991b1b;font-size:14px;"></div>
   <div id="chartTip"></div>
   <div id="dashboardHeader" style="margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%);border-radius:8px;border:1px solid #e2e8f0;">
@@ -619,7 +620,11 @@
       const resp = await fetch(dataUrl);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       data = await resp.json();
+      const loading = document.getElementById('dashboardLoading');
+      if (loading) loading.style.display = 'none';
     } catch (err) {
+      const loading = document.getElementById('dashboardLoading');
+      if (loading) loading.style.display = 'none';
       const el = document.getElementById('dashboardLoadError');
       if (el) {
         el.style.display = 'block';
