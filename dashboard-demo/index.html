@@ -10,7 +10,7 @@
     .toolbar { position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; margin: 8px 0 10px 0; padding: 8px 0; background: rgba(255,255,255,0.96); backdrop-filter: blur(2px); }
     .toolbar input[type="text"] { min-width: 340px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; }
     .toolbar button { padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }
-    .cpu-help { display: none; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d0d7de; background: #f6f8fa; font-size: 12px; line-height: 1.45; }
+    .cpu-help { margin-top: 6px; padding: 8px 10px; border-radius: 8px; border: 1px solid #eaeef2; background: #fff; font-size: 12px; line-height: 1.45; color: #57606a; }
     .cpu-help ol, .cpu-help ul { margin: 6px 0 6px 18px; padding: 0; }
     /* Secondary collapses: quiet chrome, not H2. */
     details.aux-fold {
@@ -1360,18 +1360,27 @@
     }
     const cfg = data.run_config || {};
     const pr = cfg.pr != null && String(cfg.pr).trim() !== '' ? String(cfg.pr) : null;
+    const prTitle = cfg.pr_title != null && String(cfg.pr_title).trim() !== '' ? String(cfg.pr_title).trim() : null;
     const branch = cfg.branch != null && String(cfg.branch).trim() !== '' ? String(cfg.branch).trim() : null;
     const commit = cfg.commit != null && String(cfg.commit).trim() !== '' ? String(cfg.commit).trim() : null;
       const artifactsUrl = (cfg.artifacts_url || '').trim();
     const tryLinks = Array.isArray(cfg.try_links) ? cfg.try_links : [];
-    const hasCiData = pr || branch || commit || artifactsUrl;
+    const hasCiData = pr || prTitle || branch || commit || artifactsUrl;
     const repo = escapeHtml((cfg.repo || 'ydb-platform/ydb').trim());
-    if (pr) {
+    if (pr || prTitle) {
       const el = document.getElementById('headerPr');
-      const prSafe = escapeHtml(pr);
-      el.textContent = 'PR #' + pr;
       el.style.display = '';
-      el.innerHTML = '<a href="https://github.com/' + repo + '/pull/' + prSafe + '" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;text-decoration:none;">PR #' + prSafe + '</a>';
+      let html = '';
+      if (pr) {
+        const prSafe = escapeHtml(pr);
+        html += '<a href="https://github.com/' + repo + '/pull/' + prSafe + '" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;text-decoration:none;">PR #' + prSafe + '</a>';
+      } else {
+        html += '<span style="color:#2563eb;font-weight:600;">PR</span>';
+      }
+      if (prTitle) {
+        html += ' <span style="color:#0f172a;font-weight:600;">' + escapeHtml(prTitle) + '</span>';
+      }
+      el.innerHTML = html;
     }
     if (branch) {
       const el = document.getElementById('headerBranch');
@@ -1387,6 +1396,14 @@
       const shortSafe = escapeHtml(short);
       el.innerHTML = '<a href="https://github.com/' + repo + '/commit/' + commitSafe + '" target="_blank" rel="noopener" style="color:#0f172a;text-decoration:none;">' + shortSafe + '</a>';
       el.style.display = '';
+    }
+    // Browser tab title: make it obvious which PR/dashboard this is.
+    if (pr && prTitle) {
+      document.title = 'PR #' + pr + ': ' + prTitle + ' · Resource dashboard';
+    } else if (prTitle) {
+      document.title = prTitle + ' · Resource dashboard';
+    } else if (pr) {
+      document.title = 'PR #' + pr + ' · Resource dashboard';
     }
     const linksEl = document.getElementById('headerLinks');
     const artifactsBase = safeHttpBase(artifactsUrl);
