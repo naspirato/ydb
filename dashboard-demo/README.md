@@ -1,7 +1,9 @@
-Interactive preview of the tests resource dashboard tile UI.
+Interactive preview of the tests resource dashboard (cold #57627 try_1).
 
-Use the **commit-pinned** link (branch URL may cache the old 16MB JSON on raw.githack):
+Use the **commit-pinned** link (branch URL may cache old JSON on raw.githack):
 
-https://rawcdn.githack.com/naspirato/ydb/06719a00eed7a4a941f024c359fad62e1e9f96f7/dashboard-demo/index.html
+https://rawcdn.githack.com/naspirato/ydb/PLACEHOLDER/dashboard-demo/index.html
 
-Demo JSON is slimmed (~3.3MB, top suites + downsampled series) for mobile-friendly loading.
+Source: https://storage.yandexcloud.net/ydb-gh-logs/ydb-platform/ydb/PR-check/41163688001/ya-x86-64/try_1/tests_metrics/dashboard.html
+
+Demo JSON is slimmed (~1.2MB, top 20 suites + downsampled series) for mobile-friendly loading.
