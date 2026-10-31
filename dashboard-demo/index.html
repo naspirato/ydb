@@ -572,8 +572,8 @@
       // Hidden-tab Plotly charts need explicit resize after becoming visible.
       setTimeout(() => {
         const ids = id === 'suiteTab'
-          ? ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite']
-          : ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie'];
+          ? ['yaActivity', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite']
+          : ['yaActivityChunk', 'activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie'];
         resizeChartPanes(ids);
         // Re-apply markers after resize (charts lose shapes on hidden→visible transition).
         applyMarkersToCharts();
@@ -848,13 +848,10 @@
       }
       grid.innerHTML =
         runLine +
-        '<details class="aux-fold" id="headlineTablesDetails">' +
-          '<summary>Resource tables</summary>' +
-          '<div class="headline-tables">' +
-            '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
-            hostBlock +
-          '</div>' +
-        '</details>';
+        '<div class="headline-tables">' +
+          '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
+          hostBlock +
+        '</div>';
       wrap.style.display = 'block';
     }
     renderHeadlineStats();
