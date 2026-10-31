@@ -289,6 +289,8 @@ private:
                     return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
                     return Ydb::Bridge::PileState::SYNCHRONIZED;
+                case NKikimrBridge::TClusterState::INACTIVE:
+                    return Ydb::Bridge::PileState::INACTIVE;
                 default:
                     return Ydb::Bridge::PileState::UNSPECIFIED;
             }
@@ -949,17 +951,17 @@ private:
     }
 
     static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo, ui32 groupSizeInUnits) {
-        if (pdiskInfo.GetExpectedSlotSize()) {
-            return pdiskInfo.GetExpectedSlotSize();
-        }
         ui64 slotSize = pdiskInfo.GetEnforcedDynamicSlotSize();
+        if (!slotSize) {
+            slotSize = pdiskInfo.GetExpectedSlotSize();
+        }
         if (!slotSize) {
             const ui32 slotCount = pdiskInfo.GetExpectedSlotCount() ? pdiskInfo.GetExpectedSlotCount() : 16;
             slotSize = pdiskInfo.GetTotalSize() / slotCount;
         }
-        const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
-            groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize());
-        return slotSize * ownerWeight;
+        return TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize(),
+            pdiskInfo.HasUserChunkPoolSize() ? std::make_optional(pdiskInfo.GetUserChunkPoolSize()) : std::nullopt);
     }
 
     static NKikimrWhiteboard::EFlag GetClusterStateFromSelfCheck(const Ydb::Monitoring::SelfCheckResult& result) {
@@ -1038,6 +1040,9 @@ private:
                     auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
                     std::unordered_map<ui32, ui32> pileNodes;
                     for (const auto& pile : srcBridgeInfo.Piles) {
+                        if (pile.IsFreeSlot) {
+                            continue;
+                        }
                         auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
                         pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
                         pbBridgePileInfo.SetName(pile.Name);
@@ -1051,13 +1056,11 @@ private:
                             pileNodes[*node.PileNum]++;
                         }
                     }
-                    ui32 pileNum = 0;
                     for (auto& pile : *pbBridgeInfo.MutablePiles()) {
-                        auto it = pileNodes.find(pileNum);
-                        if (it != pileNodes.end()) {
+                        const auto pileId = TBridgePileId::FromProto(&pile, &std::decay_t<decltype(pile)>::GetPileId);
+                        if (const auto it = pileNodes.find(pileId.GetPileIndex()); it != pileNodes.end()) {
                             pile.SetNodes(it->second);
                         }
-                        ++pileNum;
                     }
                 } else {
                     AddProblem("empty-node-warden-bridge-info");
@@ -1091,7 +1094,8 @@ private:
                     auto itStats = storageStatsByType.find(type);
                     if (itStats != storageStatsByType.end()) {
                         itStats->second.SetCurrentAllocatedSize(itStats->second.GetCurrentAllocatedSize() + allocated);
-                        itStats->second.SetCurrentAvailableSize(itStats->second.GetCurrentAvailableSize() + available);
+                        const ui64 currentAvailable = itStats->second.GetCurrentAvailableSize();
+                        itStats->second.SetCurrentAvailableSize(currentAvailable + Min(available, Max<ui64>() - currentAvailable));
                     }
                 }
             }

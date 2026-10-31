@@ -17,6 +17,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <limits>
+#include <util/string/printf.h>
+#include <ydb/core/base/services/blobstorage_service_id.h>
 
 #include <util/stream/null.h>
 #include <util/system/hostname.h>
@@ -373,6 +375,65 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.DispatchEvents(options);
 
         UNIT_ASSERT_VALUES_EQUAL(getRequests, 17);
+    }
+
+    Y_UNIT_TEST(DDiskStorageMetadata)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+        const ui64 tabletId = 72075186224038944;
+        UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(tabletId, 1).GetStatus(), NKikimrProto::OK);
+        const auto snapshot = env.RequestBSControllerDDiskInfo(tabletId);
+        env.WaitForDDiskInfo(tabletId, snapshot.GetRevision());
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            auto& tablet = TFakeNodeWhiteboardService::Info.at(env.GetNodeId(0)).TabletStateInfo[tabletId];
+            tablet.SetTabletId(tabletId);
+            tablet.SetLeader(true);
+            tablet.SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+            tablet.SetNbsDiskId("volume-42");
+            auto* group = TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)
+                ->MutableBaseConfig()->AddGroup();
+            group->SetIsProxyGroup(true); // identity-only fixture, not an ordinary storage group
+            group->SetStoragePoolName("pool-42");
+            for (const auto& dbg : snapshot.GetGroups()) {
+                auto addSlot = [&](const auto& id) {
+                    auto* slot = group->AddVSlotId();
+                    slot->SetNodeId(id.GetNodeId());
+                    slot->SetPDiskId(id.GetPDiskId());
+                    slot->SetVSlotId(id.GetDDiskSlotId());
+                };
+                for (const auto& id : dbg.GetDDiskId()) {
+                    addSlot(id);
+                }
+                for (const auto& id : dbg.GetPersistentBufferDDiskId()) {
+                    addSlot(id);
+                }
+            }
+        }
+        NKikimrCms::TDDiskTabletListRequest request;
+        request.SetFilterTabletId(ToString(tabletId));
+        auto tablets = env.RequestDDiskTabletList(request);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTablets(0).GetDiskId(), "volume-42");
+        const auto disks = env.RequestDDiskDiskList();
+        UNIT_ASSERT(disks.DisksSize() > 0);
+        for (const auto& disk : disks.GetDisks()) {
+            // Pool and links must not depend on a live whiteboard space sample.
+            UNIT_ASSERT(!disk.HasDDiskOccupancy());
+            UNIT_ASSERT_VALUES_EQUAL(disk.GetStoragePoolName(), "pool-42");
+            const auto& id = disk.GetDiskId();
+            UNIT_ASSERT_VALUES_EQUAL(disk.GetDDiskPath(), Sprintf("actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
+                id.GetPDiskId(), id.GetDDiskSlotId()));
+            UNIT_ASSERT_VALUES_EQUAL(disk.GetPersistentBufferId(), MakeBlobStoragePersistentBufferId(
+                id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId()).ToString());
+        }
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            TFakeNodeWhiteboardService::Info.at(env.GetNodeId(0)).TabletStateInfo[tabletId].ClearNbsDiskId();
+        }
+        tablets = env.RequestDDiskTabletList(request);
+        UNIT_ASSERT(!tablets.GetTablets(0).HasDiskId());
     }
 
     Y_UNIT_TEST(DDiskTabletListEmptyState)
@@ -2224,6 +2285,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         config.MutableClusterLimits()->SetDisabledNodesLimit(2);
         config.MutableClusterLimits()->SetDisabledNodesRatioLimit(20);
         config.SetInfoCollectionTimeout(TDuration::Minutes(1).GetValue());
+        config.MutableSentinelConfig()->SetEnable(false);
         env.SetCmsConfig(config);
 
         auto res = env.GetCmsConfig();
@@ -2234,6 +2296,39 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesLimit(), 2);
         UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesRatioLimit(), 20);
         UNIT_ASSERT_VALUES_EQUAL(res.GetInfoCollectionTimeout(), TDuration::Minutes(1).GetValue());
+
+        auto restartAndCheckConfig = [&] {
+            TActorId cms;
+            THashSet<TActorId> ackSenders;
+            auto activeObserver = env.AddObserver<TEvTablet::TEvTabletActive>([&](auto& ev) {
+                cms = ev->Sender;
+            });
+            auto ackObserver = env.AddObserver<NConsole::TEvConsole::TEvConfigNotificationResponse>([&](auto& ev) {
+                ackSenders.insert(ev->Sender);
+            });
+            env.RestartCms();
+            // TabletActive precedes replay of the initial configuration.
+            env.WaitFor("CMS configuration replay", [&] { return cms && ackSenders.contains(cms); }, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(env.GetCmsConfig().SerializeAsString(), res.SerializeAsString());
+        };
+        restartAndCheckConfig();
+
+        config.SetDefaultRetryTime(TDuration::Minutes(12).GetValue());
+        config.MutableTenantLimits()->SetDisabledNodesLimit(3);
+        config.MutableTenantLimits()->SetDisabledNodesRatioLimit(30);
+        config.MutableClusterLimits()->SetDisabledNodesLimit(4);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(40);
+        config.MutableSentinelConfig()->SetDryRun(true);
+        env.SetCmsConfig(config);
+        res = env.GetCmsConfig();
+        UNIT_ASSERT_VALUES_EQUAL(res.GetDefaultRetryTime(), TDuration::Minutes(12).GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(res.GetTenantLimits().GetDisabledNodesLimit(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetTenantLimits().GetDisabledNodesRatioLimit(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesLimit(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesRatioLimit(), 40);
+        UNIT_ASSERT(res.GetSentinelConfig().GetDryRun());
+
+        restartAndCheckConfig();
     }
 
     Y_UNIT_TEST(RestartNodeInDownState)

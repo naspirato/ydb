@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/federation_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner.inc)
 
@@ -12,13 +14,13 @@ PY_SRCS(
 )
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
-REQUIREMENTS(ram:12)
+REQUIREMENTS(cpu:1)
+REQUIREMENTS(ram:12 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:20)
+    REQUIREMENTS(ram:20 cpu:1)
 ENDIF()
 
 PEERDIR(

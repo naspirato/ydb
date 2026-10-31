@@ -187,7 +187,7 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
         return Limit.load();
     }
 
-    // stands for the node level memory availability, see NRm::TTxState::GetMemoryAvailability:
+    // stands for the node level memory availability, see NScheduler::TSchedulableMemory::GetAvailability:
     // negative under memory pressure, otherwise what is left of the limit
     i64 GetMemoryAvailability() const override {
         return MemoryPressure.load() ? -1 : static_cast<i64>(Limit.load()) - Quota.load();
@@ -1232,6 +1232,23 @@ struct TSessionTest : public TLoadTest {
     static TString GetReconciliationLog(const std::shared_ptr<TNodeState>& state) {
         std::lock_guard lock(state->Mutex);
         return state->GetReconciliationLog();
+    }
+
+    // the node's interconnect subscriptions made by actors whose activity name contains the given part; the mock
+    // has no such sensor
+    i64 GetInterconnectSubscribers(ui32 nodeIndex, TStringBuf activity) {
+        std::function<i64(const NMonitoring::TDynamicCounters&, bool)> sum = [&](const NMonitoring::TDynamicCounters& group, bool bySubscriber) {
+            i64 result = 0;
+            for (const auto& [id, child] : group.ReadSnapshot()) {
+                if (auto subgroup = dynamic_cast<const NMonitoring::TDynamicCounters*>(child.Get())) {
+                    result += sum(*subgroup, id.LabelName == "sensor" && id.LabelValue == "InterconnectSessionSubscribersByActivity");
+                } else if (bySubscriber && id.LabelName == "activity" && id.LabelValue.Contains(activity)) {
+                    result += static_cast<const NMonitoring::TCounterForPtr*>(child.Get())->Val();
+                }
+            }
+            return result;
+        };
+        return sum(*Runtime->GetDynamicCounters(nodeIndex), false);
     }
 
     using TLoadTest::WaitFor;

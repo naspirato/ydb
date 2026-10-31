@@ -1,4 +1,7 @@
 PY3TEST()
+
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_TEST_FILES()
@@ -13,8 +16,8 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:4)
-REQUIREMENTS(ram:16)
+REQUIREMENTS(cpu:1)
+REQUIREMENTS(ram:16 cpu:1)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(

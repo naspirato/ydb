@@ -4,6 +4,12 @@ RECURSE(
 
 PY3TEST()
 
+STYLE_PYTHON()
+
+PY_EXTRA_LINT_FILES(
+    examples/sdk/ld_plugin.py
+)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 ENV(YDB_KV_VOLUME_TOOL_PATH="ydb/tests/stress/kv_volume_tool/kv_volume_tool")
@@ -39,7 +45,7 @@ FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:10 cpu:16)
+    REQUIREMENTS(ram:10 cpu:1)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

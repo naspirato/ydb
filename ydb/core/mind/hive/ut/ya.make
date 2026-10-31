@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 PEERDIR(
@@ -20,6 +20,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    event_history_ut.cpp
     object_distribution_ut.cpp
     scale_recommender_policy_ut.cpp
     sequencer_ut.cpp

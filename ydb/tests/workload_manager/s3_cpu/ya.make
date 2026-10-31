@@ -1,5 +1,9 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
+PY_EXTRA_LINT_FILES(__init__.py)
+
 # the test queries yandex storage bucket
 # like olap tests do
 TAG(ya:manual)
@@ -8,7 +12,7 @@ TEST_SRCS(
     test_s3_cpu_throttle.py
 )
 
-REQUIREMENTS(ram:16 cpu:4)
+REQUIREMENTS(ram:16 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

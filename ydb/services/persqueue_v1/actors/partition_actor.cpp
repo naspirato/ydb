@@ -192,6 +192,10 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSessionAndDie("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx);
+        return;
+    }
     // extend the lifetime for PartitionGraph
     auto partitionGraph = TopicHolder->GetPartitionGraph();
     const auto& parents = GetParents(partitionGraph);
@@ -1722,6 +1726,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         } else if (PipeClient && IsNeedMorePartitionData()) {
             WaitDataInPartition(ctx);
         }
+    } else {
+        // An inactive partition has no messages for this reader after ReadOffset, e.g. all of them are older than read_from.
+        ReadOffset = Max(ReadOffset, EndOffset);
     }
 
     if (!ReadingFinishedSent) {

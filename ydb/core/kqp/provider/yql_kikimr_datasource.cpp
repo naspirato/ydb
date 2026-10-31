@@ -460,7 +460,7 @@ protected:
             normalizedValue = "true";
         }
 
-        if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+        if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::ISettingDispatcher::EStage::STATIC, NCommon::GetErrorCallback(pos, ctx))) {
             return false;
         }
 
@@ -787,6 +787,17 @@ public:
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, tablePath);
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
             YQL_ENSURE(tableDesc.Metadata);
+            if (tableDesc.Metadata->Kind != EKikimrTableKind::Datashard &&
+                read->ChildrenSize() > TKiReadTable::idx_Settings)
+            {
+                const auto& settings = *read->Child(TKiReadTable::idx_Settings);
+                if (HasSetting(settings, "samplingrate") || HasSetting(settings, "samplingseed") ||
+                    HasSetting(settings, "samplingmemtablestride"))
+                {
+                    ctx.AddError(TIssue(node->Pos(ctx), "Sampling is supported only for row tables"));
+                    return nullptr;
+                }
+            }
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
                 // SHOW CREATE EXTERNAL DATA SOURCE / EXTERNAL TABLE reads never touch
                 // the external source itself — they are rewritten downstream into
@@ -818,6 +829,11 @@ public:
                                         .Add(readArgs[1]->ChildrenList()[1])
                                     .Build()
                                     .Done().Ptr();
+                    if (dataSource.IsMessageStream() && dataSource.GetDatabaseType() == EDatabaseType::YT) {
+                        auto sourceArgs = readArgs[1]->ChildrenList();
+                        sourceArgs.push_back(ctx.NewAtom(node->Pos(), "message_stream"));
+                        readArgs[1] = ctx.ChangeChildren(*readArgs[1], std::move(sourceArgs));
+                    }
                     readArgs[2] = ctx.NewCallable(node->Pos(), "MrTableConcat", { readArgs[2] });
                     auto newRead = ctx.ChangeChildren(*read, std::move(readArgs));
                     auto retChildren = node->ChildrenList();
@@ -825,7 +841,13 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 } else if (tableDesc.Metadata->IsExternalTable()) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->GetExternalSourceType());
+                    const auto& databaseType = tableDesc.Metadata->GetExternalSourceDatabaseType();
+                    if (!databaseType) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder()
+                            << "Unknown source type for external table \"" << tablePath << "\""));
+                        return nullptr;
+                    }
+                    const auto& source = ExternalSourceFactory->GetOrCreate(*databaseType);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)

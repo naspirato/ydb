@@ -10,6 +10,7 @@
 #include <ydb/library/naming_conventions/naming_conventions.h>
 
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_join.h>
@@ -18,6 +19,8 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -104,7 +107,9 @@ public:
         AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
+        AddHandler(0, &TDqPhyHashJoin::Match, HNDL(ChooseHashJoin));
         AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
+        AddHandler(0, &TDqPhyScalarHashJoin::Match, HNDL(RewriteScalarHashJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
@@ -167,9 +172,21 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> ChooseHashJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeChooseHashJoin(node, ctx);
+        DumpAppliedRule("ChooseHashJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> RewriteBlockHashJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewriteBlockHashJoin(node, ctx);
         DumpAppliedRule("RewriteBlockHashJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteScalarHashJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteScalarHashJoin(node, ctx);
+        DumpAppliedRule("RewriteScalarHashJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -432,6 +449,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
+                newArg.MutableRef().SetConstraints(oldArg.Ref().GetConstraintSet());
                 newArgs.emplace_back(newArg);
 
                 if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
@@ -458,6 +476,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                                 .Body(newBody)
                             .Build()
                             .ArgsType(inputProgram.ArgsType())
+                            .ArgsConstraints(inputProgram.ArgsConstraints())
                             .Done();
 
                         // Run the peephole optimization on new program again to update type annotations.
@@ -476,6 +495,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
                     // Update the type annotation for an argument with return value of the input program.
                     newArg.MutableRef().SetTypeAnn(programs.at(stageUid).Lambda().Body().Ref().GetTypeAnn());
+                    newArg.MutableRef().SetConstraints(programs.at(stageUid).Lambda().Body().Ref().GetConstraintSet());
                 } else {
                     argsMap.emplace(oldArg.Raw(), newArg.Ptr());
                 }
@@ -486,6 +506,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 YQL_ENSURE(argsMap.emplace(oldArg.Raw(), newArg.Ptr()).second);
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
+                newArg.MutableRef().SetConstraints(oldArg.Ref().GetConstraintSet());
                 newArgs.emplace_back(newArg);
             }
         }
@@ -497,15 +518,27 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .Done();
 
         TVector<const TTypeAnnotationNode*> argTypes;
+        argTypes.reserve(newArgs.size());
         for (const auto& arg : newArgs) {
             YQL_ENSURE(arg.Ref().GetTypeAnn());
             argTypes.push_back(arg.Ref().GetTypeAnn());
+        }
+
+        TExprNode::TListType argConstraints;
+        argConstraints.reserve(newArgs.size());
+        for (const auto& arg : newArgs) {
+            argConstraints.push_back(ctx.NewAtom(
+                stage.Pos(),
+                NYT::NodeToYsonString(arg.Ref().GetConstraintSet().ToYson(), NYson::EYsonFormat::Text),
+                TNodeFlags::MultilineContent
+            ));
         }
 
         // TODO: get rid of TKqpProgram-callable (YQL-10078)
         auto program = Build<TKqpProgram>(ctx, stage.Pos())
             .Lambda(lambda)
             .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
+            .ArgsConstraints(ctx.NewList(stage.Pos(), std::move(argConstraints)))
             .Done();
 
         TExprNode::TPtr newProgram;
@@ -674,7 +707,7 @@ private:
             status = InstantTransform(*TxTransformer, expr, ctx);
 
             if (ValidateConstraints && status == TStatus::Ok) {
-                status = KqpBuildStreamingFlow(txIdx, TKqpPhysicalTx(expr), expr, streamingTxResults, *KqpCtx->Config, *KqpCtx->Tables, KqpCtx->Cluster, ctx);
+                status = KqpBuildStreamingFlow(txIdx, TKqpPhysicalTx(expr), expr, streamingTxResults, *KqpCtx->Config, *KqpCtx->Tables, KqpCtx->Cluster, KqpCtx->UserRequestContext.Get(), ctx);
 
                 if (status == TStatus::Repeat) {
                     TxTransformer->Rewind();
@@ -739,6 +772,8 @@ TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(
     const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
 )
 {
+    YQL_ENSURE(kqpCtx);
+    YQL_ENSURE(config);
     return new TKqpTxsPeepholeTransformer(typesCtx, config, kqpCtx);
 }
 

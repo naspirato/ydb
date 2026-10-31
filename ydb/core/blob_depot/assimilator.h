@@ -4,6 +4,8 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 
+#include <ydb/core/util/backoff.h>
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TGroupAssimilator : public TActorBootstrapped<TGroupAssimilator> {
@@ -14,6 +16,8 @@ namespace NKikimr::NBlobDepot {
                 EvResumeScanDataForCopying,
                 EvTxComplete,
                 EvUpdateBytesCopiedQ,
+                EvRetryAssimilate,
+                EvRestartScanDataForCopying,
             };
         };
 
@@ -47,7 +51,12 @@ namespace NKikimr::NBlobDepot {
         THashMap<ui64, std::tuple<TData::TKey, ui64>> Puts;
 
         bool ActionInProgress = false;
+        TBackoffTimer AssimilateRetryBackoff{10, 5000};
         bool ResumeScanDataForCopyingInFlight = false;
+        // reads of the group being decommitted have failed in this pass of copying, so the next pass waits for a while,
+        // as nothing tells the group is available again
+        bool CopyReadErrors = false;
+        TBackoffTimer CopyRetryBackoff{10, 5000};
 
         std::optional<TLogoBlobID> LastPlanScannedKey;
         bool PlanningComplete = false;
@@ -79,11 +88,13 @@ namespace NKikimr::NBlobDepot {
     private:
         void Action();
         void SendAssimilateRequest();
+        void HandleRetryAssimilate();
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);
         void ScanDataForPlanning();
         void HandleResumeScanDataForPlanning();
         void ScanDataForCopying();
         void HandleResumeScanDataForCopying();
+        void RestartScanDataForCopying();
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
         void HandleTxComplete(TAutoPtr<IEventHandle> ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);

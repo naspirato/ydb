@@ -31,6 +31,11 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr bool Default = false;
         };
 
+        struct CommittedStep: Column<11, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+        struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+
+        struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -42,7 +47,10 @@ struct TControllerSchema: NIceDb::Schema {
             NextTargetId,
             DesiredState,
             Database,
-            DeferredAlter
+            DeferredAlter,
+            CommittedStep,
+            CommittedTxId,
+            SourceOffsetMismatch
         >;
     };
 
@@ -92,6 +100,8 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr Type Default = InvalidLocalPathId;
         };
 
+        struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
             ReplicationId,
@@ -112,7 +122,8 @@ struct TControllerSchema: NIceDb::Schema {
             DstAlterTxId,
             SchemaBarrierFlushTxIds,
             PendingDstPathOwnerId,
-            PendingDstPathLocalId
+            PendingDstPathLocalId,
+            IndexBuild
         >;
     };
 
@@ -122,9 +133,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct Name: Column<3, NScheme::NTypeIds::Utf8> {};
         struct State: Column<4, NScheme::NTypeIds::Uint8> { using Type = TReplication::EStreamState; };
         struct ConsumerName: Column<5, NScheme::NTypeIds::Utf8> {};
+        struct SchemaChanges: Column<6, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ReplicationId, TargetId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, Name, State, ConsumerName>;
+        using TColumns = TableColumns<ReplicationId, TargetId, Name, State, ConsumerName, SchemaChanges>;
     };
 
     struct TxIds: Table<5> {
@@ -157,9 +169,32 @@ struct TControllerSchema: NIceDb::Schema {
         struct Applied: Column<5, NScheme::NTypeIds::Bool> {};
         struct Completed: Column<6, NScheme::NTypeIds::Bool> {};
         struct Offset: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct IndexMetadata: Column<8, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset, IndexMetadata>;
+    };
+
+    // Checkpoints outlive live Workers rows: re-registration must retain the
+    // write mode, and retired partitions' scan maxima must still bound the join.
+    struct IndexBuildWorkers: Table<9> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Progress: Column<4, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Progress>;
+    };
+
+    // Unlike Workers, these positions survive pause/resume.
+    // An absent row means progress is unknown.
+    struct ProcessedSourceOffsets: Table<10> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct NextOffset: Column<4, NScheme::NTypeIds::Uint64> {};
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, NextOffset>;
     };
 
     using TTables = SchemaTables<
@@ -169,7 +204,9 @@ struct TControllerSchema: NIceDb::Schema {
         SrcStreams,
         TxIds,
         Workers,
-        SchemaBarrierWorkers
+        SchemaBarrierWorkers,
+        IndexBuildWorkers,
+        ProcessedSourceOffsets
     >;
 
 }; // TControllerSchema

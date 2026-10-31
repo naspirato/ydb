@@ -1,4 +1,7 @@
 PY3TEST()
+
+STYLE_PYTHON()
+
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 FORK_TEST_FILES()
@@ -15,7 +18,7 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)

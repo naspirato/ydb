@@ -78,6 +78,11 @@ class TJsonNodes : public TViewerPipeClient {
         EBoardInfoRequestResource,
     };
 
+    enum class EPDisksSort {
+        Path,
+        PDiskId,
+    };
+
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
@@ -91,7 +96,11 @@ class TJsonNodes : public TViewerPipeClient {
     bool DatabaseBoardInfoProcessed = false;
     bool ResourceBoardInfoProcessed = false;
     bool PDisksProcessed = false;
+    bool DDiskStoragePoolsProcessed = false;
+    bool DDiskGroupsProcessed = false;
 
+    THashMap<std::pair<ui64, ui64>, TString> DDiskStoragePoolNames;
+    THashMap<ui32, std::pair<ui64, ui64>> DDiskGroupPools;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> StoragePoolsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> VSlotsResponse;
@@ -138,6 +147,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::optional<std::size_t> Limit;
     int UptimeSeconds = 0;
     bool ProblemNodesOnly = false;
+    bool AliveOnly = false;
     TString Filter;
     bool AllWhiteboardFields = false;
 
@@ -367,7 +377,7 @@ class TJsonNodes : public TViewerPipeClient {
                 SystemState.SetCoresUsed(usage);
                 SystemState.SetCoresTotal(threads);
             }
-            CpuUsage = usage / threads;
+            CpuUsage = threads ? usage / threads : 0.0f;
         }
 
         void CalcLoadAverage() {
@@ -902,6 +912,8 @@ class TJsonNodes : public TViewerPipeClient {
 
     ENodeFields SortBy = ENodeFields::NodeId;
     bool ReverseSort = false;
+    EPDisksSort PDisksSort = EPDisksSort::Path;
+    bool ReversePDisksSort = false;
     ENodeFields GroupBy = ENodeFields::NodeId;
     ENodeFields FilterGroupBy = ENodeFields::NodeId;
     TString FilterGroup;
@@ -1002,6 +1014,14 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::MaxNormalizedOccupancy;
         } else if (field == "CapacityAlert") {
             result = ENodeFields::CapacityAlert;
+        }
+        return result;
+    }
+
+    static EPDisksSort ParseEPDisksSort(TStringBuf sort) {
+        EPDisksSort result = EPDisksSort::Path;
+        if (sort == "PDiskId") {
+            result = EPDisksSort::PDiskId;
         }
         return result;
     }
@@ -1173,6 +1193,7 @@ public:
         FieldsRequired.set(+ENodeFields::NodeId);
         UptimeSeconds = FromStringWithDefault<int>(Params.Get("uptime"), 0);
         ProblemNodesOnly = FromStringWithDefault<bool>(Params.Get("problems_only"), ProblemNodesOnly);
+        AliveOnly = FromStringWithDefault<bool>(Params.Get("alive"), AliveOnly);
         Filter = Params.Get("filter");
         if (UptimeSeconds || ProblemNodesOnly || !Filter.empty()) {
             FieldsRequired.set(+ENodeFields::SystemState);
@@ -1252,7 +1273,7 @@ public:
         } else if (Params.Get("filter_peer_role") == "other") {
             FilterPeerRole = EPeerRole::Other;
         }
-        NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty();
+        NeedFilter = HasPendingFilters();
         if (Params.Has("offset")) {
             Offset = FromStringWithDefault<ui32>(Params.Get("offset"), 0);
             NeedLimit = true;
@@ -1288,6 +1309,16 @@ public:
             NeedGroup = true;
             ResetSortParams();
         }
+        TStringBuf pdisksSort = Params.Get("pdisks_sort");
+        if (pdisksSort) {
+            bool reversePDisksSort = false;
+            if (pdisksSort.StartsWith("-") || pdisksSort.StartsWith("+")) {
+                reversePDisksSort = (pdisksSort[0] == '-');
+                pdisksSort.Skip(1);
+            }
+            PDisksSort = ParseEPDisksSort(pdisksSort);
+            ReversePDisksSort = reversePDisksSort;
+        }
         TString fieldsRequired = Params.Get("fields_required");
         if (!fieldsRequired.empty()) {
             if (fieldsRequired == "all") {
@@ -1314,6 +1345,9 @@ public:
             AddGroupByFieldToRequired(FieldsRequired, FilterGroupBy);
         }
         FieldsRequested = FieldsRequired; // no dependent fields
+        if (AliveOnly) {
+            FieldsRequired.set(+ENodeFields::SystemState);
+        }
         if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
             FieldsRequired.set(+ENodeFields::PDisks);
         }
@@ -1393,6 +1427,14 @@ public:
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
+        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
+            if (!StoragePoolsResponse) {
+                StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+            }
+            if (!GroupsResponse) {
+                GroupsResponse = MakeCachedRequestBSControllerGroups();
+            }
+        }
         if (With != EWith::Everything || (!FilterDatabase && Type == EType::Storage)) {
             if (!PDisksResponse) {
                 PDisksResponse = MakeCachedRequestBSControllerPDisks();
@@ -1454,6 +1496,11 @@ public:
                 node->RemapDisks(IncludeDDisks);
             }
         }
+    }
+
+    bool HasPendingFilters() const {
+        return (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty()
+            || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
     }
 
     bool PreFilterDone() const {
@@ -1595,6 +1642,18 @@ public:
             AddEvent("Id Filter Applied");
         }
         if (NeedFilter) {
+            if (AliveOnly && FieldsAvailable.test(+ENodeFields::SystemState)) {
+                TNodeView nodeView;
+                for (TNode* node : NodeView) {
+                    if (!node->Disconnected) {
+                        nodeView.push_back(node);
+                    }
+                }
+                NodeView.swap(nodeView);
+                AliveOnly = false;
+                InvalidateNodes();
+                AddEvent("Alive Filter Applied");
+            }
             if (With == EWith::MissingDisks && FieldsAvailable.test(+ENodeFields::Missing)) {
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
@@ -1686,7 +1745,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
+            NeedFilter = HasPendingFilters();
             FoundNodes = NodeView.size();
         }
     }
@@ -2371,6 +2430,23 @@ public:
                 }
             }
             HiveNodeStatsProcessed = true;
+        }
+
+        if (IncludeDDisks && StoragePoolsResponse && StoragePoolsResponse->IsDone() && !DDiskStoragePoolsProcessed) {
+            if (StoragePoolsResponse->IsOk()) {
+                for (const auto& entry : StoragePoolsResponse->Get()->Record.GetEntries()) {
+                    DDiskStoragePoolNames[std::make_pair(entry.GetKey().GetBoxId(), entry.GetKey().GetStoragePoolId())] = entry.GetInfo().GetName();
+                }
+            }
+            DDiskStoragePoolsProcessed = true;
+        }
+        if (IncludeDDisks && GroupsResponse && GroupsResponse->IsDone() && !DDiskGroupsProcessed) {
+            if (GroupsResponse->IsOk()) {
+                for (const auto& entry : GroupsResponse->Get()->Record.GetEntries()) {
+                    DDiskGroupPools[entry.GetKey().GetGroupId()] = {entry.GetInfo().GetBoxId(), entry.GetInfo().GetStoragePoolId()};
+                }
+            }
+            DDiskGroupsProcessed = true;
         }
 
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
@@ -3656,8 +3732,11 @@ public:
                     for (const auto& entry : node->SysViewPDisks) {
                         sysViewPDisks.emplace(entry.GetKey().GetPDiskId(), &entry.GetInfo());
                     }
-                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
-                        return a.path() < b.path();
+                    std::sort(node->PDisks.begin(), node->PDisks.end(), [this](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
+                        if (PDisksSort == EPDisksSort::PDiskId) {
+                            return ReversePDisksSort ? a.GetPDiskId() > b.GetPDiskId() : a.GetPDiskId() < b.GetPDiskId();
+                        }
+                        return ReversePDisksSort ? a.path() > b.path() : a.path() < b.path();
                     });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
                         auto& jsonPDisk = *jsonNode.AddPDisks();
@@ -3685,6 +3764,13 @@ public:
                                 ddisk.SetPDiskId(key.GetPDiskId());
                                 ddisk.SetDDiskSlotId(key.GetVSlotId());
                                 ddisk.SetGroupId(entry.GetInfo().GetGroupId());
+                                const auto group = DDiskGroupPools.find(ddisk.GetGroupId());
+                                if (group != DDiskGroupPools.end()) {
+                                    const auto pool = DDiskStoragePoolNames.find(group->second);
+                                    if (pool != DDiskStoragePoolNames.end()) {
+                                        ddisk.SetStoragePoolName(pool->second);
+                                    }
+                                }
                                 if (!ddisk.HasHasWhiteboardData()) {
                                     ddisk.SetHasWhiteboardData(false);
                                 }
@@ -3822,6 +3908,16 @@ public:
                     description: return only problem nodes
                     required: false
                     type: boolean
+                  - name: alive
+                    in: query
+                    description: >
+                        Exclude disconnected nodes before grouping, sorting and pagination.
+                        Connected nodes with Yellow or Red status are included.
+                        FoundNodes counts matching nodes; TotalNodes is unaffected by this filter.
+                        Supported when the /viewer/nodes/alive capability is at least 1.
+                    required: false
+                    type: boolean
+                    default: false
                   - name: uptime
                     in: query
                     description: return only nodes with less uptime in sec.
@@ -3873,6 +3969,15 @@ public:
                         When `group` is set, sorting is disabled and fields needed only for sorting
                         are not fetched. `sort` is still validated; unknown fields return HTTP 400.
                         Database-level tokens must not use cluster-level fields for active sorting (403).
+                    required: false
+                    type: string
+                  - name: pdisks_sort
+                    in: query
+                    description: >
+                        sort PDisks by:
+                          * `Path`
+                          * `PDiskId`
+                        A `+` or `-` prefix selects ascending or descending order respectively.
                     required: false
                     type: string
                   - name: group

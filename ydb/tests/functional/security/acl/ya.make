@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     conftest.py
+    test_anonymous_access.py
     test_grants.py
     test_paths_lookup.py
 )
@@ -28,7 +29,7 @@ FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:10 cpu:16)
+    REQUIREMENTS(ram:10 cpu:1)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
